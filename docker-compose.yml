@@ -1,0 +1,47 @@
+services:
+  llm:
+    image: ollama/ollama:latest
+    container_name: thesis_llm
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_storage:/root/.ollama
+    # NVIDIA GPU
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+    restart: always
+
+  db:
+    image: postgres:15-alpine
+    container_name: thesis_db
+    environment:
+      POSTGRES_USER: thesis_user
+      POSTGRES_PASSWORD: secure_password
+      POSTGRES_DB: company_data
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    restart: always
+
+  app:
+    build: ./app
+    container_name: thesis_app
+    depends_on:
+      - llm
+      - db
+    environment:
+      - OLLAMA_URL=http://llm:11434
+      - DB_URL=postgresql://thesis_user:secure_password@db:5432/company_data
+    volumes:
+      - ./app:/app
+    command: tail -f /dev/null
+
+volumes:
+  ollama_storage:
+  pg_data:

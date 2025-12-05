@@ -1,46 +1,86 @@
 services:
   llm:
     image: ollama/ollama:latest
-    container_name: thesis_llm
+    container_name: llm
     ports:
       - "11434:11434"
     volumes:
       - ollama_storage:/root/.ollama
-    # NVIDIA GPU
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: 1
-    #           capabilities: [gpu]
     restart: always
+
+  llm-pull:
+    image: ollama/ollama:latest
+    container_name: llm-pull
+    depends_on:
+      - llm
+    environment:
+      - OLLAMA_HOST=http://llm:11434
+    volumes:
+      - ollama_storage:/root/.ollama
+    entrypoint: ["/bin/sh", "-c", "sleep 10 && ollama pull llama3.2:3b"]
+    restart: "no"
 
   db:
     image: postgres:15-alpine
-    container_name: thesis_db
+    container_name: db
     environment:
-      POSTGRES_USER: thesis_user
-      POSTGRES_PASSWORD: secure_password
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
       POSTGRES_DB: company_data
     ports:
       - "5432:5432"
     volumes:
       - pg_data:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
     restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d company_data"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  db-init:
+    image: postgres:15-alpine
+    container_name: db-init
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: secure_password
+    volumes:
+      - ./db/init.sql:/init.sql:ro
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        # Check if tables exist, if not run init.sql
+        TABLE_COUNT=$$(psql -h db -U user -d company_data -tAc "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public'")
+        if [ "$$TABLE_COUNT" -eq "0" ]; then
+          echo "No tables found. Initializing database..."
+          psql -h db -U user -d company_data -f /init.sql
+          echo "Database initialized successfully!"
+        else
+          echo "Database already initialized ($$TABLE_COUNT tables found). Skipping."
+        fi
+    restart: "no"
 
   app:
     build: ./app
-    container_name: thesis_app
+    container_name: app
     depends_on:
-      - llm
-      - db
+      llm-pull:
+        condition: service_completed_successfully
+      db-init:
+        condition: service_completed_successfully
     environment:
       - OLLAMA_URL=http://llm:11434
-      - DB_URL=postgresql://thesis_user:secure_password@db:5432/company_data
+      - DB_URL=postgresql://user:password@db:5432/company_data
     volumes:
       - ./app:/app
-    command: tail -f /dev/null
+    command: streamlit run main.py
+    ports:
+      - "8501:8501"
+    restart: always
+
 
 volumes:
   ollama_storage:

@@ -179,10 +179,6 @@ def main():
         st.session_state.chat_history = []
         st.rerun()
     
-    # Show schema in sidebar
-    with st.sidebar.expander("Database Schema"):
-        st.code(schema_string, language="sql")
-    
     # --- Main Chat Interface ---
     st.title("Text-to-SQL Chatbot")
     

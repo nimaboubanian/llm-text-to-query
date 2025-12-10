@@ -75,7 +75,7 @@ services:
       - OLLAMA_URL=http://llm:11434
       - DB_URL=postgresql://user:password@db:5432/company_data
     volumes:
-      - ./app:/app
+      - ./app:/app:Z
     command: streamlit run main.py
     ports:
       - "8501:8501"

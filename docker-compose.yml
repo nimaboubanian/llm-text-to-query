@@ -1,87 +1,170 @@
+x-healthcheck: &default-healthcheck
+  interval: 5s
+  timeout: 5s
+  retries: 5
+
 services:
-  llm:
+  ollama:
     image: ollama/ollama:latest
-    container_name: llm
+    container_name: ollama
     ports:
       - "11434:11434"
     volumes:
-      - ollama_storage:/root/.ollama
+      - ollama_data:/root/.ollama
     restart: always
 
-  llm-pull:
+  ollama-model-init:
     image: ollama/ollama:latest
-    container_name: llm-pull
+    container_name: ollama-model-init
     depends_on:
-      - llm
+      - ollama
     environment:
-      - OLLAMA_HOST=http://llm:11434
+      OLLAMA_HOST: ${OLLAMA_HOST}
     volumes:
-      - ollama_storage:/root/.ollama
-    entrypoint: ["/bin/sh", "-c", "sleep 10 && ollama pull llama3.2:3b"]
+      - ollama_data:/root/.ollama
+    entrypoint: ["/bin/sh", "-c", "sleep 10 && ollama pull qwen2.5:7b"]
     restart: "no"
 
-  db:
+  postgres:
     image: postgres:15-alpine
-    container_name: db
-    environment:
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: password
-      POSTGRES_DB: company_data
+    container_name: postgres
+    profiles: [postgres, all]
+    env_file: .env
     ports:
       - "5432:5432"
     volumes:
       - pg_data:/var/lib/postgresql/data
-      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:Z
+      - ./db/postgres_example.sql:/docker-entrypoint-initdb.d/init.sql:Z
     restart: always
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U user -d company_data"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      <<: *default-healthcheck
 
-  db-init:
-    image: postgres:15-alpine
-    container_name: db-init
-    depends_on:
-      db:
-        condition: service_healthy
-    environment:
-      PGPASSWORD: secure_password
+  mysql:
+    image: mysql:8.0
+    container_name: mysql
+    profiles: [mysql, all]
+    env_file: .env
+    ports:
+      - "3306:3306"
     volumes:
-      - ./db/init.sql:/init.sql:ro,Z
-    entrypoint: ["/bin/sh", "-c"]
-    command:
-      - |
-        # Check if tables exist, if not run init.sql
-        TABLE_COUNT=$$(psql -h db -U user -d company_data -tAc "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public'")
-        if [ "$$TABLE_COUNT" -eq "0" ]; then
-          echo "No tables found. Initializing database..."
-          psql -h db -U user -d company_data -f /init.sql
-          echo "Database initialized successfully!"
-        else
-          echo "Database already initialized ($$TABLE_COUNT tables found). Skipping."
-        fi
-    restart: "no"
+      - mysql_data:/var/lib/mysql
+      - ./db/mysql_example.sql:/docker-entrypoint-initdb.d/init.sql:Z
+    restart: always
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
+      <<: *default-healthcheck
+
+  mongodb:
+    image: mongo:7
+    container_name: mongodb
+    profiles: [mongodb, all]
+    env_file: .env
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+      - ./db/mongodb_example.js:/docker-entrypoint-initdb.d/init.js:Z
+    restart: always
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      <<: *default-healthcheck
+
+  mariadb:
+    image: mariadb:11
+    container_name: mariadb
+    profiles: [mariadb, all]
+    env_file: .env
+    ports:
+      - "3307:3306"
+    volumes:
+      - mariadb_data:/var/lib/mysql
+      - ./db/mariadb_example.sql:/docker-entrypoint-initdb.d/init.sql:Z
+    restart: always
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      <<: *default-healthcheck
+
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: sqlserver
+    profiles: [sqlserver, all]
+    env_file: .env
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD}
+    ports:
+      - "1433:1433"
+    volumes:
+      - sqlserver_data:/var/opt/mssql
+    restart: always
+    healthcheck:
+      test: ["CMD", "/opt/mssql-tools18/bin/sqlcmd", "-S", "localhost", "-U", "sa", "-P", "${MSSQL_SA_PASSWORD}", "-C", "-Q", "SELECT 1"]
+      <<: *default-healthcheck
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    container_name: clickhouse
+    profiles: [clickhouse, all]
+    env_file: .env
+    environment:
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
+      CLICKHOUSE_DB: ${CLICKHOUSE_DB}
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+      - ./db/clickhouse_example.sql:/docker-entrypoint-initdb.d/init-db.sql:Z
+    restart: always
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8123/ping"]
+      <<: *default-healthcheck
+
+  neo4j:
+    image: neo4j:5
+    container_name: neo4j
+    profiles: [neo4j, all]
+    env_file: .env
+    environment:
+      NEO4J_AUTH: ${NEO4J_USER}/${NEO4J_PASSWORD}
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    volumes:
+      - neo4j_data:/data
+      - ./db/neo4j_example.cypher:/var/lib/neo4j/import/init.cypher:Z
+    restart: always
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:7474"]
+      <<: *default-healthcheck
 
   app:
     build: ./app
     container_name: app
     depends_on:
-      llm-pull:
+      ollama-model-init:
         condition: service_completed_successfully
-      db-init:
-        condition: service_completed_successfully
+    env_file: .env
     environment:
-      - OLLAMA_URL=http://llm:11434
-      - DB_URL=postgresql://user:password@db:5432/company_data
+      OLLAMA_URL: ${OLLAMA_HOST}
     volumes:
       - ./app:/app:Z
+      - app_data:/app/data
+      - ./db:/app/db:Z
     command: streamlit run main.py
     ports:
       - "8501:8501"
     restart: always
 
-
 volumes:
-  ollama_storage:
+  ollama_data:
   pg_data:
+  mysql_data:
+  mongo_data:
+  mariadb_data:
+  sqlserver_data:
+  clickhouse_data:
+  neo4j_data:
+  app_data:

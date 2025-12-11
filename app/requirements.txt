@@ -3,3 +3,8 @@ psycopg2-binary==2.9.9
 sqlalchemy==2.0.25
 pandas==2.2.0
 streamlit==1.52.0
+pymysql==1.1.0
+pymongo==4.6.1
+pymssql==2.3.0
+clickhouse-connect==0.7.19
+neo4j==5.26.0

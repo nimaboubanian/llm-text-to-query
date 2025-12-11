@@ -6,6 +6,5 @@ WARP.md
 .vscode/
 .DS_Store
 .env
-
-# Local data (Docker volume handles this)
-app/data/
+*.egg-info/
+__pycache__/

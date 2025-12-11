@@ -152,8 +152,8 @@ services:
     volumes:
       - ./app:/app:Z
       - app_data:/app/data
-      - ./db:/app/db:Z
-    command: streamlit run main.py
+      - ./db:/db:Z
+    command: streamlit run src/core/main.py
     ports:
       - "8501:8501"
     restart: always

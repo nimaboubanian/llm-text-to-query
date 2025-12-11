@@ -1,3 +1,5 @@
+"""Schema introspection helpers for various database types."""
+
 from typing import Optional
 
 from sqlalchemy import create_engine, inspect, text
@@ -20,13 +22,13 @@ def get_database_schema_string(engine, db_type: DatabaseType = DatabaseType.POST
     try:
         if db_type in SQL_DB_TYPES:
             return _get_sql_schema(engine)
-        elif db_type == DatabaseType.MONGODB:
+        if db_type == DatabaseType.MONGODB:
             return _get_mongodb_schema(engine)
-        elif db_type == DatabaseType.NEO4J:
+        if db_type == DatabaseType.NEO4J:
             return _get_neo4j_schema(engine)
         return f"Schema introspection not yet implemented for {db_type.value}"
     except Exception as e:
-        raise Exception(f"Failed to introspect schema for {db_type.value}: {e}")
+        raise RuntimeError(f"Failed to introspect schema for {db_type.value}: {e}") from e
 
 
 def _get_sql_schema(engine):
@@ -39,7 +41,8 @@ def _get_sql_schema(engine):
         col_descs = [f"{c['name']} ({c['type']})" for c in columns]
 
         fk_descs = [
-            f"FOREIGN KEY ({', '.join(fk['constrained_columns'])}) REFERENCES {fk['referred_table']}({', '.join(fk['referred_columns'])})"
+            f"FOREIGN KEY ({', '.join(fk['constrained_columns'])}) "
+            f"REFERENCES {fk['referred_table']}({', '.join(fk['referred_columns'])})"
             for fk in inspector.get_foreign_keys(table_name)
         ]
 
@@ -54,7 +57,7 @@ def _get_sql_schema(engine):
 def _get_mongodb_schema(connection_url):
     """Get schema for MongoDB by sampling collections."""
     try:
-        from pymongo import MongoClient
+        from pymongo import MongoClient  # pylint: disable=import-outside-toplevel
 
         client = MongoClient(connection_url)
         db_name = connection_url.split("/")[-1].split("?")[0] or "test"
@@ -72,14 +75,14 @@ def _get_mongodb_schema(connection_url):
         return "\n".join(schema_strings)
     except ImportError:
         return "MongoDB support requires 'pymongo' package."
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught
         return f"Error introspecting MongoDB schema: {e}"
 
 
 def _get_neo4j_schema(connection_url):
     """Get schema for Neo4j by querying node labels, relationship types, and properties."""
     try:
-        from neo4j import GraphDatabase
+        from neo4j import GraphDatabase  # pylint: disable=import-outside-toplevel
 
         # Parse bolt URL: bolt://user:pass@host:port
         url_parts = connection_url.replace("bolt://", "").split("@")
@@ -112,7 +115,7 @@ def _get_neo4j_schema(connection_url):
         return "\n".join(schema_strings) or "Empty graph database"
     except ImportError:
         return "Neo4j support requires 'neo4j' package."
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught
         return f"Error introspecting Neo4j schema: {e}"
 
 
@@ -139,14 +142,14 @@ def validate_database_connection(
             engine.dispose()
             return True, None
         if db_type == DatabaseType.MONGODB:
-            from pymongo import MongoClient
+            from pymongo import MongoClient  # pylint: disable=import-outside-toplevel
 
             client = MongoClient(db_url, serverSelectionTimeoutMS=5000)
             client.server_info()
             client.close()
             return True, None
         if db_type == DatabaseType.NEO4J:
-            from neo4j import GraphDatabase
+            from neo4j import GraphDatabase  # pylint: disable=import-outside-toplevel
 
             url_parts = db_url.replace("bolt://", "").split("@")
             auth = (
@@ -162,5 +165,5 @@ def validate_database_connection(
         return False, f"Unsupported database type: {db_type.value}"
     except ImportError:
         return False, "Required database driver not installed"
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught
         return False, str(e)

@@ -132,7 +132,7 @@ def get_server_databases(server: DatabaseServer) -> list[str]:
     """List available databases on a server."""
     try:
         if server.db_type == DatabaseType.MONGODB:
-            from pymongo import MongoClient
+            from pymongo import MongoClient  # pylint: disable=import-outside-toplevel
 
             client = MongoClient(
                 host=server.host,
@@ -153,16 +153,22 @@ def get_server_databases(server: DatabaseServer) -> list[str]:
             # Neo4j doesn't have multiple databases in community edition
             return [server.default_db]
 
-        from sqlalchemy import create_engine, text
+        from sqlalchemy import create_engine, text  # pylint: disable=import-outside-toplevel
 
         url = build_connection_url(server, server.default_db)
 
         # Database listing queries per type
         queries = {
-            DatabaseType.POSTGRESQL: "SELECT datname FROM pg_database WHERE datistemplate = false AND datname NOT IN ('postgres')",
+            DatabaseType.POSTGRESQL: (
+                "SELECT datname FROM pg_database "
+                "WHERE datistemplate = false AND datname NOT IN ('postgres')"
+            ),
             DatabaseType.MYSQL: "SHOW DATABASES",
             DatabaseType.MARIADB: "SHOW DATABASES",
-            DatabaseType.SQLSERVER: "SELECT name FROM sys.databases WHERE name NOT IN ('master', 'tempdb', 'model', 'msdb')",
+            DatabaseType.SQLSERVER: (
+                "SELECT name FROM sys.databases "
+                "WHERE name NOT IN ('master', 'tempdb', 'model', 'msdb')"
+            ),
             DatabaseType.CLICKHOUSE: "SHOW DATABASES",
         }
 
@@ -262,7 +268,7 @@ class DatabaseConfigManager:
         if not DB_CONFIG_PATH.exists():
             return {}
         try:
-            data = json.loads(DB_CONFIG_PATH.read_text())
+            data = json.loads(DB_CONFIG_PATH.read_text(encoding="utf-8"))
             return {k: DatabaseConfig.from_dict(v) for k, v in data.items()}
         except (json.JSONDecodeError, KeyError):
             return {}
@@ -271,7 +277,7 @@ class DatabaseConfigManager:
         """Save databases to JSON file."""
         DB_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
         data = {k: v.to_dict() for k, v in self.databases.items()}
-        DB_CONFIG_PATH.write_text(json.dumps(data, indent=2))
+        DB_CONFIG_PATH.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
     def add_database(
         self, name: str, db_type: DatabaseType, url: str, description: str = ""

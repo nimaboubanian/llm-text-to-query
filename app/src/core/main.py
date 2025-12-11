@@ -1,3 +1,5 @@
+"""Main Streamlit application for LLM Text-to-Query chatbot."""
+
 import os
 import re
 
@@ -62,7 +64,8 @@ def get_sql_from_llm(
         if response.status_code == 404:
             return (
                 None,
-                "Model 'llama3.2:3b' not found. Please run: docker exec thesis_llm ollama pull llama3.2:3b",
+                "Model 'qwen2.5:7b' not found. "
+                "Please run: docker exec ollama-model-init ollama pull qwen2.5:7b",
             )
 
         if response.status_code != 200:
@@ -154,14 +157,14 @@ def execute_sql_query(engine, sql_query, db_type: DatabaseType):
             return _execute_neo4j_query(engine, sql_query)
         else:
             return f"Query execution not supported for {db_type.value}"
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught
         return str(e)
 
 
 def _execute_neo4j_query(connection_url: str, cypher_query: str):
     """Execute a Cypher query on Neo4j and return results as DataFrame."""
     try:
-        from neo4j import GraphDatabase
+        from neo4j import GraphDatabase  # pylint: disable=import-outside-toplevel
 
         # Parse bolt URL: bolt://user:pass@host:port
         url_parts = connection_url.replace("bolt://", "").split("@")
@@ -181,7 +184,7 @@ def _execute_neo4j_query(connection_url: str, cypher_query: str):
             return pd.DataFrame()
     except ImportError:
         return "Neo4j support requires 'neo4j' package."
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught
         return str(e)
 
 
@@ -207,7 +210,7 @@ def init_session_state():
             st.session_state.selected_db_key = list(all_dbs.keys())[0]
 
 
-def main():
+def main():  # pylint: disable=too-many-locals,too-many-branches,too-many-statements
     """Main Streamlit application."""
     # Page Config (must be first Streamlit command)
     st.set_page_config(page_title="Text-to-SQL Chatbot", layout="wide")
@@ -314,7 +317,7 @@ def main():
                             display_name, selected_server.db_type, connection_url
                         )
                         st.session_state.selected_db_key = config_key
-                        st.sidebar.success(f"✅ Connected!")
+                        st.sidebar.success("✅ Connected!")
                     st.rerun()
             else:
                 st.sidebar.warning("No databases found on this server")
@@ -378,7 +381,7 @@ def main():
                             custom_db_name, db_type_enum, custom_db_url, custom_db_desc
                         )
                         st.session_state.selected_db_key = config_key
-                        st.success(f"✅ Added")
+                        st.success("✅ Added")
                         st.rerun()
                     else:
                         st.error(f"❌ {error}")
@@ -444,7 +447,7 @@ def main():
                 st.session_state.current_engine = create_engine_for_database(
                     current_db_config.url, current_db_config.db_type
                 )
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             st.error(f"❌ Failed to connect to database: {e}")
             return
 
@@ -458,7 +461,7 @@ def main():
                 st.session_state.current_schema = get_database_schema_string(
                     st.session_state.current_engine, current_db_config.db_type
                 )
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             st.error(f"❌ Could not fetch database schema: {e}")
             return
 

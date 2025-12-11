@@ -134,7 +134,7 @@ services:
       - "7687:7687"
     volumes:
       - neo4j_data:/data
-      - ./db/neo4j_example.cypher:/var/lib/neo4j/import/init.cypher:Z
+      - ./db/neo4j_example.cypher:/var/lib/neo4j/import/init.cypher:ro,Z
     restart: always
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:7474"]

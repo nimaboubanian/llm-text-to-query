@@ -1,4 +1,5 @@
 """Database configuration management for multi-database support."""
+
 import json
 import os
 import re
@@ -15,6 +16,7 @@ DB_CONFIG_PATH = Path(os.getenv("DB_CONFIG_PATH", "/app/data/databases.json"))
 
 class DatabaseType(Enum):
     """Supported database types."""
+
     POSTGRESQL = "PostgreSQL"
     MYSQL = "MySQL"
     SQLITE = "SQLite"
@@ -32,6 +34,7 @@ _TYPE_STR_MAP = {t.name: t for t in DatabaseType}
 @dataclass
 class DatabaseServer:
     """A database server endpoint."""
+
     name: str
     db_type: DatabaseType
     host: str
@@ -46,46 +49,67 @@ def _get_known_servers() -> list[DatabaseServer]:
     """Build server list using environment variables."""
     return [
         DatabaseServer(
-            "PostgreSQL", DatabaseType.POSTGRESQL, "postgres", 5432,
+            "PostgreSQL",
+            DatabaseType.POSTGRESQL,
+            "postgres",
+            5432,
             os.getenv("POSTGRES_USER", "user"),
             os.getenv("POSTGRES_PASSWORD", "password"),
-            os.getenv("POSTGRES_DB", "postgres")
+            os.getenv("POSTGRES_DB", "postgres"),
         ),
         DatabaseServer(
-            "MySQL", DatabaseType.MYSQL, "mysql", 3306,
+            "MySQL",
+            DatabaseType.MYSQL,
+            "mysql",
+            3306,
             os.getenv("MYSQL_USER", "user"),
             os.getenv("MYSQL_PASSWORD", "password"),
-            os.getenv("MYSQL_DATABASE", "mysql")
+            os.getenv("MYSQL_DATABASE", "mysql"),
         ),
         DatabaseServer(
-            "MariaDB", DatabaseType.MARIADB, "mariadb", 3306,
+            "MariaDB",
+            DatabaseType.MARIADB,
+            "mariadb",
+            3306,
             os.getenv("MARIADB_USER", "user"),
             os.getenv("MARIADB_PASSWORD", "password"),
-            os.getenv("MARIADB_DATABASE", "mysql")
+            os.getenv("MARIADB_DATABASE", "mysql"),
         ),
         DatabaseServer(
-            "MongoDB", DatabaseType.MONGODB, "mongodb", 27017,
+            "MongoDB",
+            DatabaseType.MONGODB,
+            "mongodb",
+            27017,
             os.getenv("MONGO_INITDB_ROOT_USERNAME", "admin"),
             os.getenv("MONGO_INITDB_ROOT_PASSWORD", "password"),
-            "admin"
+            "admin",
         ),
         DatabaseServer(
-            "SQL Server", DatabaseType.SQLSERVER, "sqlserver", 1433,
+            "SQL Server",
+            DatabaseType.SQLSERVER,
+            "sqlserver",
+            1433,
             os.getenv("MSSQL_USER", "sa"),
             os.getenv("MSSQL_SA_PASSWORD", "Password123!"),
-            os.getenv("MSSQL_DATABASE", "master")
+            os.getenv("MSSQL_DATABASE", "master"),
         ),
         DatabaseServer(
-            "ClickHouse", DatabaseType.CLICKHOUSE, "clickhouse", 8123,
+            "ClickHouse",
+            DatabaseType.CLICKHOUSE,
+            "clickhouse",
+            8123,
             os.getenv("CLICKHOUSE_USER", "default"),
             os.getenv("CLICKHOUSE_PASSWORD", ""),
-            os.getenv("CLICKHOUSE_DATABASE", "default")
+            os.getenv("CLICKHOUSE_DATABASE", "default"),
         ),
         DatabaseServer(
-            "Neo4j", DatabaseType.NEO4J, "neo4j", 7687,
+            "Neo4j",
+            DatabaseType.NEO4J,
+            "neo4j",
+            7687,
             os.getenv("NEO4J_USER", "neo4j"),
             os.getenv("NEO4J_PASSWORD", "password"),
-            "neo4j"
+            "neo4j",
         ),
     ]
 
@@ -109,23 +133,30 @@ def get_server_databases(server: DatabaseServer) -> list[str]:
     try:
         if server.db_type == DatabaseType.MONGODB:
             from pymongo import MongoClient
+
             client = MongoClient(
-                host=server.host, port=server.port,
-                username=server.user, password=server.password,
-                serverSelectionTimeoutMS=2000
+                host=server.host,
+                port=server.port,
+                username=server.user,
+                password=server.password,
+                serverSelectionTimeoutMS=2000,
             )
-            dbs = [db for db in client.list_database_names() 
-                   if db not in ('admin', 'config', 'local')]
+            dbs = [
+                db
+                for db in client.list_database_names()
+                if db not in ("admin", "config", "local")
+            ]
             client.close()
             return dbs
-        
+
         if server.db_type == DatabaseType.NEO4J:
             # Neo4j doesn't have multiple databases in community edition
             return [server.default_db]
-        
+
         from sqlalchemy import create_engine, text
+
         url = build_connection_url(server, server.default_db)
-        
+
         # Database listing queries per type
         queries = {
             DatabaseType.POSTGRESQL: "SELECT datname FROM pg_database WHERE datistemplate = false AND datname NOT IN ('postgres')",
@@ -134,26 +165,40 @@ def get_server_databases(server: DatabaseServer) -> list[str]:
             DatabaseType.SQLSERVER: "SELECT name FROM sys.databases WHERE name NOT IN ('master', 'tempdb', 'model', 'msdb')",
             DatabaseType.CLICKHOUSE: "SHOW DATABASES",
         }
-        
+
         query = queries.get(server.db_type)
         if not query:
             return [server.default_db]
-        
+
         engine = create_engine(url, pool_pre_ping=True)
         with engine.connect() as conn:
             result = conn.execute(text(query))
             dbs = [row[0] for row in result]
         engine.dispose()
-        
+
         # Filter system databases
         system_dbs = {
-            DatabaseType.MYSQL: {'information_schema', 'mysql', 'performance_schema', 'sys'},
-            DatabaseType.MARIADB: {'information_schema', 'mysql', 'performance_schema', 'sys'},
-            DatabaseType.CLICKHOUSE: {'system', 'information_schema', 'INFORMATION_SCHEMA'},
+            DatabaseType.MYSQL: {
+                "information_schema",
+                "mysql",
+                "performance_schema",
+                "sys",
+            },
+            DatabaseType.MARIADB: {
+                "information_schema",
+                "mysql",
+                "performance_schema",
+                "sys",
+            },
+            DatabaseType.CLICKHOUSE: {
+                "system",
+                "information_schema",
+                "INFORMATION_SCHEMA",
+            },
         }
         if server.db_type in system_dbs:
             dbs = [db for db in dbs if db not in system_dbs[server.db_type]]
-        
+
         return dbs if dbs else [server.default_db]
     except Exception:
         return [server.default_db]
@@ -162,7 +207,7 @@ def get_server_databases(server: DatabaseServer) -> list[str]:
 def build_connection_url(server: DatabaseServer, database: str) -> str:
     """Build a connection URL for a specific database on a server."""
     u, p, h, port = server.user, server.password, server.host, server.port
-    
+
     url_patterns = {
         DatabaseType.MONGODB: f"mongodb://{u}:{p}@{h}:{port}/{database}",
         DatabaseType.POSTGRESQL: f"postgresql://{u}:{p}@{h}:{port}/{database}",
@@ -172,26 +217,29 @@ def build_connection_url(server: DatabaseServer, database: str) -> str:
         DatabaseType.CLICKHOUSE: f"clickhouse://{u}:{p}@{h}:{port}/{database}",
         DatabaseType.NEO4J: f"bolt://{u}:{p}@{h}:{port}",
     }
-    return url_patterns.get(server.db_type, f"postgresql://{u}:{p}@{h}:{port}/{database}")
+    return url_patterns.get(
+        server.db_type, f"postgresql://{u}:{p}@{h}:{port}/{database}"
+    )
 
 
 @dataclass
 class DatabaseConfig:
     """Database connection configuration."""
+
     name: str
     db_type: DatabaseType
     url: str
     description: str = ""
-    
+
     def to_dict(self) -> dict:
         """Convert to JSON-serializable dict."""
         return {
             "name": self.name,
             "db_type": self.db_type.name,
             "url": self.url,
-            "description": self.description
+            "description": self.description,
         }
-    
+
     @classmethod
     def from_dict(cls, data: dict) -> "DatabaseConfig":
         """Create from dict."""
@@ -199,16 +247,16 @@ class DatabaseConfig:
             name=data["name"],
             db_type=_TYPE_STR_MAP.get(data["db_type"], DatabaseType.POSTGRESQL),
             url=data["url"],
-            description=data.get("description", "")
+            description=data.get("description", ""),
         )
 
 
 class DatabaseConfigManager:
     """Manages database configurations stored in JSON file."""
-    
+
     def __init__(self):
         self.databases = self._load_databases()
-    
+
     def _load_databases(self) -> dict[str, DatabaseConfig]:
         """Load databases from JSON file."""
         if not DB_CONFIG_PATH.exists():
@@ -218,41 +266,43 @@ class DatabaseConfigManager:
             return {k: DatabaseConfig.from_dict(v) for k, v in data.items()}
         except (json.JSONDecodeError, KeyError):
             return {}
-    
+
     def _save_databases(self) -> None:
         """Save databases to JSON file."""
         DB_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
         data = {k: v.to_dict() for k, v in self.databases.items()}
         DB_CONFIG_PATH.write_text(json.dumps(data, indent=2))
-    
-    def add_database(self, name: str, db_type: DatabaseType, url: str, description: str = "") -> str:
+
+    def add_database(
+        self, name: str, db_type: DatabaseType, url: str, description: str = ""
+    ) -> str:
         """Add a database configuration and persist to file."""
-        base_key = re.sub(r'[^a-z0-9]', '_', name.lower()).strip('_')
+        base_key = re.sub(r"[^a-z0-9]", "_", name.lower()).strip("_")
         config_key = base_key
         counter = 1
         while config_key in self.databases:
             config_key = f"{base_key}_{counter}"
             counter += 1
-        
+
         self.databases[config_key] = DatabaseConfig(name, db_type, url, description)
         self._save_databases()
         return config_key
-    
+
     def remove_database(self, config_key: str) -> bool:
         """Remove a database configuration and update file."""
         if self.databases.pop(config_key, None) is not None:
             self._save_databases()
             return True
         return False
-    
+
     def get_all_databases(self) -> dict[str, DatabaseConfig]:
         """Get all available database configurations."""
         return self.databases
-    
+
     def get_database(self, config_key: str) -> Optional[DatabaseConfig]:
         """Get a specific database configuration."""
         return self.databases.get(config_key)
-    
+
     def get_database_display_names(self) -> list[tuple[str, str]]:
         """Get list of (config_key, display_name) tuples for UI."""
         return [(k, c.name) for k, c in self.databases.items()]

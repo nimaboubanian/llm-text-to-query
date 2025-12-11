@@ -13,3 +13,13 @@ dependencies = [
     "pymysql>=1.1.0",
     "pymongo>=4.6.1",
 ]
+
+[project.optional-dependencies]
+dev = [
+    "black>=25.12.0",
+    "pylint>=4.0.4",
+]
+
+[tool.black]
+line-length = 100
+target-version = ['py314']

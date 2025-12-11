@@ -4,8 +4,12 @@ from database_config import DatabaseType
 
 # SQL-based database types that use SQLAlchemy
 SQL_DB_TYPES = {
-    DatabaseType.POSTGRESQL, DatabaseType.MYSQL, DatabaseType.SQLITE, 
-    DatabaseType.MARIADB, DatabaseType.SQLSERVER, DatabaseType.CLICKHOUSE
+    DatabaseType.POSTGRESQL,
+    DatabaseType.MYSQL,
+    DatabaseType.SQLITE,
+    DatabaseType.MARIADB,
+    DatabaseType.SQLSERVER,
+    DatabaseType.CLICKHOUSE,
 }
 
 
@@ -27,21 +31,21 @@ def _get_sql_schema(engine):
     """Get schema for SQL databases using SQLAlchemy."""
     inspector = inspect(engine)
     schema_strings = []
-    
+
     for table_name in inspector.get_table_names():
         columns = inspector.get_columns(table_name)
         col_descs = [f"{c['name']} ({c['type']})" for c in columns]
-        
+
         fk_descs = [
             f"FOREIGN KEY ({', '.join(fk['constrained_columns'])}) REFERENCES {fk['referred_table']}({', '.join(fk['referred_columns'])})"
             for fk in inspector.get_foreign_keys(table_name)
         ]
-        
+
         table_desc = f"Table '{table_name}' has columns: {', '.join(col_descs)}"
         if fk_descs:
             table_desc += ". " + " ".join(fk_descs)
         schema_strings.append(table_desc)
-    
+
     return "\n".join(schema_strings)
 
 
@@ -49,13 +53,17 @@ def _get_mongodb_schema(connection_url):
     """Get schema for MongoDB by sampling collections."""
     try:
         from pymongo import MongoClient
+
         client = MongoClient(connection_url)
-        db_name = connection_url.split('/')[-1].split('?')[0] or 'test'
+        db_name = connection_url.split("/")[-1].split("?")[0] or "test"
         db = client[db_name]
-        
+
         schema_strings = [
-            f"Collection '{name}' has fields: {', '.join(doc.keys())}" 
-            if (doc := db[name].find_one()) else f"Collection '{name}' (empty)"
+            (
+                f"Collection '{name}' has fields: {', '.join(doc.keys())}"
+                if (doc := db[name].find_one())
+                else f"Collection '{name}' (empty)"
+            )
             for name in db.list_collection_names()
         ]
         client.close()
@@ -70,15 +78,17 @@ def _get_neo4j_schema(connection_url):
     """Get schema for Neo4j by querying node labels, relationship types, and properties."""
     try:
         from neo4j import GraphDatabase
-        
+
         # Parse bolt URL: bolt://user:pass@host:port
         url_parts = connection_url.replace("bolt://", "").split("@")
-        auth = tuple(url_parts[0].split(":")) if len(url_parts) > 1 else ("neo4j", "neo4j")
+        auth = (
+            tuple(url_parts[0].split(":")) if len(url_parts) > 1 else ("neo4j", "neo4j")
+        )
         uri = f"bolt://{url_parts[-1]}"
-        
+
         driver = GraphDatabase.driver(uri, auth=auth)
         schema_strings = []
-        
+
         with driver.session() as session:
             # Get node labels and their properties
             labels = session.run("CALL db.labels()").value()
@@ -87,13 +97,15 @@ def _get_neo4j_schema(connection_url):
                     f"MATCH (n:`{label}`) WITH n LIMIT 1 RETURN keys(n) as keys"
                 ).single()
                 prop_list = props["keys"] if props else []
-                schema_strings.append(f"Node ':{label}' has properties: {', '.join(prop_list) or 'none'}")
-            
+                schema_strings.append(
+                    f"Node ':{label}' has properties: {', '.join(prop_list) or 'none'}"
+                )
+
             # Get relationship types
             rel_types = session.run("CALL db.relationshipTypes()").value()
             for rel_type in rel_types:
                 schema_strings.append(f"Relationship ':{rel_type}'")
-        
+
         driver.close()
         return "\n".join(schema_strings) or "Empty graph database"
     except ImportError:
@@ -113,7 +125,9 @@ def create_engine_for_database(db_url: str, db_type: DatabaseType):
     raise ValueError(f"Unsupported database type: {db_type.value}")
 
 
-def validate_database_connection(db_url: str, db_type: DatabaseType) -> tuple[bool, Optional[str]]:
+def validate_database_connection(
+    db_url: str, db_type: DatabaseType
+) -> tuple[bool, Optional[str]]:
     """Validate database connection. Returns (success, error_message)."""
     try:
         if db_type in SQL_DB_TYPES:
@@ -124,14 +138,20 @@ def validate_database_connection(db_url: str, db_type: DatabaseType) -> tuple[bo
             return True, None
         if db_type == DatabaseType.MONGODB:
             from pymongo import MongoClient
+
             client = MongoClient(db_url, serverSelectionTimeoutMS=5000)
             client.server_info()
             client.close()
             return True, None
         if db_type == DatabaseType.NEO4J:
             from neo4j import GraphDatabase
+
             url_parts = db_url.replace("bolt://", "").split("@")
-            auth = tuple(url_parts[0].split(":")) if len(url_parts) > 1 else ("neo4j", "neo4j")
+            auth = (
+                tuple(url_parts[0].split(":"))
+                if len(url_parts) > 1
+                else ("neo4j", "neo4j")
+            )
             uri = f"bolt://{url_parts[-1]}"
             driver = GraphDatabase.driver(uri, auth=auth)
             driver.verify_connectivity()

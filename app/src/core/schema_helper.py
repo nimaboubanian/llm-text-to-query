@@ -1,6 +1,8 @@
-from sqlalchemy import inspect, create_engine, text
 from typing import Optional
-from database_config import DatabaseType
+
+from sqlalchemy import create_engine, inspect, text
+
+from .database_config import DatabaseType
 
 # SQL-based database types that use SQLAlchemy
 SQL_DB_TYPES = {

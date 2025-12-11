@@ -8,18 +8,32 @@ import requests
 import streamlit as st
 from sqlalchemy import text
 
-from .database_config import (
-    DatabaseConfigManager,
-    DatabaseType,
-    build_connection_url,
-    discover_available_servers,
-    get_server_databases,
-)
-from .schema_helper import (
-    create_engine_for_database,
-    get_database_schema_string,
-    validate_database_connection,
-)
+try:
+    from .database_config import (
+        DatabaseConfigManager,
+        DatabaseType,
+        build_connection_url,
+        discover_available_servers,
+        get_server_databases,
+    )
+    from .schema_helper import (
+        create_engine_for_database,
+        get_database_schema_string,
+        validate_database_connection,
+    )
+except ImportError:
+    from database_config import (
+        DatabaseConfigManager,
+        DatabaseType,
+        build_connection_url,
+        discover_available_servers,
+        get_server_databases,
+    )
+    from schema_helper import (
+        create_engine_for_database,
+        get_database_schema_string,
+        validate_database_connection,
+    )
 
 # Environment Variables
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")

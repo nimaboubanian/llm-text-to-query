@@ -4,7 +4,10 @@ from typing import Optional
 
 from sqlalchemy import create_engine, inspect, text
 
-from .database_config import DatabaseType
+try:
+    from .database_config import DatabaseType
+except ImportError:
+    from database_config import DatabaseType
 
 # SQL-based database types that use SQLAlchemy
 SQL_DB_TYPES = {

@@ -2,16 +2,10 @@
 
 import streamlit as st
 
-try:
-    from .config import APP_TITLE
-    from .llm_service import get_sql_from_llm
-    from .query_executor import execute_sql_query
-    from .ui import init_session_state, render_sidebar, render_main_chat_interface
-except ImportError:
-    from config import APP_TITLE
-    from llm_service import get_sql_from_llm
-    from query_executor import execute_sql_query
-    from ui import init_session_state, render_sidebar, render_main_chat_interface
+from core.config import APP_TITLE
+from core.llm_service import get_sql_from_llm
+from core.query_executor import execute_sql_query
+from core.ui import init_session_state, render_sidebar, render_main_chat_interface
 
 
 def main():

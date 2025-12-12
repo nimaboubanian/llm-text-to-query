@@ -7,28 +7,16 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
 
-try:
-    from .config import (
-        DB_CONFIG_PATH,
-        POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB, POSTGRES_HOST, POSTGRES_PORT,
-        MYSQL_USER, MYSQL_PASSWORD, MYSQL_DATABASE, MYSQL_HOST, MYSQL_PORT,
-        MARIADB_USER, MARIADB_PASSWORD, MARIADB_DATABASE, MARIADB_HOST, MARIADB_PORT,
-        MONGO_USER, MONGO_PASSWORD, MONGO_DATABASE, MONGO_HOST, MONGO_PORT,
-        MSSQL_USER, MSSQL_SA_PASSWORD, MSSQL_DATABASE, MSSQL_HOST, MSSQL_PORT,
-        CLICKHOUSE_USER, CLICKHOUSE_PASSWORD, CLICKHOUSE_DB, CLICKHOUSE_HOST, CLICKHOUSE_PORT,
-        NEO4J_USER, NEO4J_PASSWORD, NEO4J_DATABASE, NEO4J_HOST, NEO4J_PORT,
-    )
-except ImportError:
-    from config import (
-        DB_CONFIG_PATH,
-        POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB, POSTGRES_HOST, POSTGRES_PORT,
-        MYSQL_USER, MYSQL_PASSWORD, MYSQL_DATABASE, MYSQL_HOST, MYSQL_PORT,
-        MARIADB_USER, MARIADB_PASSWORD, MARIADB_DATABASE, MARIADB_HOST, MARIADB_PORT,
-        MONGO_USER, MONGO_PASSWORD, MONGO_DATABASE, MONGO_HOST, MONGO_PORT,
-        MSSQL_USER, MSSQL_SA_PASSWORD, MSSQL_DATABASE, MSSQL_HOST, MSSQL_PORT,
-        CLICKHOUSE_USER, CLICKHOUSE_PASSWORD, CLICKHOUSE_DB, CLICKHOUSE_HOST, CLICKHOUSE_PORT,
-        NEO4J_USER, NEO4J_PASSWORD, NEO4J_DATABASE, NEO4J_HOST, NEO4J_PORT,
-    )
+from core.config import (
+    DB_CONFIG_PATH,
+    POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB, POSTGRES_HOST, POSTGRES_PORT,
+    MYSQL_USER, MYSQL_PASSWORD, MYSQL_DATABASE, MYSQL_HOST, MYSQL_PORT,
+    MARIADB_USER, MARIADB_PASSWORD, MARIADB_DATABASE, MARIADB_HOST, MARIADB_PORT,
+    MONGO_USER, MONGO_PASSWORD, MONGO_DATABASE, MONGO_HOST, MONGO_PORT,
+    MSSQL_USER, MSSQL_SA_PASSWORD, MSSQL_DATABASE, MSSQL_HOST, MSSQL_PORT,
+    CLICKHOUSE_USER, CLICKHOUSE_PASSWORD, CLICKHOUSE_DB, CLICKHOUSE_HOST, CLICKHOUSE_PORT,
+    NEO4J_USER, NEO4J_PASSWORD, NEO4J_DATABASE, NEO4J_HOST, NEO4J_PORT,
+)
 
 
 class DatabaseType(Enum):
@@ -58,76 +46,26 @@ class DatabaseServer:
     port: int
     user: str
     password: str
-    default_db: str  # Used for initial connection to list databases
+    default_db: str
 
 
-# Known database server endpoints - credentials from environment
+# Server configuration mapping: (host, port, user, password, default_db)
+_SERVER_CONFIGS = {
+    DatabaseType.POSTGRESQL: (POSTGRES_HOST, POSTGRES_PORT, POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB),
+    DatabaseType.MYSQL: (MYSQL_HOST, MYSQL_PORT, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DATABASE),
+    DatabaseType.MARIADB: (MARIADB_HOST, MARIADB_PORT, MARIADB_USER, MARIADB_PASSWORD, MARIADB_DATABASE),
+    DatabaseType.MONGODB: (MONGO_HOST, MONGO_PORT, MONGO_USER, MONGO_PASSWORD, MONGO_DATABASE),
+    DatabaseType.SQLSERVER: (MSSQL_HOST, MSSQL_PORT, MSSQL_USER, MSSQL_SA_PASSWORD, MSSQL_DATABASE),
+    DatabaseType.CLICKHOUSE: (CLICKHOUSE_HOST, CLICKHOUSE_PORT, CLICKHOUSE_USER, CLICKHOUSE_PASSWORD, CLICKHOUSE_DB),
+    DatabaseType.NEO4J: (NEO4J_HOST, NEO4J_PORT, NEO4J_USER, NEO4J_PASSWORD, NEO4J_DATABASE),
+}
+
+
 def _get_known_servers() -> list[DatabaseServer]:
-    """Build server list using configuration from config.py."""
+    """Build server list from configuration mapping."""
     return [
-        DatabaseServer(
-            "PostgreSQL",
-            DatabaseType.POSTGRESQL,
-            POSTGRES_HOST,
-            POSTGRES_PORT,
-            POSTGRES_USER,
-            POSTGRES_PASSWORD,
-            POSTGRES_DB,
-        ),
-        DatabaseServer(
-            "MySQL",
-            DatabaseType.MYSQL,
-            MYSQL_HOST,
-            MYSQL_PORT,
-            MYSQL_USER,
-            MYSQL_PASSWORD,
-            MYSQL_DATABASE,
-        ),
-        DatabaseServer(
-            "MariaDB",
-            DatabaseType.MARIADB,
-            MARIADB_HOST,
-            MARIADB_PORT,
-            MARIADB_USER,
-            MARIADB_PASSWORD,
-            MARIADB_DATABASE,
-        ),
-        DatabaseServer(
-            "MongoDB",
-            DatabaseType.MONGODB,
-            MONGO_HOST,
-            MONGO_PORT,
-            MONGO_USER,
-            MONGO_PASSWORD,
-            MONGO_DATABASE,
-        ),
-        DatabaseServer(
-            "SQL Server",
-            DatabaseType.SQLSERVER,
-            MSSQL_HOST,
-            MSSQL_PORT,
-            MSSQL_USER,
-            MSSQL_SA_PASSWORD,
-            MSSQL_DATABASE,
-        ),
-        DatabaseServer(
-            "ClickHouse",
-            DatabaseType.CLICKHOUSE,
-            CLICKHOUSE_HOST,
-            CLICKHOUSE_PORT,
-            CLICKHOUSE_USER,
-            CLICKHOUSE_PASSWORD,
-            CLICKHOUSE_DB,
-        ),
-        DatabaseServer(
-            "Neo4j",
-            DatabaseType.NEO4J,
-            NEO4J_HOST,
-            NEO4J_PORT,
-            NEO4J_USER,
-            NEO4J_PASSWORD,
-            NEO4J_DATABASE,
-        ),
+        DatabaseServer(db_type.value, db_type, *config)
+        for db_type, config in _SERVER_CONFIGS.items()
     ]
 
 
@@ -200,27 +138,11 @@ def get_server_databases(server: DatabaseServer) -> list[str]:
         engine.dispose()
 
         # Filter system databases
-        system_dbs = {
-            DatabaseType.MYSQL: {
-                "information_schema",
-                "mysql",
-                "performance_schema",
-                "sys",
-            },
-            DatabaseType.MARIADB: {
-                "information_schema",
-                "mysql",
-                "performance_schema",
-                "sys",
-            },
-            DatabaseType.CLICKHOUSE: {
-                "system",
-                "information_schema",
-                "INFORMATION_SCHEMA",
-            },
+        _SYSTEM_DBS = {
+            "information_schema", "mysql", "performance_schema", "sys",
+            "system", "INFORMATION_SCHEMA",
         }
-        if server.db_type in system_dbs:
-            dbs = [db for db in dbs if db not in system_dbs[server.db_type]]
+        dbs = [db for db in dbs if db not in _SYSTEM_DBS]
 
         return dbs if dbs else [server.default_db]
     except Exception:

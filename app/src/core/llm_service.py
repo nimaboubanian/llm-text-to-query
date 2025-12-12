@@ -4,12 +4,8 @@ import re
 
 import requests
 
-try:
-    from .config import OLLAMA_URL, OLLAMA_MODEL, OLLAMA_TIMEOUT
-    from .database_config import DatabaseType
-except ImportError:
-    from config import OLLAMA_URL, OLLAMA_MODEL, OLLAMA_TIMEOUT
-    from database_config import DatabaseType
+from core.config import OLLAMA_URL, OLLAMA_MODEL, OLLAMA_TIMEOUT
+from core.database_config import DatabaseType
 
 
 # Map database types to SQL dialects for prompt generation

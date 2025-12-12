@@ -4,19 +4,22 @@ from typing import Optional
 
 from sqlalchemy import create_engine, inspect, text
 
-try:
-    from .database_config import DatabaseType
-except ImportError:
-    from database_config import DatabaseType
+from core.database_config import DatabaseType
 
 # SQL-based database types that use SQLAlchemy
-SQL_DB_TYPES = {
+SQL_DB_TYPES = frozenset({
     DatabaseType.POSTGRESQL,
     DatabaseType.MYSQL,
     DatabaseType.SQLITE,
     DatabaseType.MARIADB,
     DatabaseType.SQLSERVER,
     DatabaseType.CLICKHOUSE,
+})
+
+# Schema handler dispatch
+_SCHEMA_HANDLERS = {
+    DatabaseType.MONGODB: "_get_mongodb_schema",
+    DatabaseType.NEO4J: "_get_neo4j_schema",
 }
 
 
@@ -25,10 +28,9 @@ def get_database_schema_string(engine, db_type: DatabaseType = DatabaseType.POST
     try:
         if db_type in SQL_DB_TYPES:
             return _get_sql_schema(engine)
-        if db_type == DatabaseType.MONGODB:
-            return _get_mongodb_schema(engine)
-        if db_type == DatabaseType.NEO4J:
-            return _get_neo4j_schema(engine)
+        handler = _SCHEMA_HANDLERS.get(db_type)
+        if handler:
+            return globals()[handler](engine)
         return f"Schema introspection not yet implemented for {db_type.value}"
     except Exception as e:
         raise RuntimeError(f"Failed to introspect schema for {db_type.value}: {e}") from e

@@ -3,42 +3,34 @@
 import pandas as pd
 from sqlalchemy import text
 
-try:
-    from .database_config import DatabaseType
-except ImportError:
-    from database_config import DatabaseType
+from core.database_config import DatabaseType
+
+# SQL-based database types
+SQL_DB_TYPES = frozenset({
+    DatabaseType.POSTGRESQL,
+    DatabaseType.MYSQL,
+    DatabaseType.SQLITE,
+    DatabaseType.MARIADB,
+    DatabaseType.SQLSERVER,
+    DatabaseType.CLICKHOUSE,
+})
 
 
 def execute_sql_query(engine, sql_query: str, db_type: DatabaseType):
     """
     Execute the SQL query and return results as a DataFrame.
 
-    Args:
-        engine: SQLAlchemy engine or connection URL (for Neo4j)
-        sql_query: The SQL/Cypher query to execute
-        db_type: Type of database
-
     Returns:
         DataFrame with results, or error message string
     """
     try:
-        # SQL-based databases (SQLAlchemy)
-        sql_types = [
-            DatabaseType.POSTGRESQL,
-            DatabaseType.MYSQL,
-            DatabaseType.SQLITE,
-            DatabaseType.MARIADB,
-            DatabaseType.SQLSERVER,
-            DatabaseType.CLICKHOUSE,
-        ]
-        if db_type in sql_types:
+        if db_type in SQL_DB_TYPES:
             return _execute_sqlalchemy_query(engine, sql_query)
-        elif db_type == DatabaseType.MONGODB:
-            return _execute_mongodb_query(engine, sql_query)
-        elif db_type == DatabaseType.NEO4J:
+        if db_type == DatabaseType.MONGODB:
+            return "MongoDB query execution not yet implemented"
+        if db_type == DatabaseType.NEO4J:
             return _execute_neo4j_query(engine, sql_query)
-        else:
-            return f"Query execution not supported for {db_type.value}"
+        return f"Query execution not supported for {db_type.value}"
     except Exception as e:  # pylint: disable=broad-exception-caught
         return str(e)
 
@@ -50,13 +42,6 @@ def _execute_sqlalchemy_query(engine, sql_query: str) -> pd.DataFrame:
         rows = result.fetchall()
         columns = result.keys()
         return pd.DataFrame(rows, columns=columns)
-
-
-def _execute_mongodb_query(engine, query: str) -> str:
-    """Execute MongoDB query. Currently not implemented."""
-    # For MongoDB, the query would be different (not SQL)
-    # This would need to parse the query and use pymongo
-    return "MongoDB query execution not yet implemented"
 
 
 def _execute_neo4j_query(connection_url: str, cypher_query: str):

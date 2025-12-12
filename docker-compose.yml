@@ -126,19 +126,40 @@ services:
     image: neo4j:5
     container_name: neo4j
     profiles: [neo4j, all]
-    env_file: .env
     environment:
-      NEO4J_AUTH: ${NEO4J_USER}/${NEO4J_PASSWORD}
+      NEO4J_AUTH: ${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD:-password123}
     ports:
       - "7474:7474"
       - "7687:7687"
     volumes:
       - neo4j_data:/data
-      - ./db/neo4j_example.cypher:/var/lib/neo4j/import/init.cypher:ro,Z
+      - ./db:/import:Z
     restart: always
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:7474"]
       <<: *default-healthcheck
+
+  neo4j-init:
+    image: neo4j:5
+    container_name: neo4j-init
+    profiles: [neo4j, all]
+    depends_on:
+      neo4j:
+        condition: service_healthy
+    environment:
+      NEO4J_USER: ${NEO4J_USER:-neo4j}
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD:-password123}
+    volumes:
+      - ./db/neo4j_example.cypher:/init.cypher:ro,Z
+    entrypoint: >
+      /bin/bash -c "
+        echo 'Waiting for Neo4j to be ready...' &&
+        sleep 5 &&
+        echo 'Running init script...' &&
+        cat /init.cypher | cypher-shell -a bolt://neo4j:7687 -u $$NEO4J_USER -p $$NEO4J_PASSWORD &&
+        echo 'Neo4j initialization complete!'
+      "
+    restart: "no"
 
   app:
     build: ./app

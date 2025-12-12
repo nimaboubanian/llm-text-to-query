@@ -1,17 +1,34 @@
 """Database configuration management for multi-database support."""
 
 import json
-import os
 import re
 import socket
 from dataclasses import dataclass
 from enum import Enum
-from pathlib import Path
 from typing import Optional
 
-
-# Path for storing database configurations
-DB_CONFIG_PATH = Path(os.getenv("DB_CONFIG_PATH", "/app/data/databases.json"))
+try:
+    from .config import (
+        DB_CONFIG_PATH,
+        POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB, POSTGRES_HOST, POSTGRES_PORT,
+        MYSQL_USER, MYSQL_PASSWORD, MYSQL_DATABASE, MYSQL_HOST, MYSQL_PORT,
+        MARIADB_USER, MARIADB_PASSWORD, MARIADB_DATABASE, MARIADB_HOST, MARIADB_PORT,
+        MONGO_USER, MONGO_PASSWORD, MONGO_DATABASE, MONGO_HOST, MONGO_PORT,
+        MSSQL_USER, MSSQL_SA_PASSWORD, MSSQL_DATABASE, MSSQL_HOST, MSSQL_PORT,
+        CLICKHOUSE_USER, CLICKHOUSE_PASSWORD, CLICKHOUSE_DB, CLICKHOUSE_HOST, CLICKHOUSE_PORT,
+        NEO4J_USER, NEO4J_PASSWORD, NEO4J_DATABASE, NEO4J_HOST, NEO4J_PORT,
+    )
+except ImportError:
+    from config import (
+        DB_CONFIG_PATH,
+        POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB, POSTGRES_HOST, POSTGRES_PORT,
+        MYSQL_USER, MYSQL_PASSWORD, MYSQL_DATABASE, MYSQL_HOST, MYSQL_PORT,
+        MARIADB_USER, MARIADB_PASSWORD, MARIADB_DATABASE, MARIADB_HOST, MARIADB_PORT,
+        MONGO_USER, MONGO_PASSWORD, MONGO_DATABASE, MONGO_HOST, MONGO_PORT,
+        MSSQL_USER, MSSQL_SA_PASSWORD, MSSQL_DATABASE, MSSQL_HOST, MSSQL_PORT,
+        CLICKHOUSE_USER, CLICKHOUSE_PASSWORD, CLICKHOUSE_DB, CLICKHOUSE_HOST, CLICKHOUSE_PORT,
+        NEO4J_USER, NEO4J_PASSWORD, NEO4J_DATABASE, NEO4J_HOST, NEO4J_PORT,
+    )
 
 
 class DatabaseType(Enum):
@@ -46,70 +63,70 @@ class DatabaseServer:
 
 # Known database server endpoints - credentials from environment
 def _get_known_servers() -> list[DatabaseServer]:
-    """Build server list using environment variables."""
+    """Build server list using configuration from config.py."""
     return [
         DatabaseServer(
             "PostgreSQL",
             DatabaseType.POSTGRESQL,
-            "postgres",
-            5432,
-            os.getenv("POSTGRES_USER", "user"),
-            os.getenv("POSTGRES_PASSWORD", "password"),
-            os.getenv("POSTGRES_DB", "postgres"),
+            POSTGRES_HOST,
+            POSTGRES_PORT,
+            POSTGRES_USER,
+            POSTGRES_PASSWORD,
+            POSTGRES_DB,
         ),
         DatabaseServer(
             "MySQL",
             DatabaseType.MYSQL,
-            "mysql",
-            3306,
-            os.getenv("MYSQL_USER", "user"),
-            os.getenv("MYSQL_PASSWORD", "password"),
-            os.getenv("MYSQL_DATABASE", "mysql"),
+            MYSQL_HOST,
+            MYSQL_PORT,
+            MYSQL_USER,
+            MYSQL_PASSWORD,
+            MYSQL_DATABASE,
         ),
         DatabaseServer(
             "MariaDB",
             DatabaseType.MARIADB,
-            "mariadb",
-            3306,
-            os.getenv("MARIADB_USER", "user"),
-            os.getenv("MARIADB_PASSWORD", "password"),
-            os.getenv("MARIADB_DATABASE", "mysql"),
+            MARIADB_HOST,
+            MARIADB_PORT,
+            MARIADB_USER,
+            MARIADB_PASSWORD,
+            MARIADB_DATABASE,
         ),
         DatabaseServer(
             "MongoDB",
             DatabaseType.MONGODB,
-            "mongodb",
-            27017,
-            os.getenv("MONGO_INITDB_ROOT_USERNAME", "admin"),
-            os.getenv("MONGO_INITDB_ROOT_PASSWORD", "password"),
-            "admin",
+            MONGO_HOST,
+            MONGO_PORT,
+            MONGO_USER,
+            MONGO_PASSWORD,
+            MONGO_DATABASE,
         ),
         DatabaseServer(
             "SQL Server",
             DatabaseType.SQLSERVER,
-            "sqlserver",
-            1433,
-            os.getenv("MSSQL_USER", "sa"),
-            os.getenv("MSSQL_SA_PASSWORD", "Password123!"),
-            os.getenv("MSSQL_DATABASE", "master"),
+            MSSQL_HOST,
+            MSSQL_PORT,
+            MSSQL_USER,
+            MSSQL_SA_PASSWORD,
+            MSSQL_DATABASE,
         ),
         DatabaseServer(
             "ClickHouse",
             DatabaseType.CLICKHOUSE,
-            "clickhouse",
-            8123,
-            os.getenv("CLICKHOUSE_USER", "default"),
-            os.getenv("CLICKHOUSE_PASSWORD", ""),
-            os.getenv("CLICKHOUSE_DATABASE", "default"),
+            CLICKHOUSE_HOST,
+            CLICKHOUSE_PORT,
+            CLICKHOUSE_USER,
+            CLICKHOUSE_PASSWORD,
+            CLICKHOUSE_DB,
         ),
         DatabaseServer(
             "Neo4j",
             DatabaseType.NEO4J,
-            "neo4j",
-            7687,
-            os.getenv("NEO4J_USER", "neo4j"),
-            os.getenv("NEO4J_PASSWORD", "password"),
-            "neo4j",
+            NEO4J_HOST,
+            NEO4J_PORT,
+            NEO4J_USER,
+            NEO4J_PASSWORD,
+            NEO4J_DATABASE,
         ),
     ]
 

@@ -4,11 +4,11 @@ import re
 
 import requests
 
-from .config import OLLAMA_URL, OLLAMA_MODEL, OLLAMA_TIMEOUT
-
 try:
+    from .config import OLLAMA_URL, OLLAMA_MODEL, OLLAMA_TIMEOUT
     from .database_config import DatabaseType
 except ImportError:
+    from config import OLLAMA_URL, OLLAMA_MODEL, OLLAMA_TIMEOUT
     from database_config import DatabaseType
 
 

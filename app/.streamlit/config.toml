@@ -1,0 +1,12 @@
+[client]
+showSidebarNavigation = false
+toolbarMode = "minimal"
+
+[server]
+headless = true
+
+[browser]
+gatherUsageStats = false
+
+[theme]
+base = "light"

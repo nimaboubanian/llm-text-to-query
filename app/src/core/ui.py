@@ -4,6 +4,7 @@ import pandas as pd
 import streamlit as st
 
 try:
+    from .config import APP_TITLE
     from .database_config import (
         DatabaseConfigManager,
         DatabaseType,
@@ -17,6 +18,7 @@ try:
         validate_database_connection,
     )
 except ImportError:
+    from config import APP_TITLE
     from database_config import (
         DatabaseConfigManager,
         DatabaseType,
@@ -54,125 +56,119 @@ def init_session_state():
 
 
 def render_database_selector():
-    """Render the database selection dropdown in sidebar."""
-    st.sidebar.subheader("📊 Select Database")
+    """Render unified database selection with saved and discovered databases."""
+    st.sidebar.subheader("🗄️ Database Connection")
 
     db_config_manager = st.session_state.db_config_manager
     all_databases = db_config_manager.get_all_databases()
-
-    if all_databases:
-        db_display_names = db_config_manager.get_database_display_names()
-        db_keys = [key for key, _ in db_display_names]
-        db_labels = [
-            f"{name} ({all_databases[key].db_type.value})"
-            for key, name in db_display_names
-        ]
-
-        # Find current selection index
-        current_index = 0
-        if st.session_state.selected_db_key in db_keys:
-            current_index = db_keys.index(st.session_state.selected_db_key)
-
-        selected_index = st.sidebar.selectbox(
-            "Choose Database",
-            range(len(db_labels)),
-            format_func=lambda i: db_labels[i],
-            index=current_index,
-            key="db_selector",
-        )
-
-        new_selected_key = db_keys[selected_index]
-
-        # If database changed, update engine and schema
-        if new_selected_key != st.session_state.selected_db_key:
-            st.session_state.selected_db_key = new_selected_key
-            st.session_state.current_engine = None
-            st.session_state.current_schema = None
-            st.session_state.use_manual_schema = False
-            st.rerun()
-    else:
-        st.sidebar.warning("⚠️ No databases configured")
-
-
-def render_quick_connect():
-    """Render the quick connect section in sidebar."""
-    st.sidebar.subheader("⚡ Quick Connect")
 
     # Cache discovered servers for this session
     if "discovered_servers" not in st.session_state:
         st.session_state.discovered_servers = discover_available_servers()
 
     servers = st.session_state.discovered_servers
-    db_config_manager = st.session_state.db_config_manager
-    all_databases = db_config_manager.get_all_databases()
 
-    if servers:
-        # Step 1: Select server
-        server_names = ["-- Select server --"] + [
-            f"{s.name} ({s.host}:{s.port})" for s in servers
-        ]
-        selected_server_name = st.sidebar.selectbox(
-            "Database Server", options=server_names, key="quick_connect_server"
+    # Build combined list: saved databases + discovered (not yet saved)
+    db_options = []  # List of (key, label, is_saved, server_info, db_name)
+
+    # Add saved databases first
+    for key, config in all_databases.items():
+        label = f"💾 {config.name} ({config.db_type.value})"
+        db_options.append((key, label, True, None, None))
+
+    # Add discovered databases that aren't already saved
+    for server in servers:
+        cache_key = f"dbs_{server.host}_{server.port}"
+        if cache_key not in st.session_state:
+            st.session_state[cache_key] = get_server_databases(server)
+
+        databases = st.session_state[cache_key]
+        for db_name in databases:
+            connection_url = build_connection_url(server, db_name)
+            # Check if this database is already saved
+            already_saved = any(c.url == connection_url for c in all_databases.values())
+            if not already_saved:
+                label = f"🔍 {db_name} ({server.name})"
+                db_options.append((None, label, False, server, db_name))
+
+    if db_options:
+        # Build display labels with placeholder
+        labels = ["-- Select Database --"] + [opt[1] for opt in db_options]
+
+        # Find current selection index (offset by 1 due to placeholder)
+        current_index = 0
+        if st.session_state.selected_db_key:
+            for i, opt in enumerate(db_options):
+                if opt[0] == st.session_state.selected_db_key:
+                    current_index = i + 1  # +1 for placeholder
+                    break
+
+        selected_index = st.sidebar.selectbox(
+            "Choose Database",
+            range(len(labels)),
+            format_func=lambda i: labels[i],
+            index=current_index,
+            key="db_selector",
         )
 
-        if selected_server_name != "-- Select server --":
-            # Find selected server
-            server_idx = server_names.index(selected_server_name) - 1
-            selected_server = servers[server_idx]
+        # Handle placeholder selection
+        if selected_index == 0:
+            st.sidebar.info("Please select a database to connect.")
+            if st.sidebar.button("🔄 Scan for Servers", key="scan_servers_placeholder"):
+                _refresh_discovered_servers()
+                st.rerun()
+        else:
+            selected_option = db_options[selected_index - 1]  # -1 for placeholder offset
+            selected_key, _, is_saved, server_info, db_name = selected_option
 
-            # Step 2: List databases on this server
-            cache_key = f"dbs_{selected_server.host}_{selected_server.port}"
-            if cache_key not in st.session_state:
-                st.session_state[cache_key] = get_server_databases(selected_server)
-
-            databases = st.session_state[cache_key]
-
-            if databases:
-                selected_database = st.sidebar.selectbox(
-                    "Database/Schema", options=databases, key="quick_connect_database"
-                )
-
-                # Build connection URL
-                connection_url = build_connection_url(
-                    selected_server, selected_database
-                )
-                display_name = f"{selected_database} ({selected_server.name})"
-
-                if st.sidebar.button("Connect", key="quick_connect_btn"):
-                    # Check if already added
-                    existing_key = None
-                    for key, config in all_databases.items():
-                        if config.url == connection_url:
-                            existing_key = key
-                            break
-
-                    if existing_key:
-                        st.session_state.selected_db_key = existing_key
-                        st.sidebar.info("Already added, selected it.")
-                    else:
+            # Handle selection change
+            if is_saved:
+                # Saved database - just switch to it
+                if selected_key != st.session_state.selected_db_key:
+                    st.session_state.selected_db_key = selected_key
+                    st.session_state.current_engine = None
+                    st.session_state.current_schema = None
+                    st.session_state.use_manual_schema = False
+                    st.rerun()
+            else:
+                # Discovered database - show connect button
+                col1, col2 = st.sidebar.columns(2)
+                with col1:
+                    if st.button("🔗 Connect", key="connect_discovered"):
+                        connection_url = build_connection_url(server_info, db_name)
+                        display_name = f"{db_name} ({server_info.name})"
                         config_key = db_config_manager.add_database(
-                            display_name, selected_server.db_type, connection_url
+                            display_name, server_info.db_type, connection_url
                         )
                         st.session_state.selected_db_key = config_key
                         st.sidebar.success("✅ Connected!")
-                    st.rerun()
-            else:
-                st.sidebar.warning("No databases found on this server")
+                        st.rerun()
+                with col2:
+                    if st.button("🔄 Refresh", key="refresh_servers"):
+                        _refresh_discovered_servers()
+                        st.rerun()
 
-        if st.sidebar.button("🔄 Refresh", key="refresh_servers"):
-            # Clear all cached data
-            keys_to_clear = [k for k in st.session_state if k.startswith("dbs_")]
-            for k in keys_to_clear:
-                del st.session_state[k]
-            st.session_state.discovered_servers = discover_available_servers()
-            st.rerun()
+            # Refresh button when a saved database is selected
+            if is_saved:
+                if st.sidebar.button("🔄 Scan for Servers", key="scan_servers"):
+                    _refresh_discovered_servers()
+                    st.rerun()
     else:
-        st.sidebar.info(
-            "No database servers detected. Start containers or add manually."
-        )
-        if st.sidebar.button("🔄 Scan", key="scan_servers"):
-            st.session_state.discovered_servers = discover_available_servers()
+        st.sidebar.info("No databases available. Scan for servers or add manually.")
+        if st.sidebar.button("🔄 Scan for Servers", key="scan_servers_empty"):
+            _refresh_discovered_servers()
             st.rerun()
+
+    # Show legend
+    st.sidebar.caption("💾 Saved  |  🔍 Discovered")
+
+
+def _refresh_discovered_servers():
+    """Clear cached data and rediscover servers."""
+    keys_to_clear = [k for k in st.session_state if k.startswith("dbs_")]
+    for k in keys_to_clear:
+        del st.session_state[k]
+    st.session_state.discovered_servers = discover_available_servers()
 
 
 def render_manual_connection():
@@ -247,6 +243,7 @@ def render_schema_management():
             "Enter Schema Manually",
             value=st.session_state.manual_schema_override or "",
             height=200,
+            placeholder="Table 'users' has columns: id (INTEGER), name (VARCHAR), email (VARCHAR)\nTable 'orders' has columns: id (INTEGER), user_id (INTEGER), total (DECIMAL). FOREIGN KEY (user_id) REFERENCES users(id)",
             key="manual_schema_input",
         )
         if st.sidebar.button("Apply Manual Schema"):
@@ -271,10 +268,35 @@ def render_sidebar():
     """Render the complete sidebar with all sections."""
     st.sidebar.title("⚙️ Settings")
     render_database_selector()
-    render_quick_connect()
+    st.sidebar.divider()
     render_manual_connection()
+    st.sidebar.divider()
     render_schema_management()
+    st.sidebar.divider()
     render_other_settings()
+
+
+def apply_custom_styles():
+    """Apply custom CSS styles to the app."""
+    custom_css = """
+        <style>
+        /* Hide anchor links on headers */
+        .stMarkdown a[href^="#"] {
+            display: none !important;
+        }
+        h1 a, h2 a, h3 a {
+            display: none !important;
+        }
+        /* Fix cursor for selectbox dropdowns */
+        .stSelectbox > div > div {
+            cursor: pointer !important;
+        }
+        .stSelectbox input {
+            cursor: pointer !important;
+        }
+        </style>
+    """
+    st.markdown(custom_css, unsafe_allow_html=True)
 
 
 def render_chat_history():
@@ -361,7 +383,11 @@ def render_main_chat_interface(sql_generator, query_executor):
         sql_generator: Function to generate SQL from natural language
         query_executor: Function to execute SQL query
     """
-    st.title("💬 Text-to-SQL Chatbot")
+    apply_custom_styles()
+    st.markdown(
+        f"<h1 style='text-align: center;'>💬 {APP_TITLE}</h1>",
+        unsafe_allow_html=True,
+    )
 
     db_config_manager = st.session_state.db_config_manager
 

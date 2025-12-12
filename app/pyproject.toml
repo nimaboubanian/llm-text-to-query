@@ -19,6 +19,7 @@ dependencies = [
     "pymssql>=2.3.0",
     "clickhouse-connect>=0.7.19",
     "neo4j>=5.26.0",
+    "python-dotenv>=1.0.0",
 ]
 
 [project.optional-dependencies]

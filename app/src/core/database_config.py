@@ -6,6 +6,7 @@ import socket
 from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
+from urllib.parse import quote_plus
 
 from core.config import (
     DB_CONFIG_PATH,
@@ -151,7 +152,9 @@ def get_server_databases(server: DatabaseServer) -> list[str]:
 
 def build_connection_url(server: DatabaseServer, database: str) -> str:
     """Build a connection URL for a specific database on a server."""
-    u, p, h, port = server.user, server.password, server.host, server.port
+    # URL-encode credentials to handle special characters like @, :, /
+    u, p = quote_plus(server.user), quote_plus(server.password)
+    h, port = server.host, server.port
 
     url_patterns = {
         DatabaseType.MONGODB: f"mongodb://{u}:{p}@{h}:{port}/{database}",

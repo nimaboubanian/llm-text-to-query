@@ -122,6 +122,8 @@ def _handle_database_selection(option, db_config_manager):
                 db_name, server.db_type, url
             )
             st.session_state.selected_db_key = config_key
+            st.session_state.current_engine = None
+            st.session_state.current_schema = None
             st.rerun()
 
 
@@ -164,6 +166,8 @@ def render_manual_connection():
                 if ok:
                     key = st.session_state.db_config_manager.add_database(name, db_type_enum, url)
                     st.session_state.selected_db_key = key
+                    st.session_state.current_engine = None
+                    st.session_state.current_schema = None
                     st.rerun()
                 else:
                     st.error(f"❌ {err}")

@@ -8,105 +8,82 @@ A natural language to SQL/NoSQL query converter using local LLMs (Ollama) with m
 # 1. Setup environment
 cp .env.example .env
 
-# 2. Start core services (app + LLM only)
-docker compose up -d
+# 2. Start core services (app + LLM)
+make up
 
 # 3. Start with specific databases
-docker compose --profile postgres up -d           # + PostgreSQL
-docker compose --profile postgres --profile mysql up -d  # + PostgreSQL & MySQL
-docker compose --profile all up -d                # + All databases
+make postgres    # + PostgreSQL
+make mysql       # + MySQL
+make all         # + All databases
 
 # 4. Open the app
 open http://localhost:8501
 ```
 
-## Database Profiles
+## Makefile Commands
 
-Only start the databases you need:
-
-| Profile | Databases | Command |
-|---------|-----------|---------|
-| (none) | App + Ollama only | `docker compose up -d` |
-| `postgres` | + PostgreSQL | `docker compose --profile postgres up -d` |
-| `mysql` | + MySQL | `docker compose --profile mysql up -d` |
-| `mariadb` | + MariaDB | `docker compose --profile mariadb up -d` |
-| `mongodb` | + MongoDB | `docker compose --profile mongodb up -d` |
-| `sqlserver` | + SQL Server | `docker compose --profile sqlserver up -d` |
-| `clickhouse` | + ClickHouse | `docker compose --profile clickhouse up -d` |
-| `neo4j` | + Neo4j | `docker compose --profile neo4j up -d` |
-| `all` | All databases | `docker compose --profile all up -d` |
-
-Combine profiles: `docker compose --profile postgres --profile mongodb up -d`
+| Command | Description |
+|---------|-------------|
+| `make help` | Show all commands |
+| `make up` | Start core services (app + Ollama) |
+| `make dev` | Start with logs in terminal |
+| `make postgres` | + PostgreSQL |
+| `make mysql` | + MySQL |
+| `make all` | + All databases |
+| `make down` | Stop services (keeps data) |
+| `make clean` | Stop and remove all volumes |
+| `make logs` | View app logs |
+| `make rebuild` | Rebuild app container |
 
 ## Configuration
 
-### Files Overview
-
-| File | Purpose | Git Tracked |
-|------|---------|-------------|
-| `.env.example` | Template with all variables (copy this) | ✅ Yes |
-| `.env` | Your actual credentials (edit this) | ❌ No |
-| `docker-compose.yml` | Service definitions | ✅ Yes |
-| `app/` | Application source code | ✅ Yes |
-| `db/` | Example database schemas | ✅ Yes |
-
 ### Environment Variables (.env)
 
-Copy `.env.example` to `.env` and configure:
-
-```bash
-cp .env.example .env
-```
+Copy `.env.example` to `.env` and configure needed databases.
 
 | Variable | Service | Description |
 |----------|---------|-------------|
 | `OLLAMA_HOST` | Ollama | LLM service URL |
-| `POSTGRES_USER` | PostgreSQL | Database username |
-| `POSTGRES_PASSWORD` | PostgreSQL | Database password |
-| `POSTGRES_DB` | PostgreSQL | Database name |
-| `MYSQL_ROOT_PASSWORD` | MySQL | Root password |
-| `MYSQL_DATABASE` | MySQL | Database name |
-| `MYSQL_USER` | MySQL | Database username |
-| `MYSQL_PASSWORD` | MySQL | Database password |
-| `MARIADB_*` | MariaDB | Same as MySQL |
-| `MONGO_INITDB_ROOT_USERNAME` | MongoDB | Admin username |
-| `MONGO_INITDB_ROOT_PASSWORD` | MongoDB | Admin password |
-| `MSSQL_SA_PASSWORD` | SQL Server | SA password (complex required) |
-| `CLICKHOUSE_USER` | ClickHouse | Username |
-| `CLICKHOUSE_PASSWORD` | ClickHouse | Password |
-| `CLICKHOUSE_DB` | ClickHouse | Default database |
-| `NEO4J_USER` | Neo4j | Username |
-| `NEO4J_PASSWORD` | Neo4j | Password |
+| `POSTGRES_*` | PostgreSQL | DB credentials |
+| `MYSQL_*` | MySQL | DB credentials |
+| `MARIADB_*` | MariaDB | DB credentials |
+| `MONGO_*` | MongoDB | DB credentials |
+| `MSSQL_*` | SQL Server | DB credentials |
+| `CLICKHOUSE_*` | ClickHouse | DB credentials |
+| `NEO4J_*` | Neo4j | DB credentials |
 
 ## Services
 
-| Service | Port | Description |
-|---------|------|-------------|
-| App | 8501 | Streamlit web interface |
-| Ollama | 11434 | LLM API |
-| PostgreSQL | 5432 | SQL database |
-| MySQL | 3306 | SQL database |
-| MariaDB | 3307 | SQL database |
-| MongoDB | 27017 | NoSQL database |
-| SQL Server | 1433 | SQL database |
-| ClickHouse | 8123, 9000 | OLAP database |
-| Neo4j | 7474, 7687 | Graph database |
+| Service | Port | Health Check | Notes |
+|---------|------|--------------|-------|
+| App | 8501 | ✅ | Streamlit UI |
+| Ollama | 11434 | ✅ | LLM API |
+| PostgreSQL | 5432 | ✅ | SQL DB |
+| MySQL | 3306 | ✅ | SQL DB |
+| MariaDB | 3307 | ✅ | SQL DB |
+| MongoDB | 27017 | ✅ | NoSQL DB |
+| SQL Server | 1433 | ✅ | SQL DB |
+| ClickHouse | 8123/9000 | ✅ | OLAP DB |
+| Neo4j | 7474/7687 | ✅ | Graph DB |
+
+## Features
+
+- **Multi-Database**: SQL, NoSQL, Graph databases
+- **LLM Selection**: Choose from 3 models (qwen2.5:7b, mistral:7b, llama3.2:3b)
+- **Auto-Discovery**: Detect running databases
+- **Persistent Data**: External volumes survive restarts
+- **Health Checks**: All services monitored
 
 ## Usage
 
-1. **Quick Connect**: Select from auto-detected running databases
-2. **Add Manually**: Enter custom connection URLs
-3. **Chat**: Ask questions in natural language
+1. **Connect**: Auto-detect or manually add databases
+2. **Chat**: Ask questions in natural language
+3. **Query**: Get generated SQL/NoSQL queries
 
-### Connection URL Examples
+### Connection Examples
 
 ```text
-PostgreSQL:  postgresql://user:password@postgres:5432/company_data
-MySQL:       mysql+pymysql://user:password@mysql:3306/ecommerce_db
-MariaDB:     mysql+pymysql://user:password@mariadb:3306/library_db
-MongoDB:     mongodb://admin:password@mongodb:27017/blog_platform
-SQLite:      sqlite:////app/data/mydb.db
-SQL Server:  mssql+pymssql://sa:Password@sqlserver:1433/mydb
-ClickHouse:  clickhouse://default:password@clickhouse:8123/analytics
-Neo4j:       bolt://neo4j:password@neo4j:7687
+PostgreSQL: postgresql://user:pass@postgres:5432/db
+MySQL: mysql+pymysql://user:pass@mysql:3306/db
+MongoDB: mongodb://admin:pass@mongodb:27017/db
 ```

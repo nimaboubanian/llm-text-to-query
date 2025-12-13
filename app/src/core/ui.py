@@ -3,7 +3,7 @@
 import pandas as pd
 import streamlit as st
 
-from core.config import APP_TITLE
+from core.config import APP_TITLE, AVAILABLE_MODELS, DEFAULT_MODEL
 from core.database_config import (
     DatabaseConfigManager,
     DatabaseType,
@@ -11,6 +11,7 @@ from core.database_config import (
     discover_available_servers,
     get_server_databases,
 )
+from core.llm_service import get_available_models
 from core.schema_helper import (
     create_engine_for_database,
     get_database_schema_string,
@@ -28,6 +29,8 @@ def init_session_state():
         "manual_schema_override": None,
         "use_manual_schema": False,
         "chat_history": [],
+        "selected_model": DEFAULT_MODEL,
+        "available_models": AVAILABLE_MODELS,
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -280,10 +283,11 @@ def handle_user_query(query, active_schema, current_db_config, sql_generator, qu
         st.write(query)
     st.session_state.chat_history.append({"role": "user", "content": query})
 
-    # Generate SQL
-    with st.spinner("Generating SQL..."):
+    # Generate SQL using selected model
+    selected_model = st.session_state.get("selected_model", DEFAULT_MODEL)
+    with st.spinner(f"Generating SQL with {selected_model}..."):
         generated_sql, error = sql_generator(
-            query, active_schema, current_db_config.db_type
+            query, active_schema, current_db_config.db_type, model=selected_model
         )
 
     if error:
@@ -404,8 +408,36 @@ def render_main_chat_interface(sql_generator, query_executor):
     # Display chat history
     render_chat_history()
 
-    # Chat input
-    query = st.chat_input("Ask a question about the database...")
+    # Chat input with LLM selector
+    chat_col, model_col = st.columns([0.92, 0.08])
+    
+    with chat_col:
+        query = st.chat_input("Ask a question about the database...")
+    
+    with model_col:
+        with st.popover("🤖", use_container_width=True):
+            st.markdown("**Select LLM Model**")
+            # Fetch available models from Ollama
+            models = get_available_models()
+            if models:
+                st.session_state.available_models = models
+            
+            current_model = st.session_state.selected_model
+            model_index = 0
+            if current_model in st.session_state.available_models:
+                model_index = st.session_state.available_models.index(current_model)
+            
+            selected = st.selectbox(
+                "Model",
+                options=st.session_state.available_models,
+                index=model_index,
+                key="model_selector",
+                label_visibility="collapsed",
+            )
+            if selected != st.session_state.selected_model:
+                st.session_state.selected_model = selected
+            
+            st.caption(f"Current: **{st.session_state.selected_model}**")
 
     if query:
         handle_user_query(query, active_schema, current_db_config, sql_generator, query_executor)

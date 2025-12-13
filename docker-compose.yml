@@ -22,7 +22,7 @@ services:
       OLLAMA_HOST: ${OLLAMA_HOST}
     volumes:
       - ollama_data:/root/.ollama
-    entrypoint: ["/bin/sh", "-c", "sleep 10 && ollama pull qwen2.5:7b"]
+    entrypoint: ["/bin/sh", "-c", "sleep 10 && ollama pull qwen2.5:7b && ollama pull mistral:7b && ollama pull llama3.2:3b"]
     restart: "no"
 
   postgres:
@@ -181,11 +181,29 @@ services:
 
 volumes:
   ollama_data:
+    external: true
+    name: ollama_models
   pg_data:
+    external: true
+    name: llm_pg_data
   mysql_data:
+    external: true
+    name: llm_mysql_data
   mongo_data:
+    external: true
+    name: llm_mongo_data
   mariadb_data:
+    external: true
+    name: llm_mariadb_data
   sqlserver_data:
+    external: true
+    name: llm_sqlserver_data
   clickhouse_data:
+    external: true
+    name: llm_clickhouse_data
   neo4j_data:
+    external: true
+    name: llm_neo4j_data
   app_data:
+    external: true
+    name: llm_app_data

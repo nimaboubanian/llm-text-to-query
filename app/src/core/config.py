@@ -27,6 +27,14 @@ OLLAMA_URL = _env("OLLAMA_URL") or _env("OLLAMA_HOST") or "http://localhost:1143
 OLLAMA_MODEL = _env("OLLAMA_MODEL", "qwen2.5:7b")
 OLLAMA_TIMEOUT = _env_int("OLLAMA_TIMEOUT", 120)
 
+# Available LLM models (pulled at container startup)
+AVAILABLE_MODELS = [
+    "qwen2.5:7b",
+    "mistral:7b",
+    "llama3.2:3b",
+]
+DEFAULT_MODEL = AVAILABLE_MODELS[0]
+
 # =============================================================================
 # Database Configurations (host, port, user, password, database)
 # =============================================================================

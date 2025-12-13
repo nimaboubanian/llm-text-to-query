@@ -4,7 +4,7 @@ import re
 
 import requests
 
-from core.config import OLLAMA_URL, OLLAMA_MODEL, OLLAMA_TIMEOUT
+from core.config import OLLAMA_URL, OLLAMA_TIMEOUT, AVAILABLE_MODELS, DEFAULT_MODEL
 from core.database_config import DatabaseType
 
 
@@ -21,10 +21,29 @@ DIALECT_MAP = {
 }
 
 
+def get_available_models() -> list[str]:
+    """
+    Get list of available models from Ollama server.
+    Falls back to configured models if server is unreachable.
+    """
+    try:
+        response = requests.get(f"{OLLAMA_URL}/api/tags", timeout=5)
+        if response.status_code == 200:
+            data = response.json()
+            models = [m["name"] for m in data.get("models", [])]
+            # Filter to only show models we support or all if none match
+            supported = [m for m in models if any(am in m for am in AVAILABLE_MODELS)]
+            return supported if supported else models
+    except requests.exceptions.RequestException:
+        pass
+    return AVAILABLE_MODELS
+
+
 def get_sql_from_llm(
     user_query: str,
     schema_str: str,
     db_type: DatabaseType = DatabaseType.POSTGRESQL,
+    model: str | None = None,
 ) -> tuple[str | None, str | None]:
     """
     Send the prompt to Ollama and return the generated SQL.
@@ -33,13 +52,15 @@ def get_sql_from_llm(
         user_query: Natural language question from the user
         schema_str: Database schema string for context
         db_type: Type of database to generate query for
+        model: LLM model to use (defaults to DEFAULT_MODEL)
 
     Returns:
         Tuple of (sql_query, error_message). One will be None.
     """
+    selected_model = model or DEFAULT_MODEL
     dialect = DIALECT_MAP.get(db_type, "SQL")
     prompt = _build_prompt(user_query, schema_str, dialect)
-    payload = {"model": OLLAMA_MODEL, "prompt": prompt, "stream": False}
+    payload = {"model": selected_model, "prompt": prompt, "stream": False}
 
     try:
         response = requests.post(
@@ -49,8 +70,8 @@ def get_sql_from_llm(
         if response.status_code == 404:
             return (
                 None,
-                f"Model '{OLLAMA_MODEL}' not found. "
-                f"Please run: docker exec ollama-model-init ollama pull {OLLAMA_MODEL}",
+                f"Model '{selected_model}' not found. "
+                f"Please run: docker exec ollama ollama pull {selected_model}",
             )
 
         if response.status_code != 200:

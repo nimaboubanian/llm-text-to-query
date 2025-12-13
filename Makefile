@@ -41,6 +41,10 @@ setup:
 		(echo "Creating llm_clickhouse_data volume..." && docker volume create llm_clickhouse_data)
 	@docker volume inspect llm_neo4j_data >/dev/null 2>&1 || \
 		(echo "Creating llm_neo4j_data volume..." && docker volume create llm_neo4j_data)
+	@docker volume inspect llm_neo4j_logs >/dev/null 2>&1 || \
+		(echo "Creating llm_neo4j_logs volume..." && docker volume create llm_neo4j_logs)
+	@docker volume inspect llm_mongo_configdb >/dev/null 2>&1 || \
+		(echo "Creating llm_mongo_configdb volume..." && docker volume create llm_mongo_configdb)
 	@docker volume inspect llm_app_data >/dev/null 2>&1 || \
 		(echo "Creating llm_app_data volume..." && docker volume create llm_app_data)
 
@@ -85,16 +89,16 @@ clean:
 	@echo "Stopping and removing all app containers..."
 	docker compose down --remove-orphans --volumes
 	@echo "Removing all app volumes..."
-	-docker volume rm ollama_models llm_pg_data llm_mysql_data llm_mongo_data \
-		llm_mariadb_data llm_sqlserver_data llm_clickhouse_data llm_neo4j_data llm_app_data 2>/dev/null || true
+	-docker volume rm ollama_models llm_pg_data llm_mysql_data llm_mongo_data llm_mongo_configdb \
+		llm_mariadb_data llm_sqlserver_data llm_clickhouse_data llm_neo4j_data llm_neo4j_logs llm_app_data 2>/dev/null || true
 	@echo "Cleanup complete."
 
 # Nuclear cleanup - removes EVERYTHING related to this project
 nuke:
 	@echo "🧨 Nuclear cleanup - removing all project containers, images, and volumes!"
 	docker compose --profile all down --remove-orphans --volumes --rmi all
-	-docker volume rm ollama_models llm_pg_data llm_mysql_data llm_mongo_data \
-		llm_mariadb_data llm_sqlserver_data llm_clickhouse_data llm_neo4j_data llm_app_data 2>/dev/null || true
+	-docker volume rm ollama_models llm_pg_data llm_mysql_data llm_mongo_data llm_mongo_configdb \
+		llm_mariadb_data llm_sqlserver_data llm_clickhouse_data llm_neo4j_data llm_neo4j_logs llm_app_data 2>/dev/null || true
 	-docker network rm llm-text-to-query_app-network 2>/dev/null || true
 	@echo "💥 All project resources removed. Run 'make setup' to start fresh."
 

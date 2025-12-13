@@ -76,6 +76,7 @@ services:
       - "27017:27017"
     volumes:
       - mongo_data:/data/db
+      - mongo_configdb:/data/configdb
       - ./db/mongodb_example.js:/docker-entrypoint-initdb.d/init.js:ro,Z
     restart: always
     healthcheck:
@@ -149,6 +150,7 @@ services:
       - "7687:7687"
     volumes:
       - neo4j_data:/data
+      - neo4j_logs:/logs
       - ./db:/import:Z
     restart: always
     healthcheck:
@@ -168,6 +170,8 @@ services:
       NEO4J_USER: ${NEO4J_USER:-neo4j}
       NEO4J_PASSWORD: ${NEO4J_PASSWORD:-password123}
     volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
       - ./db/neo4j_example.cypher:/init.cypher:ro,Z
     entrypoint: >
       /bin/bash -c "
@@ -232,6 +236,12 @@ volumes:
   neo4j_data:
     external: true
     name: llm_neo4j_data
+  neo4j_logs:
+    external: true
+    name: llm_neo4j_logs
+  mongo_configdb:
+    external: true
+    name: llm_mongo_configdb
   app_data:
     external: true
     name: llm_app_data

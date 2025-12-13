@@ -4,12 +4,13 @@
 help:
 	@echo "Available commands:"
 	@echo "  make setup      - Create all external volumes (run once)"
-	@echo "  make up         - Start core services (ollama + app)"
+	@echo "  make up         - Start core services (ollama + app) in background"
+	@echo "  make dev        - Start core services with logs in terminal"
 	@echo "  make down       - Stop all services (keeps volumes)"
-	@echo "  make clean      - Stop services only"
-	@echo "  make clean-all  - Stop and remove ALL external volumes"
+	@echo "  make clean      - Stop services and remove ALL external volumes"
 	@echo "  make logs       - Follow app logs"
 	@echo "  make rebuild    - Rebuild and restart app container"
+	@echo "  make test       - Run tests in app container"
 	@echo ""
 	@echo "Database profiles:"
 	@echo "  make postgres   - Start with PostgreSQL"
@@ -88,7 +89,7 @@ clean:
 
 # View app logs
 logs:
-	docker compose logs -f app
+	docker compose logs app
 
 # Rebuild app container
 rebuild:
@@ -96,4 +97,4 @@ rebuild:
 	docker compose up -d app
 
 test:
-    docker compose exec app pytest
+	docker compose exec app pytest

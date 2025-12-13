@@ -1,9 +1,10 @@
-FROM python:3.10-slim
+FROM python:3.14-slim
 
-# System dependencies for PostgreSQL
+# System dependencies for PostgreSQL and SQL Server
 RUN apt-get update && apt-get install -y \
     gcc \
     libpq-dev \
+    freetds-dev \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
@@ -22,5 +23,8 @@ RUN uv pip install --system --no-cache -r pyproject.toml
 # Copy the rest of the application
 COPY . .
 
-# Handled by docker-compose
-CMD ["python", "main.py"]
+# Install the package in editable mode
+RUN uv pip install --system --no-cache -e .
+
+# Default command (overridden by docker-compose)
+CMD ["python", "-m", "core.main"]

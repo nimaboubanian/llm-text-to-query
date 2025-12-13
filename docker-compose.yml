@@ -1,47 +1,241 @@
+x-healthcheck: &default-healthcheck
+  interval: 5s
+  timeout: 5s
+  retries: 5
+
+x-network: &default-network
+  networks:
+    - app-network
+
 services:
-  llm:
+  ollama:
     image: ollama/ollama:latest
-    container_name: thesis_llm
+    container_name: ollama
+    <<: *default-network
     ports:
       - "11434:11434"
     volumes:
-      - ollama_storage:/root/.ollama
-    # NVIDIA GPU
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: 1
-    #           capabilities: [gpu]
+      - ollama_data:/root/.ollama
     restart: always
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      <<: *default-healthcheck
 
-  db:
-    image: postgres:15-alpine
-    container_name: thesis_db
+  ollama-model-init:
+    image: ollama/ollama:latest
+    container_name: ollama-model-init
+    <<: *default-network
+    depends_on:
+      - ollama
     environment:
-      POSTGRES_USER: thesis_user
-      POSTGRES_PASSWORD: secure_password
-      POSTGRES_DB: company_data
+      OLLAMA_HOST: ${OLLAMA_HOST}
+    volumes:
+      - ollama_data:/root/.ollama
+    entrypoint: ["/bin/sh", "-c", "sleep 10 && ollama pull qwen2.5:7b && ollama pull mistral:7b && ollama pull llama3.2:3b"]
+    restart: "no"
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: postgres
+    <<: *default-network
+    profiles: [postgres, all]
+    env_file: .env
     ports:
       - "5432:5432"
     volumes:
       - pg_data:/var/lib/postgresql/data
+      - ./db/postgres_example.sql:/docker-entrypoint-initdb.d/init.sql:ro,Z
     restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      <<: *default-healthcheck
+
+  mysql:
+    image: mysql:8.0
+    container_name: mysql
+    <<: *default-network
+    profiles: [mysql, all]
+    env_file: .env
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./db/mysql_example.sql:/docker-entrypoint-initdb.d/init.sql:ro,Z
+    restart: always
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
+      <<: *default-healthcheck
+
+  mongodb:
+    image: mongo:7
+    container_name: mongodb
+    <<: *default-network
+    profiles: [mongodb, all]
+    env_file: .env
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+      - ./db/mongodb_example.js:/docker-entrypoint-initdb.d/init.js:ro,Z
+    restart: always
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      <<: *default-healthcheck
+
+  mariadb:
+    image: mariadb:11
+    container_name: mariadb
+    <<: *default-network
+    profiles: [mariadb, all]
+    env_file: .env
+    ports:
+      - "3307:3306"
+    volumes:
+      - mariadb_data:/var/lib/mysql
+      - ./db/mariadb_example.sql:/docker-entrypoint-initdb.d/init.sql:ro,Z
+    restart: always
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      <<: *default-healthcheck
+
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: sqlserver
+    <<: *default-network
+    profiles: [sqlserver, all]
+    env_file: .env
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD}
+    ports:
+      - "1433:1433"
+    volumes:
+      - sqlserver_data:/var/opt/mssql
+    restart: always
+    healthcheck:
+      test: ["CMD", "/opt/mssql-tools18/bin/sqlcmd", "-S", "localhost", "-U", "sa", "-P", "${MSSQL_SA_PASSWORD}", "-C", "-Q", "SELECT 1"]
+      <<: *default-healthcheck
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    container_name: clickhouse
+    <<: *default-network
+    profiles: [clickhouse, all]
+    env_file: .env
+    environment:
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
+      CLICKHOUSE_DB: ${CLICKHOUSE_DB}
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+      - ./db/clickhouse_example.sql:/docker-entrypoint-initdb.d/init-db.sql:ro,Z
+    restart: always
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8123/ping"]
+      <<: *default-healthcheck
+
+  neo4j:
+    image: neo4j:5
+    container_name: neo4j
+    <<: *default-network
+    profiles: [neo4j, all]
+    environment:
+      NEO4J_AUTH: ${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD:-password123}
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    volumes:
+      - neo4j_data:/data
+      - ./db:/import:Z
+    restart: always
+    healthcheck:
+      test: ["CMD", "neo4j-admin", "server", "status"]
+      start_period: 30s
+      <<: *default-healthcheck
+
+  neo4j-init:
+    image: neo4j:5
+    container_name: neo4j-init
+    <<: *default-network
+    profiles: [neo4j, all]
+    depends_on:
+      neo4j:
+        condition: service_healthy
+    environment:
+      NEO4J_USER: ${NEO4J_USER:-neo4j}
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD:-password123}
+    volumes:
+      - ./db/neo4j_example.cypher:/init.cypher:ro,Z
+    entrypoint: >
+      /bin/bash -c "
+        echo 'Waiting for Neo4j to be ready...' &&
+        sleep 5 &&
+        echo 'Running init script...' &&
+        cat /init.cypher | cypher-shell -a bolt://neo4j:7687 -u $$NEO4J_USER -p $$NEO4J_PASSWORD &&
+        echo 'Neo4j initialization complete!'
+      "
+    restart: "no"
 
   app:
     build: ./app
-    container_name: thesis_app
+    container_name: app
+    <<: *default-network
     depends_on:
-      - llm
-      - db
+      ollama-model-init:
+        condition: service_completed_successfully
+    env_file: .env
     environment:
-      - OLLAMA_URL=http://llm:11434
-      - DB_URL=postgresql://thesis_user:secure_password@db:5432/company_data
+      OLLAMA_URL: ${OLLAMA_HOST}
     volumes:
-      - ./app:/app
-    command: tail -f /dev/null
+      - ./app:/app:Z
+      - app_data:/app/data
+      - ./db:/db:Z
+    command: streamlit run src/core/main.py
+    ports:
+      - "8501:8501"
+    restart: always
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "8501"]
+      start_period: 30s
+      <<: *default-healthcheck
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
-  ollama_storage:
+  ollama_data:
+    external: true
+    name: ollama_models
   pg_data:
+    external: true
+    name: llm_pg_data
+  mysql_data:
+    external: true
+    name: llm_mysql_data
+  mongo_data:
+    external: true
+    name: llm_mongo_data
+  mariadb_data:
+    external: true
+    name: llm_mariadb_data
+  sqlserver_data:
+    external: true
+    name: llm_sqlserver_data
+  clickhouse_data:
+    external: true
+    name: llm_clickhouse_data
+  neo4j_data:
+    external: true
+    name: llm_neo4j_data
+  app_data:
+    external: true
+    name: llm_app_data
+
+networks:
+  app-network:
+    driver: bridge

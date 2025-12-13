@@ -1,7 +1,11 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
-name = "thesis-core"
+name = "core"
 version = "0.1.0"
-description = "Add your description here"
+description = "Chatbot for text to query"
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
@@ -9,4 +13,31 @@ dependencies = [
     "psycopg2-binary>=2.9.11",
     "requests>=2.32.5",
     "sqlalchemy>=2.0.44",
+    "streamlit>=1.52.0",
+    "pymysql>=1.1.0",
+    "cryptography>=44.0.0",
+    "pymongo>=4.6.1",
+    "pymssql>=2.3.0",
+    "clickhouse-connect>=0.7.19",
+    "neo4j>=5.26.0",
+    "python-dotenv>=1.0.0",
 ]
+
+[project.optional-dependencies]
+dev = [
+    "black>=25.12.0",
+    "pylint>=4.0.4",
+]
+
+[project.scripts]
+llm-query = "core.main:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.black]
+line-length = 100
+target-version = ['py314']

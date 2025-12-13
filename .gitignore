@@ -1,2 +1,12 @@
 venv/
+app/__pycache__/
+app/*.pyc
+app/.venv/
+app/data/
+app/db/
 WARP.md
+.vscode/
+.DS_Store
+.env
+*.egg-info/
+__pycache__/

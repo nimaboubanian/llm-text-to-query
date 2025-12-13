@@ -89,15 +89,14 @@ clean:
 		llm_mariadb_data llm_sqlserver_data llm_clickhouse_data llm_neo4j_data llm_app_data 2>/dev/null || true
 	@echo "Cleanup complete."
 
-# Nuclear cleanup - removes EVERYTHING (containers, images, networks, volumes)
+# Nuclear cleanup - removes EVERYTHING related to this project
 nuke:
-	@echo "🧨 Nuclear cleanup - this removes EVERYTHING!"
-	-docker stop $$(docker ps -q) 2>/dev/null || true
+	@echo "🧨 Nuclear cleanup - removing all project containers, images, and volumes!"
 	docker compose --profile all down --remove-orphans --volumes --rmi all
 	-docker volume rm ollama_models llm_pg_data llm_mysql_data llm_mongo_data \
-        llm_mariadb_data llm_sqlserver_data llm_clickhouse_data llm_neo4j_data llm_app_data 2>/dev/null || true
-	docker system prune -f --volumes
-	@echo "💥 Everything removed. Run 'make setup' to start fresh."
+		llm_mariadb_data llm_sqlserver_data llm_clickhouse_data llm_neo4j_data llm_app_data 2>/dev/null || true
+	-docker network rm llm-text-to-query_app-network 2>/dev/null || true
+	@echo "💥 All project resources removed. Run 'make setup' to start fresh."
 
 # View app logs
 logs:

@@ -17,6 +17,9 @@ services:
     volumes:
       - ollama_data:/root/.ollama
     restart: always
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      <<: *default-healthcheck
 
   ollama-model-init:
     image: ollama/ollama:latest
@@ -194,6 +197,15 @@ services:
     ports:
       - "8501:8501"
     restart: always
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "8501"]
+      start_period: 30s
+      <<: *default-healthcheck
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
   ollama_data:

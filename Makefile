@@ -46,6 +46,9 @@ setup:
 up: setup
 	docker compose up -d
 
+dev: setup
+	docker compose up  # Without -d for logs in terminal
+
 # Database profile targets
 postgres: setup
 	docker compose --profile postgres up -d
@@ -75,12 +78,8 @@ all: setup
 down:
 	docker compose down
 
-# Stop services only (alias for down)
-clean:
-	docker compose down
-
 # Full cleanup - removes ALL external volumes
-clean-all:
+clean:
 	docker compose down
 	@echo "Removing all external volumes..."
 	-docker volume rm ollama_models llm_pg_data llm_mysql_data llm_mongo_data \
@@ -95,3 +94,6 @@ logs:
 rebuild:
 	docker compose build app
 	docker compose up -d app
+
+test:
+    docker compose exec app pytest

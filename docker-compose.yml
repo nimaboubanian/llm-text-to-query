@@ -3,10 +3,15 @@ x-healthcheck: &default-healthcheck
   timeout: 5s
   retries: 5
 
+x-network: &default-network
+  networks:
+    - app-network
+
 services:
   ollama:
     image: ollama/ollama:latest
     container_name: ollama
+    <<: *default-network
     ports:
       - "11434:11434"
     volumes:
@@ -16,6 +21,7 @@ services:
   ollama-model-init:
     image: ollama/ollama:latest
     container_name: ollama-model-init
+    <<: *default-network
     depends_on:
       - ollama
     environment:
@@ -28,6 +34,7 @@ services:
   postgres:
     image: postgres:15-alpine
     container_name: postgres
+    <<: *default-network
     profiles: [postgres, all]
     env_file: .env
     ports:
@@ -43,6 +50,7 @@ services:
   mysql:
     image: mysql:8.0
     container_name: mysql
+    <<: *default-network
     profiles: [mysql, all]
     env_file: .env
     ports:
@@ -58,6 +66,7 @@ services:
   mongodb:
     image: mongo:7
     container_name: mongodb
+    <<: *default-network
     profiles: [mongodb, all]
     env_file: .env
     ports:
@@ -73,6 +82,7 @@ services:
   mariadb:
     image: mariadb:11
     container_name: mariadb
+    <<: *default-network
     profiles: [mariadb, all]
     env_file: .env
     ports:
@@ -88,6 +98,7 @@ services:
   sqlserver:
     image: mcr.microsoft.com/mssql/server:2022-latest
     container_name: sqlserver
+    <<: *default-network
     profiles: [sqlserver, all]
     env_file: .env
     environment:
@@ -105,6 +116,7 @@ services:
   clickhouse:
     image: clickhouse/clickhouse-server:latest
     container_name: clickhouse
+    <<: *default-network
     profiles: [clickhouse, all]
     env_file: .env
     environment:
@@ -125,6 +137,7 @@ services:
   neo4j:
     image: neo4j:5
     container_name: neo4j
+    <<: *default-network
     profiles: [neo4j, all]
     environment:
       NEO4J_AUTH: ${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD:-password123}
@@ -136,12 +149,14 @@ services:
       - ./db:/import:Z
     restart: always
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:7474"]
+      test: ["CMD", "neo4j-admin", "server", "status"]
+      start_period: 30s
       <<: *default-healthcheck
 
   neo4j-init:
     image: neo4j:5
     container_name: neo4j-init
+    <<: *default-network
     profiles: [neo4j, all]
     depends_on:
       neo4j:
@@ -164,6 +179,7 @@ services:
   app:
     build: ./app
     container_name: app
+    <<: *default-network
     depends_on:
       ollama-model-init:
         condition: service_completed_successfully
@@ -207,3 +223,7 @@ volumes:
   app_data:
     external: true
     name: llm_app_data
+
+networks:
+  app-network:
+    driver: bridge

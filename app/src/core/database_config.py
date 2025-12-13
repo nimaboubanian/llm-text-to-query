@@ -254,3 +254,8 @@ class DatabaseConfigManager:
     def get_database_display_names(self) -> list[tuple[str, str]]:
         """Get list of (config_key, display_name) tuples for UI."""
         return [(k, c.name) for k, c in self.databases.items()]
+
+    def clear_all_databases(self) -> None:
+        """Clear all saved database configurations and reset the JSON file."""
+        self.databases = {}
+        self._save_databases()

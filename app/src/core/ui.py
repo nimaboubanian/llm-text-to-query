@@ -209,6 +209,12 @@ def render_other_settings():
     if st.sidebar.button("Reset Chat History"):
         st.session_state.chat_history = []
         st.rerun()
+    if st.sidebar.button("Reset Saved Databases"):
+        st.session_state.db_config_manager.clear_all_databases()
+        st.session_state.selected_db_key = None
+        st.session_state.current_engine = None
+        st.session_state.current_schema = None
+        st.rerun()
 
 
 def render_sidebar():

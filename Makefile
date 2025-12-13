@@ -7,7 +7,8 @@ help:
 	@echo "  make up         - Start core services (ollama + app) in background"
 	@echo "  make dev        - Start core services with logs in terminal"
 	@echo "  make down       - Stop all services (keeps volumes)"
-	@echo "  make clean      - Stop services and remove ALL external volumes"
+	@echo "  make clean      - Stop services, remove app containers & volumes"
+	@echo "  make nuke       - Nuclear option: remove EVERYTHING"
 	@echo "  make logs       - Follow app logs"
 	@echo "  make rebuild    - Rebuild and restart app container"
 	@echo "  make test       - Run tests in app container"
@@ -79,13 +80,24 @@ all: setup
 down:
 	docker compose down
 
-# Full cleanup - removes ALL external volumes
+# Full cleanup - removes app containers, networks, AND volumes
 clean:
-	docker compose down
-	@echo "Removing all external volumes..."
+	@echo "Stopping and removing all app containers..."
+	docker compose down --remove-orphans --volumes
+	@echo "Removing all app volumes..."
 	-docker volume rm ollama_models llm_pg_data llm_mysql_data llm_mongo_data \
 		llm_mariadb_data llm_sqlserver_data llm_clickhouse_data llm_neo4j_data llm_app_data 2>/dev/null || true
-	@echo "All volumes removed."
+	@echo "Cleanup complete."
+
+# Nuclear cleanup - removes EVERYTHING (containers, images, networks, volumes)
+nuke:
+	@echo "🧨 Nuclear cleanup - this removes EVERYTHING!"
+	-docker stop $$(docker ps -q) 2>/dev/null || true
+	docker compose --profile all down --remove-orphans --volumes --rmi all
+	-docker volume rm ollama_models llm_pg_data llm_mysql_data llm_mongo_data \
+        llm_mariadb_data llm_sqlserver_data llm_clickhouse_data llm_neo4j_data llm_app_data 2>/dev/null || true
+	docker system prune -f --volumes
+	@echo "💥 Everything removed. Run 'make setup' to start fresh."
 
 # View app logs
 logs:

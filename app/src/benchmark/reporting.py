@@ -1,4 +1,4 @@
-"""Benchmark reporting and session archiving (steps 8–9)."""
+"""Benchmark reporting and session archiving (steps 8-9)."""
 
 import shutil
 from datetime import datetime

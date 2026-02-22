@@ -1,8 +1,13 @@
 # Quick Start: docker compose up -d
 
+x-common-env: &common-env
+  PYTHONPATH: /app/src
+  DATABASE_URL: postgresql://user:password@postgres:5432/testdb
+  UV_PROJECT_ENVIRONMENT: /tmp/.venv
+
 services:
   ollama:
-    image: ollama/ollama:latest
+    image: ollama/ollama:0.5.7
     container_name: ollama
     networks:
       - app-network
@@ -50,13 +55,11 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      PYTHONPATH: /app/src
-      DATABASE_URL: postgresql://user:password@postgres:5432/testdb
-      UV_PROJECT_ENVIRONMENT: /tmp/.venv
+      <<: *common-env
     volumes:
       - ./config.yaml:/app/config.yaml:ro,Z
     restart: unless-stopped
-    command: [ "sh", "-c", "while true; do sleep 3600; done" ]
+    command: ["sleep", "infinity"]
 
   # Orchestrator service runs only in benchmark profile
   orchestrator:
@@ -70,9 +73,7 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      PYTHONPATH: /app/src
-      DATABASE_URL: postgresql://user:password@postgres:5432/testdb
-      UV_PROJECT_ENVIRONMENT: /tmp/.venv
+      <<: *common-env
       PYTHONUNBUFFERED: "1"
     volumes:
       - ./config.yaml:/app/config.yaml:ro,Z
@@ -81,7 +82,6 @@ services:
     restart: "no"
     profiles:
       - benchmark
-    user: "0:0" # Run as root (one-shot container, exits immediately)
     command: [ "uv", "run", "benchmark-orchestrator" ]
 
 volumes:

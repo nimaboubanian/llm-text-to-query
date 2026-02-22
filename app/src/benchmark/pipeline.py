@@ -1,7 +1,7 @@
-"""Pipeline setup and data preparation (steps 1–5).
+"""Pipeline setup and data preparation (steps 1-5).
 
-Steps 6–7: benchmark.llm_benchmark
-Steps 8–9: benchmark.reporting
+Steps 6-7: benchmark.llm_benchmark
+Steps 8-9: benchmark.reporting
 """
 
 import os

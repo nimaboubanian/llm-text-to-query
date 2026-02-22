@@ -1,4 +1,21 @@
-"""Individual pipeline step implementations for automated benchmark."""
+"""Individual pipeline step implementations for the automated TPC-H benchmark.
+
+Step numbering convention (matches orchestrator call order):
+    1  Generate TPC-H data          (data generation, subprocess)
+    2  Validate directories         (questions & queries existence check)
+    3  Check database readiness     (schema + non-empty tables)
+    4  Setup database               (load schema, COPY data, build indexes)
+    5  Generate reference answers   (execute ground-truth SQL → CSV)
+    6  Run core LLM benchmark       (send questions to LLM, save generated SQL)
+    7  Execute generated queries    (run LLM SQL against DB → CSV)
+    8  Generate reports             (per-query + summary markdown)
+    9  Archive session              (move outputs to timestamped results dir)
+
+Dependency flow:
+    orchestrator.py  →  pipeline.py  →  database.schema / database.executor
+                                     →  llm.service
+                                     →  benchmark.validation / benchmark.data_loader
+"""
 
 import shutil
 import subprocess
@@ -95,6 +112,26 @@ def step_3_check_database_readiness(db_url: str, **_) -> bool:
     return ready
 
 
+def _parse_schema_sql(schema_file: Path) -> list[str]:
+    """Read a .sql file and return executable statements (comments stripped)."""
+    if not schema_file.exists():
+        raise FileNotFoundError(f"Schema file not found: {schema_file}")
+
+    raw_statements = schema_file.read_text().split(";")
+    statements = []
+    for stmt in raw_statements:
+        stmt = stmt.strip()
+        if not stmt:
+            continue
+        # Strip SQL line comments (-- ...)
+        lines = [line for line in stmt.split("\n")
+                 if not line.strip().startswith("--")]
+        cleaned = "\n".join(lines).strip()
+        if cleaned:
+            statements.append(cleaned)
+    return statements
+
+
 def step_4_setup_database(
     schema_file: Path,
     data_dir: Path,
@@ -115,27 +152,8 @@ def step_4_setup_database(
     """
     print("  📋 Loading database schema...")
 
-    if not schema_file.exists():
-        raise FileNotFoundError(f"Schema file not found: {schema_file}")
-
-    schema_sql = schema_file.read_text()
+    statements = _parse_schema_sql(schema_file)
     engine = create_engine_for_database(db_url)
-
-    # Split by semicolons and filter out comments/empty statements
-    raw_statements = schema_sql.split(';')
-    statements = []
-    for stmt in raw_statements:
-        # Remove leading/trailing whitespace
-        stmt = stmt.strip()
-        # Skip empty statements
-        if not stmt:
-            continue
-        # Skip SQL comments (-- at start of line)
-        lines = [line for line in stmt.split('\n')
-                 if not line.strip().startswith('--')]
-        cleaned = '\n'.join(lines).strip()
-        if cleaned:
-            statements.append(cleaned)
 
     try:
         with engine.begin() as conn:
@@ -264,26 +282,6 @@ def _execute_queries_to_csv(
 
     return results
 
-
-def step_7_execute_generated_queries(
-    queries_dir: Path,
-    answers_dir: Path,
-    db_url: str,
-) -> List[Dict]:
-    """Execute LLM-generated SQL queries and save results as CSV."""
-    query_files = sorted(queries_dir.glob("*.sql"))
-    total = len(query_files)
-
-    # Caching: skip queries that already have a CSV
-    existing = {f.stem for f in answers_dir.glob("*.csv")} if answers_dir.exists() else set()
-    to_process = [q for q in query_files if q.stem not in existing]
-
-    if not to_process:
-        print(f"  ✓ All {total} answer files already exist in {answers_dir}")
-        return []
-
-    print(f"  🔨 Executing {len(to_process)}/{total} queries (skipping {len(existing)} cached)...")
-    return _execute_queries_to_csv(to_process, answers_dir, db_url, write_error_csv=True)
 
 
 def step_6_run_core_benchmark(

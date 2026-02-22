@@ -10,8 +10,12 @@ from benchmark.pipeline import (
     step_3_check_database_readiness,
     step_4_setup_database,
     step_5_generate_answers,
+)
+from benchmark.llm_benchmark import (
     step_6_run_core_benchmark,
     step_7_execute_generated_queries,
+)
+from benchmark.reporting import (
     step_8_generate_reports,
     step_9_archive_session,
 )
@@ -31,7 +35,7 @@ def _step_header(number: int, title: str) -> None:
 
 
 def main():
-    """Run the full benchmark pipeline (Phase 1 + Phase 2 + Phase 3)."""
+    """Run the full benchmark pipeline."""
 
     from core.config import (
         DATABASE_URL,
@@ -42,7 +46,6 @@ def main():
         BENCHMARK_OUTPUT_DIR,
     )
 
-    # Define paths
     questions_dir = Path("benchmark/.tpch/questions")
     queries_dir = Path("benchmark/.tpch/queries")
     answers_dir = Path("benchmark/.tpch/answers")
@@ -148,22 +151,19 @@ def main():
         return 0
 
     except FileNotFoundError as e:
-        print(f"\n❌ Configuration Error: {e}", file=sys.stderr)
-        print("\nPlease check that required files and directories exist.", file=sys.stderr)
+        print(f"\n❌ {e}", file=sys.stderr)
         return 1
 
     except ValueError as e:
-        print(f"\n❌ Validation Error: {e}", file=sys.stderr)
+        print(f"\n❌ {e}", file=sys.stderr)
         return 1
 
     except RuntimeError as e:
-        print(f"\n❌ Runtime Error: {e}", file=sys.stderr)
-        print("\nCheck that docker compose services are running:", file=sys.stderr)
-        print("  docker compose ps", file=sys.stderr)
+        print(f"\n❌ {e}", file=sys.stderr)
         return 1
 
     except Exception as e:
-        print(f"\n❌ Unexpected Error: {e}", file=sys.stderr)
+        print(f"\n❌ {e}", file=sys.stderr)
         import traceback
         traceback.print_exc()
         return 1

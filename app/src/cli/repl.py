@@ -30,7 +30,7 @@ def print_help():
 
 def print_result(result, max_rows: int = 100):
     """Display query result."""
-    if isinstance(result, str):  # Error message
+    if isinstance(result, str):
         print(f"❌ Error: {result}")
         return
 
@@ -38,7 +38,6 @@ def print_result(result, max_rows: int = 100):
         print("✓ Empty result set")
         return
 
-    # Truncate if too many rows
     if len(result) > max_rows:
         print(f"📊 {len(result)} rows (showing first {max_rows}):")
         print(result.head(max_rows).to_string(index=False))
@@ -60,13 +59,11 @@ def handle_query(question: str, engine, schema: str, model: str):
     print(f"🤔 Processing: {question}")
     print()
 
-    # Generate SQL via LLM
     generated_sql = None
     error = None
 
     for chunk in get_sql_from_llm_streaming(question, schema, "postgresql", model):
         if chunk["type"] == "token":
-            # Optional: Show streaming progress (could add verbose flag)
             pass
         elif chunk["type"] == "done":
             generated_sql = chunk.get("sql")
@@ -83,7 +80,6 @@ def handle_query(question: str, engine, schema: str, model: str):
     print(generated_sql)
     print()
 
-    # Execute SQL
     result = execute_sql_query(engine, generated_sql)
     print_result(result)
 
@@ -93,7 +89,6 @@ def main():
     print_banner()
     print_help()
 
-    # Connect to database
     try:
         engine = create_engine_for_database(DATABASE_URL)
         print("✅ Connected to database")
@@ -101,7 +96,6 @@ def main():
         print(f"❌ Failed to connect to database: {e}")
         sys.exit(1)
 
-    # Get schema for LLM context
     try:
         schema = get_database_schema_string(engine)
         print("✅ Loaded database schema")
@@ -113,7 +107,6 @@ def main():
     print("Type your question or /help for commands.")
     print()
 
-    # Main REPL loop
     while True:
         try:
             user_input = input("❓ Query> ").strip()
@@ -121,7 +114,6 @@ def main():
             if not user_input:
                 continue
 
-            # Handle commands
             if user_input == "/quit":
                 print("👋 Goodbye!")
                 break

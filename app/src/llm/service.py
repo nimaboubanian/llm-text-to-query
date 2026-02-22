@@ -150,28 +150,27 @@ def _clean_sql_response(response: str) -> str | None:
     """Extract SQL from LLM response."""
     if not response:
         return None
-    
-    # Try markdown code block first
+
+    # Markdown code block
     match = re.search(r"```(?:sql)?\s*(.*?)```", response, re.DOTALL | re.IGNORECASE)
     if match:
         return match.group(1).strip()
-    
-    # Try SQL statement with semicolon
+
+    # SQL with semicolon
     match = re.search(r"(SELECT|INSERT|UPDATE|DELETE|WITH)\s+.*?;", response, re.DOTALL | re.IGNORECASE)
     if match:
         return match.group(0).strip()
-    
-    # Try SQL statement without semicolon
+
+    # SQL without semicolon
     match = re.search(r"(SELECT|INSERT|UPDATE|DELETE|WITH)\s+[^;]*", response, re.DOTALL | re.IGNORECASE)
     if match:
         sql = match.group(0).strip()
-        # Stop at common non-SQL patterns
         for stop in ["\n\nOR ", "\n\nNote:", "\n\nThis ", "\n\nIf ", "\n\n--"]:
             if stop in sql:
                 sql = sql.split(stop)[0].strip()
         return sql
-    
-    # Last resort: first line if it looks like SQL
+
+    # First line if it looks like SQL
     first_line = response.split("\n")[0].strip()
     if first_line.upper().startswith(("SELECT", "INSERT", "UPDATE", "DELETE", "WITH")):
         return first_line

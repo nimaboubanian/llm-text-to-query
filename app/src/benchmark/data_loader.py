@@ -8,7 +8,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# TPC-H tables in FK-dependency order
+# Tables in FK-dependency order
 TPCH_TABLES = [
     'region', 'nation', 'part', 'supplier',
     'customer', 'partsupp', 'orders', 'lineitem',
@@ -29,20 +29,15 @@ def load_tpch_data(
     db_url: str,
     truncate: bool = False,
 ) -> dict[str, int]:
-    """Load TPC-H .tbl files into PostgreSQL using COPY.
+    """Load .tbl files into PostgreSQL using COPY.
 
-    Each table is loaded in its own transaction. The trailing pipe
-    delimiter in .tbl files is stripped via sed before piping to COPY.
-
-    Returns:
-        Dictionary mapping table names to row counts loaded.
+    Returns dict mapping table names to row counts.
     """
     from database.schema import create_engine_for_database
 
     if not data_dir.exists():
         raise FileNotFoundError(f"Data directory not found: {data_dir}")
 
-    # Verify all .tbl files exist
     missing = [t for t in TPCH_TABLES if not (data_dir / f"{t}.tbl").exists()]
     if missing:
         raise FileNotFoundError(f"Missing .tbl files: {', '.join(missing)}")
@@ -62,7 +57,7 @@ def load_tpch_data(
             raw = conn.connection
             cur = raw.cursor()
             try:
-                # sed strips the trailing pipe; output streams into COPY
+                # Strip trailing pipe and stream into COPY
                 proc = subprocess.Popen(
                     ["sed", "s/|$//", str(tbl_file)],
                     stdout=subprocess.PIPE,

@@ -8,12 +8,7 @@ from benchmark.data_loader import TPCH_TABLES
 
 
 def check_directory(directory: Path, extension: str, expected_count: int) -> None:
-    """Check that a directory exists and contains the expected number of files.
-
-    Raises:
-        FileNotFoundError: If directory doesn't exist.
-        ValueError: If file count doesn't match.
-    """
+    """Check directory exists and has expected file count."""
     if not directory.exists():
         raise FileNotFoundError(f"Directory not found: {directory}")
 
@@ -26,10 +21,7 @@ def check_directory(directory: Path, extension: str, expected_count: int) -> Non
 
 
 def check_database_ready(db_url: str) -> bool:
-    """Check if the database has the TPC-H schema loaded and tables non-empty.
-
-    Returns True if ready, False if setup is needed.
-    """
+    """Check if database has schema and non-empty tables."""
     from database.schema import create_engine_for_database
 
     engine = create_engine_for_database(db_url)
@@ -54,7 +46,7 @@ def check_database_ready(db_url: str) -> bool:
 
 
 def check_data_cache(data_dir: Path) -> bool:
-    """Check if all .tbl files exist and are non-empty."""
+    """Check all .tbl files exist and are non-empty."""
     if not data_dir.exists():
         return False
     return all(
@@ -67,7 +59,7 @@ def check_answers_completeness(
     answers_dir: Path,
     queries_dir: Path,
 ) -> Tuple[bool, Set[str]]:
-    """Return (is_complete, missing_query_ids)."""
+    """Return (is_complete, missing_ids)."""
     expected = {q.stem for q in queries_dir.glob("*.sql")}
     if not answers_dir.exists():
         return False, expected

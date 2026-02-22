@@ -1,7 +1,5 @@
 """Database schema introspection via SQLAlchemy."""
 
-from typing import Optional
-
 from sqlalchemy import create_engine, inspect, text
 
 
@@ -24,14 +22,3 @@ def create_engine_for_database(db_url: str):
     """Create SQLAlchemy engine with connection pooling."""
     return create_engine(db_url, pool_pre_ping=True, pool_size=5, max_overflow=10, pool_recycle=3600)
 
-
-def validate_database_connection(db_url: str) -> tuple[bool, Optional[str]]:
-    """Test database connection. Returns (success, error_message)."""
-    try:
-        engine = create_engine(db_url)
-        with engine.connect() as conn:
-            conn.execute(text("SELECT 1"))
-        engine.dispose()
-        return True, None
-    except Exception as e:
-        return False, str(e)

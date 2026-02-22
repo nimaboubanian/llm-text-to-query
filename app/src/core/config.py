@@ -72,7 +72,6 @@ BENCHMARK_SCALE_FACTOR = int(_get_config("benchmark_scale_factor", 1, "BENCHMARK
 BENCHMARK_DATA_PATH = _get_config("benchmark_data_path", None, "BENCHMARK_DATA_PATH")
 BENCHMARK_SCHEMA_PATH = Path(_get_config("benchmark_schema_path", "benchmark/.tpch/schema.sql", "BENCHMARK_SCHEMA_PATH"))
 BENCHMARK_OUTPUT_DIR = Path(_get_config("benchmark_output_dir", "benchmark/queries", "BENCHMARK_OUTPUT_DIR"))
-BENCHMARK_RESULTS_FILE = Path(_get_config("benchmark_results_file", "benchmark/results.csv", "BENCHMARK_RESULTS_FILE"))
 
 # Database Settings
 DATABASE_URL = _get_config("database_url", "postgresql://user:password@postgres:5432/testdb", "DATABASE_URL")

@@ -17,10 +17,22 @@ from benchmark.pipeline import (
 )
 
 
-def main():
-    """Run the full benchmark pipeline (Phase 1 + Phase 2)."""
+def _phase_header(number: int, subtitle: str) -> None:
+    print("=" * 60)
+    print(f"  TPC-H Benchmark Pipeline - Phase {number}")
+    print(f"  {subtitle}")
+    print("=" * 60)
+    print()
 
-    # Import here to avoid circular imports and get latest config
+
+def _step_header(number: int, title: str) -> None:
+    print(f"Step {number}: {title}")
+    print("-" * 60)
+
+
+def main():
+    """Run the full benchmark pipeline (Phase 1 + Phase 2 + Phase 3)."""
+
     from core.config import (
         DATABASE_URL,
         DEFAULT_MODEL,
@@ -41,16 +53,10 @@ def main():
     data_dir = Path(BENCHMARK_DATA_PATH) if BENCHMARK_DATA_PATH else Path(f"benchmark/.tpch/data/sf{BENCHMARK_SCALE_FACTOR}")
 
     try:
-        # ── Phase 1: Setup & Validation ──────────────────────────
-        print("=" * 60)
-        print("  TPC-H Benchmark Pipeline - Phase 1")
-        print("  Setup & Validation")
-        print("=" * 60)
-        print()
+        # ── Phase 1 ──────────────────────────────────────────────
+        _phase_header(1, "Setup & Validation")
 
-        # Step 1: Data Generation (with caching)
-        print("Step 1: Data Generation")
-        print("-" * 60)
+        _step_header(1, "Data Generation")
         if BENCHMARK_DATA_PATH:
             print(f"📁 Using existing data: {BENCHMARK_DATA_PATH}")
             data_dir = Path(BENCHMARK_DATA_PATH)
@@ -59,15 +65,11 @@ def main():
             data_dir = step_1_generate_data(BENCHMARK_SCALE_FACTOR, data_dir)
         print()
 
-        # Step 2: Validate Directories
-        print("Step 2: Validate Questions & Queries")
-        print("-" * 60)
+        _step_header(2, "Validate Questions & Queries")
         step_2_validate_directories(questions_dir, queries_dir)
         print()
 
-        # Step 3: Check Database Readiness
-        print("Step 3: Check Database Readiness")
-        print("-" * 60)
+        _step_header(3, "Check Database Readiness")
         is_ready = step_3_check_database_readiness(
             db_url=DATABASE_URL,
             schema_file=Path(BENCHMARK_SCHEMA_PATH),
@@ -75,10 +77,8 @@ def main():
         )
         print()
 
-        # Step 4: Setup Database (if needed)
         if not is_ready:
-            print("Step 4: Setup Database")
-            print("-" * 60)
+            _step_header(4, "Setup Database")
             step_4_setup_database(
                 schema_file=Path(BENCHMARK_SCHEMA_PATH),
                 data_dir=data_dir,
@@ -90,74 +90,44 @@ def main():
             print("Step 4: Skipped (Database already ready)")
             print()
 
-        # Step 5: Generate Answers
-        print("Step 5: Generate Answer Files")
-        print("-" * 60)
-        step_5_generate_answers(
-            queries_dir=queries_dir,
-            answers_dir=answers_dir,
-            db_url=DATABASE_URL
-        )
+        _step_header(5, "Generate Answer Files")
+        step_5_generate_answers(queries_dir=queries_dir, answers_dir=answers_dir, db_url=DATABASE_URL)
         print()
 
         print("  ✓ Phase 1 Complete")
         print()
 
-        # ── Phase 2: LLM SQL Generation ─────────────────────────
-        print("=" * 60)
-        print("  TPC-H Benchmark Pipeline - Phase 2")
-        print(f"  LLM SQL Generation (model: {DEFAULT_MODEL})")
-        print("=" * 60)
-        print()
+        # ── Phase 2 ──────────────────────────────────────────────
+        _phase_header(2, f"LLM SQL Generation (model: {DEFAULT_MODEL})")
 
-        # Step 6: Generate SQL Queries via LLM
-        print("Step 6: Generate SQL Queries via LLM")
-        print("-" * 60)
-        results = step_6_run_core_benchmark(
-            questions_dir=questions_dir,
-            output_dir=output_dir,
-            db_url=DATABASE_URL,
-            model=DEFAULT_MODEL,
+        _step_header(6, "Generate SQL Queries via LLM")
+        step_6_run_core_benchmark(
+            questions_dir=questions_dir, output_dir=output_dir,
+            db_url=DATABASE_URL, model=DEFAULT_MODEL,
         )
         print()
 
-        # Step 7: Execute LLM-generated queries against DB
-        print("Step 7: Execute LLM-Generated Queries")
-        print("-" * 60)
+        _step_header(7, "Execute LLM-Generated Queries")
         step_7_execute_generated_queries(
-            queries_dir=output_dir,
-            answers_dir=generated_answers_dir,
-            db_url=DATABASE_URL,
+            queries_dir=output_dir, answers_dir=generated_answers_dir, db_url=DATABASE_URL,
         )
         print()
 
-        # ── Phase 3: Analysis & Archiving ────────────────────────
-        print("=" * 60)
-        print("  TPC-H Benchmark Pipeline - Phase 3")
-        print("  Analysis & Archiving")
-        print("=" * 60)
-        print()
+        # ── Phase 3 ──────────────────────────────────────────────
+        _phase_header(3, "Analysis & Archiving")
 
-        # Step 8: Generate reports
-        print("Step 8: Generate Reports")
-        print("-" * 60)
+        _step_header(8, "Generate Reports")
         step_8_generate_reports(
-            generated_queries_dir=output_dir,
-            reference_queries_dir=queries_dir,
-            generated_answers_dir=generated_answers_dir,
-            reference_answers_dir=answers_dir,
+            generated_queries_dir=output_dir, reference_queries_dir=queries_dir,
+            generated_answers_dir=generated_answers_dir, reference_answers_dir=answers_dir,
             report_dir=report_dir,
         )
         print()
 
-        # Step 9: Archive session
-        print("Step 9: Archive Session")
-        print("-" * 60)
+        _step_header(9, "Archive Session")
         session_dir = step_9_archive_session(
-            queries_dir=output_dir,
-            answers_dir=generated_answers_dir,
-            report_dir=report_dir,
-            results_base=results_base,
+            queries_dir=output_dir, answers_dir=generated_answers_dir,
+            report_dir=report_dir, results_base=results_base,
         )
         print()
 

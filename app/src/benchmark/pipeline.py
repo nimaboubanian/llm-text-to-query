@@ -1,9 +1,13 @@
 """Individual pipeline step implementations for automated benchmark."""
 
+import shutil
 import subprocess
 import re
+from datetime import datetime
 from pathlib import Path
-from typing import List, Dict, Set
+from typing import List, Dict
+
+import pandas as pd
 from sqlalchemy import text
 
 from database.schema import create_engine_for_database, get_database_schema_string
@@ -168,22 +172,15 @@ def step_4_setup_database(
     print("  📇 Building indexes...")
     try:
         engine = create_engine_for_database(db_url)
+        indexes_file = schema_file.parent / "indexes.sql"
+        if not indexes_file.exists():
+            print("  ⚠ No indexes.sql found, skipping index creation")
+            return
+        indexes_sql = indexes_file.read_text()
+        statements = [s.strip() for s in indexes_sql.split(";") if s.strip()]
         with engine.begin() as conn:
-            indexes = [
-                "CREATE INDEX IF NOT EXISTS idx_lineitem_orderkey   ON lineitem (l_orderkey)",
-                "CREATE INDEX IF NOT EXISTS idx_lineitem_partkey    ON lineitem (l_partkey)",
-                "CREATE INDEX IF NOT EXISTS idx_lineitem_suppkey    ON lineitem (l_suppkey)",
-                "CREATE INDEX IF NOT EXISTS idx_lineitem_shipdate   ON lineitem (l_shipdate)",
-                "CREATE INDEX IF NOT EXISTS idx_lineitem_part_supp_ship ON lineitem (l_partkey, l_suppkey, l_shipdate)",
-                "CREATE INDEX IF NOT EXISTS idx_orders_custkey      ON orders   (o_custkey)",
-                "CREATE INDEX IF NOT EXISTS idx_orders_orderdate    ON orders   (o_orderdate)",
-                "CREATE INDEX IF NOT EXISTS idx_partsupp_suppkey    ON partsupp (ps_suppkey)",
-                "CREATE INDEX IF NOT EXISTS idx_customer_nationkey  ON customer (c_nationkey)",
-                "CREATE INDEX IF NOT EXISTS idx_supplier_nationkey  ON supplier (s_nationkey)",
-                "CREATE INDEX IF NOT EXISTS idx_nation_regionkey    ON nation   (n_regionkey)",
-            ]
-            for idx_sql in indexes:
-                conn.execute(text(idx_sql))
+            for stmt in statements:
+                conn.execute(text(stmt))
         print("  ✓ Indexes built")
     except Exception as e:
         print(f"  ⚠ Index creation failed (non-fatal): {e}")
@@ -194,22 +191,9 @@ def step_5_generate_answers(
     answers_dir: Path,
     db_url: str
 ) -> List[Dict]:
-    """Generate answer CSV files from SQL queries.
-
-    Args:
-        queries_dir: Directory containing .sql query files
-        answers_dir: Directory to save .csv answer files
-        db_url: Database connection URL
-
-    Returns:
-        List of generation results
-
-    Raises:
-        RuntimeError: If answer generation fails
-    """
+    """Generate answer CSV files from ground truth SQL queries."""
     print("  📝 Checking answer files...")
 
-    # Check completeness
     is_complete, missing_ids = check_answers_completeness(answers_dir, queries_dir)
 
     if is_complete:
@@ -218,46 +202,88 @@ def step_5_generate_answers(
         return []
 
     print(f"  🔨 Generating {len(missing_ids)} missing answer files...")
-
-    # Create directory if needed
-    answers_dir.mkdir(parents=True, exist_ok=True)
-
-    # Determine which queries to process
     query_files = [queries_dir / f"{qid}.sql" for qid in sorted(missing_ids)]
+    return _execute_queries_to_csv(query_files, answers_dir, db_url, write_error_csv=False)
 
+
+def _execute_queries_to_csv(
+    query_files: List[Path],
+    output_dir: Path,
+    db_url: str,
+    *,
+    write_error_csv: bool = False,
+) -> List[Dict]:
+    """Execute SQL files and save results as CSV.
+
+    Args:
+        query_files: List of .sql files to execute.
+        output_dir: Directory to save .csv results.
+        db_url: Database connection URL.
+        write_error_csv: If True, write a CSV with ERROR column on failure.
+                         If False, skip failed queries (no output file).
+    """
+    output_dir.mkdir(parents=True, exist_ok=True)
     engine = create_engine_for_database(db_url)
     results = []
 
-    for query_file in query_files:
+    for i, query_file in enumerate(query_files, 1):
         query_id = query_file.stem
+        print(f"  [{i}/{len(query_files)}] Q{query_id}...", end="", flush=True)
+
         try:
-            query = query_file.read_text()
-            result_df = execute_sql_query(engine, query)
+            sql = query_file.read_text().strip()
+            result_df = execute_sql_query(engine, sql)
+            output_file = output_dir / f"{query_id}.csv"
 
             if isinstance(result_df, str):
-                results.append({'query_id': query_id, 'status': 'error', 'error': result_df})
-                continue
-
-            output_file = answers_dir / f"{query_id}.csv"
-            result_df.to_csv(output_file, index=False)
-            results.append({'query_id': query_id, 'status': 'success', 'rows': len(result_df)})
+                if write_error_csv:
+                    pd.DataFrame({"ERROR": [result_df]}).to_csv(output_file, index=False)
+                print(" ✗ (error)")
+                results.append({"query_id": query_id, "status": "error", "error": result_df})
+            else:
+                result_df.to_csv(output_file, index=False)
+                print(f" ✓ ({len(result_df)} rows)")
+                results.append({"query_id": query_id, "status": "success", "rows": len(result_df)})
 
         except Exception as e:
-            results.append({'query_id': query_id, 'status': 'error', 'error': str(e)})
+            if write_error_csv:
+                output_file = output_dir / f"{query_id}.csv"
+                pd.DataFrame({"ERROR": [str(e)]}).to_csv(output_file, index=False)
+            print(" ✗ (error)")
+            results.append({"query_id": query_id, "status": "error", "error": str(e)})
 
-    # Report results
-    success_count = sum(1 for r in results if r['status'] == 'success')
-    error_count = sum(1 for r in results if r['status'] == 'error')
-
-    print(f"  ✓ Generated {success_count} answer files")
-    if error_count > 0:
-        print(f"  ⚠ {error_count} queries failed:")
+    # Summary
+    success = sum(1 for r in results if r["status"] == "success")
+    errors = sum(1 for r in results if r["status"] == "error")
+    print(f"  ✓ Executed {success} queries → {output_dir}")
+    if errors > 0:
+        print(f"  ⚠ {errors} failed:")
         for r in results:
-            if r['status'] == 'error':
-                error_msg = r.get('error', 'Unknown error')
-                print(f"    - Query {r['query_id']}: {error_msg[:60]}...")
+            if r["status"] == "error":
+                print(f"    - Q{r['query_id']}: {r.get('error', 'Unknown')[:60]}")
 
     return results
+
+
+def step_7_execute_generated_queries(
+    queries_dir: Path,
+    answers_dir: Path,
+    db_url: str,
+) -> List[Dict]:
+    """Execute LLM-generated SQL queries and save results as CSV."""
+    query_files = sorted(queries_dir.glob("*.sql"))
+    total = len(query_files)
+
+    # Caching: skip queries that already have a CSV
+    existing = {f.stem for f in answers_dir.glob("*.csv")} if answers_dir.exists() else set()
+    to_process = [q for q in query_files if q.stem not in existing]
+
+    if not to_process:
+        print(f"  ✓ All {total} answer files already exist in {answers_dir}")
+        return []
+
+    print(f"  🔨 Executing {len(to_process)}/{total} queries (skipping {len(existing)} cached)...")
+    return _execute_queries_to_csv(to_process, answers_dir, db_url, write_error_csv=True)
 
 
 def step_6_run_core_benchmark(
@@ -354,7 +380,6 @@ def step_7_execute_generated_queries(
     Returns:
         List of result dicts with query_id and status.
     """
-    import pandas as pd
 
     query_files = sorted(queries_dir.glob("*.sql"))
     total = len(query_files)
@@ -413,33 +438,6 @@ def step_7_execute_generated_queries(
     return results
 
 
-def step_4_evaluate_similarity(
-    generated_dir: Path,
-    reference_dir: Path,
-    answers_dir: Path,
-) -> List[Dict]:
-    """Evaluate SQL similarity (stub for now).
-
-    Args:
-        generated_dir: Directory with generated SQL files
-        reference_dir: Directory with reference SQL files
-        answers_dir: Directory with expected result files
-
-    Returns:
-        Empty list (stub - scaffold for future)
-    """
-    # STUB IMPLEMENTATION
-    # This is where similarity evaluation will eventually happen
-    # For now, just return empty list to satisfy the interface
-
-    # TODO: Implement SQL similarity evaluation
-    # - Compare SQL syntax
-    # - Compare result sets
-    # - Calculate metrics (precision, recall, F1, Jaccard, etc.)
-
-    return []
-
-
 def step_8_generate_reports(
     generated_queries_dir: Path,
     reference_queries_dir: Path,
@@ -462,6 +460,9 @@ def step_8_generate_reports(
         f.stem for f in reference_queries_dir.glob("*.sql")
     )
 
+    executed = 0
+    errors = 0
+
     for qid in query_ids:
         has_generated = (generated_queries_dir / f"{qid}.sql").exists()
         has_answer = (generated_answers_dir / f"{qid}.csv").exists()
@@ -474,6 +475,11 @@ def step_8_generate_reports(
 
         status = "✗ error" if is_error else ("✓ executed" if has_answer else "✗ not generated")
 
+        if is_error:
+            errors += 1
+        elif has_answer:
+            executed += 1
+
         report = (
             f"# Query {qid} — Report\n\n"
             f"- **Status:** {status}\n"
@@ -484,18 +490,8 @@ def step_8_generate_reports(
         (per_query_dir / f"{qid}.md").write_text(report)
         print(f"  [{qid}] {status}")
 
-    # Summary report
+    # Summary report (uses counts collected above — no redundant file reads)
     total = len(query_ids)
-    executed = sum(
-        1 for qid in query_ids
-        if (generated_answers_dir / f"{qid}.csv").exists()
-        and (generated_answers_dir / f"{qid}.csv").read_text().split("\n", 1)[0].strip() != "ERROR"
-    )
-    errors = sum(
-        1 for qid in query_ids
-        if (generated_answers_dir / f"{qid}.csv").exists()
-        and (generated_answers_dir / f"{qid}.csv").read_text().split("\n", 1)[0].strip() == "ERROR"
-    )
     not_generated = total - executed - errors
 
     summary = (
@@ -528,8 +524,6 @@ def step_9_archive_session(
     Returns:
         Path to the created session directory.
     """
-    import shutil
-    from datetime import datetime
 
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     session_dir = results_base / timestamp

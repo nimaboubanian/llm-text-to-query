@@ -1,0 +1,97 @@
+# Quick Start: docker compose up -d
+
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    networks:
+      - app-network
+    volumes:
+      - ollama_data:/root/.ollama
+      - ./app/ollama-entrypoint.sh:/entrypoint.sh:ro,Z
+      - ./config.yaml:/config.yaml:ro,Z
+    environment:
+      DEFAULT_MODEL: qwen2.5-coder:7b
+    entrypoint: [ "/entrypoint.sh" ]
+    restart: always
+    healthcheck:
+      test: [ "CMD", "sh", "-c", "ollama show \"$$DEFAULT_MODEL\" > /dev/null 2>&1" ]
+      start_period: 240s
+      interval: 10s
+      timeout: 10s
+      retries: 10
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: postgres
+    networks:
+      - app-network
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: testdb
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    restart: always
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U user -d testdb" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build: ./app
+    container_name: app
+    networks:
+      - app-network
+    depends_on:
+      ollama:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    environment:
+      PYTHONPATH: /app/src
+      DATABASE_URL: postgresql://user:password@postgres:5432/testdb
+      UV_PROJECT_ENVIRONMENT: /tmp/.venv
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro,Z
+    restart: unless-stopped
+    command: [ "sh", "-c", "while true; do sleep 3600; done" ]
+
+  # Orchestrator service runs only in benchmark profile
+  orchestrator:
+    build: ./app
+    container_name: orchestrator
+    networks:
+      - app-network
+    depends_on:
+      ollama:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    environment:
+      PYTHONPATH: /app/src
+      DATABASE_URL: postgresql://user:password@postgres:5432/testdb
+      UV_PROJECT_ENVIRONMENT: /tmp/.venv
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro,Z
+      - ./benchmark:/app/benchmark:Z
+      - benchmark_venv:/app/.venv
+    restart: "no"
+    profiles:
+      - benchmark
+    user: "0:0" # Run as root (one-shot container, exits immediately)
+    command: [ "uv", "run", "benchmark-orchestrator" ]
+
+volumes:
+  ollama_data:
+    name: llm_ollama_data
+  pg_data:
+    name: llm_pg_data
+  benchmark_venv:
+    name: llm_benchmark_venv
+
+networks:
+  app-network:
+    driver: bridge

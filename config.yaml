@@ -1,0 +1,52 @@
+# Optional configuration file
+# All settings have hardcoded defaults in the codebase
+# Uncomment only the settings you want to override
+
+# ============================================
+# LLM BEHAVIOR
+# ============================================
+# Controls model creativity (0.0 = deterministic, 1.0 = creative)
+# temperature: 0.1
+
+# Maximum tokens in generated SQL query
+# Increase for complex queries, decrease for faster responses
+# max_tokens: 2048
+
+# Request timeout in seconds
+# Increase if model takes long to load or generate
+# ollama_timeout: 300
+
+# ============================================
+# MODEL SELECTION
+# ============================================
+# Default Ollama model
+# Available models: docker compose exec ollama ollama list
+# default_model: "llama3.2:3b"
+# default_model: "qwen2.5-coder:7b"
+# default_model: "qwen2.5:14b"
+
+# ============================================
+# BENCHMARK SETTINGS
+# ============================================
+# TPC-H data scale factor (1 = 1GB, 10 = 10GB, etc.)
+# Higher values = more test data, longer benchmark time
+# benchmark_scale_factor: 1
+
+# ============================================
+# ADVANCED - Use with caution
+# ============================================
+# Custom LLM prompt template
+# Must include placeholders: {schema}, {query}, {dialect}
+# prompt_template: |
+#   You are a PostgreSQL query generator.
+#   Given the following database schema:
+#   {schema}
+#   Generate a query to answer: {query}
+#   Rules:
+#   - Return ONLY the query, nothing else
+#   - No explanations, no comments, no markdown
+#   - Only use tables and columns from the schema above
+#   - Use {dialect} syntax
+
+# External database connection (requires manual network setup)
+# database_url: "postgresql://user:password@postgres:5432/testdb"

@@ -1,0 +1,10 @@
+[project]
+name = "tpch"
+version = "0.0.1"
+description = "TPC-H Benchmark Data Generator and Query Runner Written in Rust for the Project"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "pandas>=2.0.0",
+    "tpchgen-cli>=2.0.1",
+]

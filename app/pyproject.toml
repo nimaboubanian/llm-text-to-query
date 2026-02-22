@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "core"
+version = "0.0.1"
+description = "Text to SQL using local LLMs"
+requires-python = ">=3.12"
+dependencies = [
+    "pandas>=2.2.0",
+    "requests>=2.32.0",
+    "sqlalchemy>=2.0.0",
+    "psycopg2-binary>=2.9.0",
+    "pyyaml>=6.0",
+]
+
+[project.scripts]
+benchmark-orchestrator = "benchmark.orchestrator:main"
+llm-query = "cli.repl:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]

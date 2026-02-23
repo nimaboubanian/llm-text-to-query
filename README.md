@@ -35,12 +35,25 @@ max_tokens: 2048
 
 ## Benchmark
 
-The automated pipeline:
-1. Generates TPC-H test data
-2. Loads database schema
-3. Processes 22 questions through LLM
-4. Saves SQL to `benchmark/queries/`
-5. Shuts down automatically
+The automated TPC-H benchmark pipeline runs in three phases:
+
+**Phase 1 — Setup & Validation**
+1. Generates TPC-H test data (with caching)
+2. Loads database schema, data, and indexes
+3. Generates ground truth answer CSVs from reference queries
+
+**Phase 2 — LLM Query Generation & Execution**
+4. Sends 22 natural language questions to the LLM with the database schema
+5. Executes LLM-generated SQL against the database
+
+**Phase 3 — Analysis & Archiving**
+6. Evaluates each query across four similarity layers:
+   - **Result-set F1** — precision/recall on CSV row multisets
+   - **AST similarity** — structural diff via sqlglot
+   - **Component F1** — per-clause comparison (SELECT, FROM+JOIN, WHERE, etc.)
+   - **Token Jaccard** — word-level overlap as fallback
+7. Generates per-query and summary reports to `benchmark/answers/report/`
+8. Archives the full session to `benchmark/results/YYYY-MM-DD_HH-MM-SS/`
 
 ## Requirements
 

@@ -1,15 +1,176 @@
-"""SQL similarity evaluation (stub for future)."""
+import re
+from collections import Counter
+from pathlib import Path
+
+import pandas as pd
+import sqlglot
+from sqlglot import exp
+from sqlglot.diff import Keep, diff
 
 
-def evaluate_sql_similarity(
-    generated_sql: str,
-    reference_sql: str,
-    generated_result: list[dict],
-    reference_result: list[dict],
+def evaluate_query(
+    query_id: int,
+    gt_csv: Path,
+    llm_csv: Path,
+    gt_sql: Path,
+    llm_sql: Path,
 ) -> dict:
-    """Evaluate SQL similarity (stub).
+    status, exact_match, precision, recall, f1 = _result_set_comparison(gt_csv, llm_csv)
 
-    Returns:
-        Empty dict (scaffold for future metrics).
-    """
-    return {}
+    gt_sql_text = gt_sql.read_text() if gt_sql.exists() else ""
+    llm_sql_text = llm_sql.read_text() if llm_sql.exists() else ""
+
+    ast_sim = _ast_similarity(gt_sql_text, llm_sql_text)
+    comp_f1 = _component_f1(gt_sql_text, llm_sql_text)
+    jaccard = _token_jaccard(gt_sql_text, llm_sql_text)
+
+    return {
+        "query_id": query_id,
+        "status": status,
+        "exact_match": exact_match,
+        "result_precision": _round(precision),
+        "result_recall": _round(recall),
+        "result_f1": _round(f1),
+        "ast_similarity": _round(ast_sim),
+        "component_f1": {k: _round(v) for k, v in comp_f1.items()} if comp_f1 is not None else None,
+        "token_jaccard": _round(jaccard),
+    }
+
+
+def _round(value: float | None) -> float | None:
+    return round(value, 4) if value is not None else None
+
+
+def _result_set_comparison(
+    gt_csv: Path, llm_csv: Path,
+) -> tuple[str, bool | None, float | None, float | None, float | None]:
+    if not llm_csv.exists():
+        return "missing", None, None, None, None
+
+    first_line = llm_csv.read_text().split("\n", 1)[0].strip()
+    if first_line == "ERROR":
+        return "exec_error", False, 0.0, 0.0, 0.0
+
+    gt_df = pd.read_csv(gt_csv)
+    llm_df = pd.read_csv(llm_csv)
+
+    if len(gt_df.columns) != len(llm_df.columns):
+        return "ok", False, 0.0, 0.0, 0.0
+
+    for df in (gt_df, llm_df):
+        for col in df.select_dtypes(include=["float"]).columns:
+            df[col] = df[col].round(4)
+        df.fillna("NULL", inplace=True)
+
+    gt_rows = Counter(tuple(row) for row in gt_df.itertuples(index=False, name=None))
+    llm_rows = Counter(tuple(row) for row in llm_df.itertuples(index=False, name=None))
+
+    matched = sum((gt_rows & llm_rows).values())
+    total_llm = sum(llm_rows.values())
+    total_gt = sum(gt_rows.values())
+
+    precision = matched / total_llm if total_llm > 0 else 0.0
+    recall = matched / total_gt if total_gt > 0 else 0.0
+    f1 = (2 * precision * recall / (precision + recall)) if (precision + recall) > 0 else 0.0
+    exact_match = f1 == 1.0
+
+    return "ok", exact_match, precision, recall, f1
+
+
+def _ast_similarity(gt_sql: str, llm_sql: str) -> float | None:
+    try:
+        gt_tree = sqlglot.parse(gt_sql, dialect="postgres")[0]
+        llm_tree = sqlglot.parse(llm_sql, dialect="postgres")[0]
+        if gt_tree is None or llm_tree is None:
+            return None
+    except Exception:
+        return None
+
+    try:
+        changes = diff(gt_tree, llm_tree)
+    except Exception:
+        return None
+
+    kept = sum(1 for c in changes if isinstance(c, Keep))
+    edits = sum(1 for c in changes if not isinstance(c, Keep))
+
+    total = kept + edits
+    return kept / total if total > 0 else 1.0
+
+
+def _extract_clause_tokens(tree: exp.Expression, clause_type: type) -> set[str] | None:
+    if clause_type == exp.Select:
+        exprs = tree.expressions
+        if not exprs:
+            return None
+        return {e.sql(dialect="postgres") for e in exprs}
+
+    if clause_type == exp.From:
+        parts = []
+        from_clause = tree.find(exp.From)
+        if from_clause:
+            parts.append(from_clause.sql(dialect="postgres"))
+        for join in tree.find_all(exp.Join):
+            parts.append(join.sql(dialect="postgres"))
+        return {t for t in parts} if parts else None
+
+    node = tree.find(clause_type)
+    if node is None:
+        return None
+    return {node.sql(dialect="postgres")}
+
+
+def _f1_from_sets(gt_set: set[str], llm_set: set[str]) -> float:
+    if not gt_set and not llm_set:
+        return 1.0
+    if not gt_set or not llm_set:
+        return 0.0
+    matched = len(gt_set & llm_set)
+    precision = matched / len(llm_set)
+    recall = matched / len(gt_set)
+    return (2 * precision * recall / (precision + recall)) if (precision + recall) > 0 else 0.0
+
+
+def _component_f1(gt_sql: str, llm_sql: str) -> dict[str, float] | None:
+    try:
+        gt_tree = sqlglot.parse(gt_sql, dialect="postgres")[0]
+        llm_tree = sqlglot.parse(llm_sql, dialect="postgres")[0]
+        if gt_tree is None or llm_tree is None:
+            return None
+    except Exception:
+        return None
+
+    clauses = {
+        "select": exp.Select,
+        "from_join": exp.From,
+        "where": exp.Where,
+        "group_by": exp.Group,
+        "order_by": exp.Order,
+        "having": exp.Having,
+    }
+
+    result = {}
+    for name, cls in clauses.items():
+        gt_tokens = _extract_clause_tokens(gt_tree, cls)
+        llm_tokens = _extract_clause_tokens(llm_tree, cls)
+
+        if gt_tokens is None and llm_tokens is None:
+            result[name] = 1.0
+        elif gt_tokens is None or llm_tokens is None:
+            result[name] = 0.0
+        else:
+            result[name] = _f1_from_sets(gt_tokens, llm_tokens)
+
+    return result
+
+
+def _token_jaccard(gt_sql: str, llm_sql: str) -> float:
+    gt_tokens = set(re.findall(r"\w+", gt_sql.lower()))
+    llm_tokens = set(re.findall(r"\w+", llm_sql.lower()))
+
+    if not gt_tokens and not llm_tokens:
+        return 0.0
+
+    intersection = len(gt_tokens & llm_tokens)
+    union = len(gt_tokens | llm_tokens)
+    return intersection / union

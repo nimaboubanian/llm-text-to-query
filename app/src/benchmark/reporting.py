@@ -4,6 +4,83 @@ import shutil
 from datetime import datetime
 from pathlib import Path
 
+from benchmark.similarity import evaluate_query
+
+
+def _format_per_query_similarity(result: dict) -> str:
+    def _v(val: float | bool | None) -> str:
+        if val is None:
+            return "—"
+        if isinstance(val, bool):
+            return "✓" if val else "✗"
+        return f"{val:.4f}"
+
+    lines = [
+        "## Similarity Analysis\n",
+        "| Metric | Value |",
+        "|---|---|",
+        f"| Result F1 | {_v(result['result_f1'])} |",
+        f"| Precision | {_v(result['result_precision'])} |",
+        f"| Recall | {_v(result['result_recall'])} |",
+        f"| Exact Match | {_v(result['exact_match'])} |",
+        f"| AST Similarity | {_v(result['ast_similarity'])} |",
+        f"| Token Jaccard | {_v(result['token_jaccard'])} |",
+    ]
+
+    comp = result.get("component_f1")
+    if comp is not None:
+        labels = {
+            "select": "SELECT",
+            "from_join": "FROM + JOIN",
+            "where": "WHERE",
+            "group_by": "GROUP BY",
+            "order_by": "ORDER BY",
+            "having": "HAVING",
+        }
+        lines.append("")
+        lines.append("| Clause | F1 |")
+        lines.append("|---|---|")
+        for key, label in labels.items():
+            lines.append(f"| {label} | {_v(comp.get(key))} |")
+
+    return "\n".join(lines) + "\n"
+
+
+def _format_summary_similarity(all_results: list[dict]) -> str:
+    exact_count = sum(1 for r in all_results if r.get("exact_match") is True)
+    total = len(all_results)
+
+    f1_vals = [r["result_f1"] for r in all_results if r["result_f1"] is not None]
+    ast_vals = [r["ast_similarity"] for r in all_results if r["ast_similarity"] is not None]
+    avg_f1 = sum(f1_vals) / len(f1_vals) if f1_vals else 0.0
+    avg_ast = sum(ast_vals) / len(ast_vals) if ast_vals else 0.0
+
+    def _v(val: float | bool | None) -> str:
+        if val is None:
+            return "—"
+        if isinstance(val, bool):
+            return "✓" if val else "✗"
+        return f"{val:.4f}"
+
+    lines = [
+        "## Similarity Metrics\n",
+        f"- **Exact matches:** {exact_count} / {total}",
+        f"- **Average Result F1:** {avg_f1:.4f}",
+        f"- **Average AST Similarity:** {avg_ast:.4f}",
+        "",
+        "| Query | Status | Result F1 | Exact Match | AST Similarity | Token Jaccard |",
+        "|---|---|---|---|---|---|",
+    ]
+
+    for r in all_results:
+        qid = f"{r['query_id']:02d}"
+        lines.append(
+            f"| {qid} | {r['status']} | {_v(r['result_f1'])} | {_v(r['exact_match'])} "
+            f"| {_v(r['ast_similarity'])} | {_v(r['token_jaccard'])} |"
+        )
+
+    return "\n".join(lines) + "\n"
+
 
 def step_8_generate_reports(
     generated_queries_dir: Path,
@@ -22,6 +99,7 @@ def step_8_generate_reports(
 
     executed = 0
     errors = 0
+    all_results = []
 
     for qid in query_ids:
         has_generated = (generated_queries_dir / f"{qid}.sql").exists()
@@ -39,12 +117,21 @@ def step_8_generate_reports(
         elif has_answer:
             executed += 1
 
+        sim_result = evaluate_query(
+            query_id=int(qid),
+            gt_csv=reference_answers_dir / f"{qid}.csv",
+            llm_csv=generated_answers_dir / f"{qid}.csv",
+            gt_sql=reference_queries_dir / f"{qid}.sql",
+            llm_sql=generated_queries_dir / f"{qid}.sql",
+        )
+        all_results.append(sim_result)
+
         report = (
             f"# Query {qid} — Report\n\n"
             f"- **Status:** {status}\n"
             f"- **LLM query generated:** {'yes' if has_generated else 'no'}\n"
-            f"- **LLM answer produced:** {'yes' if has_answer and not is_error else 'no'}\n"
-            f"\n> Detailed similarity analysis will be added in a future update.\n"
+            f"- **LLM answer produced:** {'yes' if has_answer and not is_error else 'no'}\n\n"
+            + _format_per_query_similarity(sim_result)
         )
         (per_query_dir / f"{qid}.md").write_text(report)
         print(f"  [{qid}] {status}")
@@ -59,8 +146,8 @@ def step_8_generate_reports(
         f"| Total queries | {total} |\n"
         f"| Executed successfully | {executed} |\n"
         f"| Execution errors | {errors} |\n"
-        f"| Not generated | {not_generated} |\n"
-        f"\n> Detailed similarity metrics will be added in a future update.\n"
+        f"| Not generated | {not_generated} |\n\n"
+        + _format_summary_similarity(all_results)
     )
     (report_dir / "summary.md").write_text(summary)
 

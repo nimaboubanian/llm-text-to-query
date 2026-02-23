@@ -78,6 +78,7 @@ dependencies = [
     { name = "pyyaml" },
     { name = "requests" },
     { name = "sqlalchemy" },
+    { name = "sqlglot" },
 ]
 
 [package.metadata]
@@ -87,6 +88,7 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "requests", specifier = ">=2.32.0" },
     { name = "sqlalchemy", specifier = ">=2.0.0" },
+    { name = "sqlglot", specifier = ">=26.0.0" },
 ]
 
 [[package]]
@@ -356,6 +358,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/32/d5/0e66097fc64fa266f29a7963296b40a80d6a997b7ac13806183700676f86/sqlalchemy-2.0.44-cp313-cp313-win32.whl", hash = "sha256:ee51625c2d51f8baadf2829fae817ad0b66b140573939dd69284d2ba3553ae73", size = 2101275, upload-time = "2025-10-10T15:03:26.096Z" },
     { url = "https://files.pythonhosted.org/packages/03/51/665617fe4f8c6450f42a6d8d69243f9420f5677395572c2fe9d21b493b7b/sqlalchemy-2.0.44-cp313-cp313-win_amd64.whl", hash = "sha256:c1c80faaee1a6c3428cecf40d16a2365bcf56c424c92c2b6f0f9ad204b899e9e", size = 2127901, upload-time = "2025-10-10T15:03:27.548Z" },
     { url = "https://files.pythonhosted.org/packages/9c/5e/6a29fa884d9fb7ddadf6b69490a9d45fded3b38541713010dad16b77d015/sqlalchemy-2.0.44-py3-none-any.whl", hash = "sha256:19de7ca1246fbef9f9d1bff8f1ab25641569df226364a0e40457dc5457c54b05", size = 1928718, upload-time = "2025-10-10T15:29:45.32Z" },
+]
+
+[[package]]
+name = "sqlglot"
+version = "29.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/4f/a7/7ce0a012cb49d93f2fff480834990cd3a03a5e623355aa24c14d7fdafb0c/sqlglot-29.0.0.tar.gz", hash = "sha256:5f6297ccfe186e270a2d2586213132e733c4c3bd6bda592254d52190aa8af7d1", size = 5749218, upload-time = "2026-02-23T18:41:17.274Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/8c/0c/ab081b49638cdaf96a575fab273339b5378809056734541332e62d226a1e/sqlglot-29.0.0-py3-none-any.whl", hash = "sha256:e545f2afd7ff5f886c407c75fb16f8ecd432eb2dceffbf342d2badebffc849b3", size = 611290, upload-time = "2026-02-23T18:41:15.277Z" },
 ]
 
 [[package]]

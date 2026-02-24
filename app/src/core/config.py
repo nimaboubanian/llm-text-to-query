@@ -36,8 +36,8 @@ def _get_config(key: str, default: Any, env_var: str | None = None) -> Any:
     return default
 
 
-OLLAMA_URL = _get_config("ollama_url", "http://ollama:11434", "OLLAMA_URL")
-OLLAMA_TIMEOUT = int(_get_config("ollama_timeout", 300, "OLLAMA_TIMEOUT"))
+OLLAMA_URL = "http://ollama:11434"
+OLLAMA_TIMEOUT = 300
 
 LLM_TEMPERATURE = float(_get_config("temperature", 0.1, "LLM_TEMPERATURE"))
 LLM_MAX_TOKENS = int(_get_config("max_tokens", 2048, "LLM_MAX_TOKENS"))
@@ -45,9 +45,7 @@ LLM_MAX_TOKENS = int(_get_config("max_tokens", 2048, "LLM_MAX_TOKENS"))
 DEFAULT_MODEL = _get_config("default_model", "qwen2.5-coder:7b", "DEFAULT_MODEL")
 AVAILABLE_MODELS = [DEFAULT_MODEL]
 
-LLM_PROMPT_TEMPLATE = _get_config(
-    "prompt_template",
-    """You are a PostgreSQL query generator.
+LLM_PROMPT_TEMPLATE = """You are a PostgreSQL query generator.
 Given the following database schema:
 {schema}
 
@@ -58,13 +56,11 @@ Rules:
 - No explanations, no comments, no markdown
 - Only use tables and columns from the schema above
 - Use PostgreSQL syntax
-""",
-    "LLM_PROMPT_TEMPLATE",
-)
+"""
 
 BENCHMARK_SCALE_FACTOR = int(_get_config("benchmark_scale_factor", 1, "BENCHMARK_SCALE_FACTOR"))
-BENCHMARK_DATA_PATH = _get_config("benchmark_data_path", None, "BENCHMARK_DATA_PATH")
-BENCHMARK_SCHEMA_PATH = Path(_get_config("benchmark_schema_path", "benchmark/.tpch/schema.sql", "BENCHMARK_SCHEMA_PATH"))
-BENCHMARK_OUTPUT_DIR = Path(_get_config("benchmark_output_dir", "benchmark/queries", "BENCHMARK_OUTPUT_DIR"))
+BENCHMARK_DATA_PATH = os.getenv("BENCHMARK_DATA_PATH")
+BENCHMARK_SCHEMA_PATH = Path("benchmark/.tpch/schema.sql")
+BENCHMARK_OUTPUT_DIR = Path("benchmark/queries")
 
-DATABASE_URL = _get_config("database_url", "postgresql://user:password@postgres:5432/testdb", "DATABASE_URL")
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://user:password@postgres:5432/testdb")

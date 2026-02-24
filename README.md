@@ -9,7 +9,7 @@ Convert natural language to SQL queries using local LLMs.
 docker compose up -d
 
 # Enter interactive REPL
-docker compose exec app uv run llm-query
+docker compose exec app uv run text2query
 ```
 
 ## Commands
@@ -17,7 +17,7 @@ docker compose exec app uv run llm-query
 | Command | Purpose |
 |---------|---------|
 | `docker compose up -d` | Start services (ollama, postgres, app) |
-| `docker compose exec app uv run llm-query` | Start interactive REPL |
+| `docker compose exec app uv run text2query` | Start interactive REPL |
 | `docker compose --profile benchmark up` | Run automated TPC-H benchmark |
 | `docker compose up -d --build app` | Rebuild after code changes |
 | `docker compose logs -f app` | View app logs |

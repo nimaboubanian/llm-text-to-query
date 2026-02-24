@@ -4,18 +4,18 @@
 from pathlib import Path
 import sys
 
-from benchmark.pipeline import (
+from text2query.benchmark.pipeline import (
     step_1_generate_data,
     step_2_validate_directories,
     step_3_check_database_readiness,
     step_4_setup_database,
     step_5_generate_answers,
 )
-from benchmark.llm_benchmark import (
+from text2query.benchmark.llm_benchmark import (
     step_6_run_core_benchmark,
     step_7_execute_generated_queries,
 )
-from benchmark.reporting import (
+from text2query.benchmark.reporting import (
     step_8_generate_reports,
     step_9_archive_session,
 )
@@ -37,7 +37,7 @@ def _step_header(number: int, title: str) -> None:
 def main():
     """Run the full benchmark pipeline."""
 
-    from core.config import (
+    from text2query.core.config import (
         DATABASE_URL,
         DEFAULT_MODEL,
         BENCHMARK_SCALE_FACTOR,

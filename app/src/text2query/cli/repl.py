@@ -3,10 +3,10 @@
 
 import sys
 
-from database.schema import create_engine_for_database, get_database_schema_string
-from database.executor import execute_sql_query
-from llm.service import get_sql_from_llm_streaming
-from core.config import DATABASE_URL, DEFAULT_MODEL
+from text2query.database.schema import create_engine_for_database, get_database_schema_string
+from text2query.database.executor import execute_sql_query
+from text2query.llm.service import get_sql_from_llm_streaming
+from text2query.core.config import DATABASE_URL, DEFAULT_MODEL
 
 
 def print_banner():

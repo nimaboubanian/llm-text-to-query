@@ -69,29 +69,6 @@ wheels = [
 ]
 
 [[package]]
-name = "core"
-version = "0.0.1"
-source = { editable = "." }
-dependencies = [
-    { name = "pandas" },
-    { name = "psycopg2-binary" },
-    { name = "pyyaml" },
-    { name = "requests" },
-    { name = "sqlalchemy" },
-    { name = "sqlglot" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "pandas", specifier = ">=2.2.0" },
-    { name = "psycopg2-binary", specifier = ">=2.9.0" },
-    { name = "pyyaml", specifier = ">=6.0" },
-    { name = "requests", specifier = ">=2.32.0" },
-    { name = "sqlalchemy", specifier = ">=2.0.0" },
-    { name = "sqlglot", specifier = ">=26.0.0" },
-]
-
-[[package]]
 name = "greenlet"
 version = "3.2.4"
 source = { registry = "https://pypi.org/simple" }
@@ -367,6 +344,29 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/4f/a7/7ce0a012cb49d93f2fff480834990cd3a03a5e623355aa24c14d7fdafb0c/sqlglot-29.0.0.tar.gz", hash = "sha256:5f6297ccfe186e270a2d2586213132e733c4c3bd6bda592254d52190aa8af7d1", size = 5749218, upload-time = "2026-02-23T18:41:17.274Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/8c/0c/ab081b49638cdaf96a575fab273339b5378809056734541332e62d226a1e/sqlglot-29.0.0-py3-none-any.whl", hash = "sha256:e545f2afd7ff5f886c407c75fb16f8ecd432eb2dceffbf342d2badebffc849b3", size = 611290, upload-time = "2026-02-23T18:41:15.277Z" },
+]
+
+[[package]]
+name = "text2query"
+version = "0.0.1"
+source = { editable = "." }
+dependencies = [
+    { name = "pandas" },
+    { name = "psycopg2-binary" },
+    { name = "pyyaml" },
+    { name = "requests" },
+    { name = "sqlalchemy" },
+    { name = "sqlglot" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "pandas", specifier = ">=2.2.0" },
+    { name = "psycopg2-binary", specifier = ">=2.9.0" },
+    { name = "pyyaml", specifier = ">=6.0" },
+    { name = "requests", specifier = ">=2.32.0" },
+    { name = "sqlalchemy", specifier = ">=2.0.0" },
+    { name = "sqlglot", specifier = ">=26.0.0" },
 ]
 
 [[package]]

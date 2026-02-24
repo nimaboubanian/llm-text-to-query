@@ -4,7 +4,7 @@ import shutil
 from datetime import datetime
 from pathlib import Path
 
-from benchmark.similarity import evaluate_query
+from text2query.benchmark.similarity import evaluate_query
 
 
 def _format_per_query_similarity(result: dict) -> str:

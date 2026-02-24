@@ -4,9 +4,9 @@ import re
 from pathlib import Path
 from typing import List, Dict
 
-from database.schema import create_engine_for_database, get_database_schema_string
-from llm.service import get_sql_from_llm_streaming
-from benchmark.pipeline import _execute_queries_to_csv
+from text2query.database.schema import create_engine_for_database, get_database_schema_string
+from text2query.llm.service import get_sql_from_llm_streaming
+from text2query.benchmark.pipeline import _execute_queries_to_csv
 
 
 def step_6_run_core_benchmark(

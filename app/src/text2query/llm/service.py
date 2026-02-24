@@ -6,7 +6,7 @@ from typing import Generator, Callable
 
 import requests
 
-from core.config import (
+from text2query.core.config import (
     OLLAMA_URL, OLLAMA_TIMEOUT, AVAILABLE_MODELS, DEFAULT_MODEL,
     LLM_TEMPERATURE, LLM_MAX_TOKENS,
 )
@@ -139,7 +139,7 @@ def get_sql_from_llm_streaming(
 
 def _build_prompt(user_query: str, schema_str: str) -> str:
     """Build LLM prompt from template."""
-    from llm.prompts import DEFAULT_SQL_GENERATION_TEMPLATE
+    from text2query.llm.prompts import DEFAULT_SQL_GENERATION_TEMPLATE
     return DEFAULT_SQL_GENERATION_TEMPLATE.format(
         schema=schema_str,
         query=user_query,

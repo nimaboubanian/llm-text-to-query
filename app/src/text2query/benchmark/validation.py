@@ -4,7 +4,7 @@ from pathlib import Path
 from sqlalchemy import inspect, text
 from typing import Tuple, Set
 
-from benchmark.data_loader import TPCH_TABLES
+from text2query.benchmark.data_loader import TPCH_TABLES
 
 
 def check_directory(directory: Path, extension: str, expected_count: int) -> None:
@@ -22,7 +22,7 @@ def check_directory(directory: Path, extension: str, expected_count: int) -> Non
 
 def check_database_ready(db_url: str) -> bool:
     """Check if database has schema and non-empty tables."""
-    from database.schema import create_engine_for_database
+    from text2query.database.schema import create_engine_for_database
 
     engine = create_engine_for_database(db_url)
     try:

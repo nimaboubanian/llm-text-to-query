@@ -33,7 +33,7 @@ def load_tpch_data(
 
     Returns dict mapping table names to row counts.
     """
-    from database.schema import create_engine_for_database
+    from text2query.database.schema import create_engine_for_database
 
     if not data_dir.exists():
         raise FileNotFoundError(f"Data directory not found: {data_dir}")

@@ -1,7 +1,7 @@
 """Pipeline setup and data preparation (steps 1-5).
 
-Steps 6-7: benchmark.llm_benchmark
-Steps 8-9: benchmark.reporting
+Steps 6-7: text2query.benchmark.llm_benchmark
+Steps 8-9: text2query.benchmark.reporting
 """
 
 import os
@@ -12,17 +12,17 @@ from typing import List, Dict
 import pandas as pd
 from sqlalchemy import text
 
-from database.schema import create_engine_for_database
-from database.executor import execute_sql_query
+from text2query.database.schema import create_engine_for_database
+from text2query.database.executor import execute_sql_query
 
-from benchmark.validation import (
+from text2query.benchmark.validation import (
     check_directory,
     check_database_ready,
     check_data_cache,
     check_answers_completeness,
 )
 
-from benchmark.data_loader import load_tpch_data
+from text2query.benchmark.data_loader import load_tpch_data
 
 
 def step_1_generate_data(scale_factor: int, output_dir: Path) -> Path:

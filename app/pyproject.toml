@@ -3,7 +3,7 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "core"
+name = "text2query"
 version = "0.0.1"
 description = "Text to SQL using local LLMs"
 requires-python = ">=3.12"
@@ -17,8 +17,8 @@ dependencies = [
 ]
 
 [project.scripts]
-benchmark-orchestrator = "benchmark.orchestrator:main"
-llm-query = "cli.repl:main"
+benchmark-orchestrator = "text2query.benchmark.orchestrator:main"
+text2query = "text2query.cli.repl:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

@@ -139,8 +139,8 @@ def get_sql_from_llm_streaming(
 
 def _build_prompt(user_query: str, schema_str: str) -> str:
     """Build LLM prompt from template."""
-    from core.config import LLM_PROMPT_TEMPLATE
-    return LLM_PROMPT_TEMPLATE.format(
+    from llm.prompts import DEFAULT_SQL_GENERATION_TEMPLATE
+    return DEFAULT_SQL_GENERATION_TEMPLATE.format(
         schema=schema_str,
         query=user_query,
     )

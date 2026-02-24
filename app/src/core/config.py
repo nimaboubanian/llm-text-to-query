@@ -45,19 +45,6 @@ LLM_MAX_TOKENS = int(_get_config("max_tokens", 2048, "LLM_MAX_TOKENS"))
 DEFAULT_MODEL = _get_config("default_model", "qwen2.5-coder:7b", "DEFAULT_MODEL")
 AVAILABLE_MODELS = [DEFAULT_MODEL]
 
-LLM_PROMPT_TEMPLATE = """You are a PostgreSQL query generator.
-Given the following database schema:
-{schema}
-
-Generate a query to answer: {query}
-
-Rules:
-- Return ONLY the query, nothing else
-- No explanations, no comments, no markdown
-- Only use tables and columns from the schema above
-- Use PostgreSQL syntax
-"""
-
 BENCHMARK_SCALE_FACTOR = int(_get_config("benchmark_scale_factor", 1, "BENCHMARK_SCALE_FACTOR"))
 BENCHMARK_DATA_PATH = os.getenv("BENCHMARK_DATA_PATH")
 BENCHMARK_SCHEMA_PATH = Path("benchmark/.tpch/schema.sql")

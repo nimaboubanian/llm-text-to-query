@@ -4,10 +4,12 @@
 .env
 .claude/
 *.egg-info/
+*.pytest_cache/
 __pycache__/
 python-venv
 venv/
 app/__pycache__/
+app/.pytest_cache/
 app/*.pyc
 app/.venv/
 benchmark/.tpch/.venv/

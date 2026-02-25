@@ -1,5 +1,3 @@
-"""TPC-H data loading from .tbl files to PostgreSQL using COPY."""
-
 import os
 import subprocess
 from pathlib import Path
@@ -8,7 +6,6 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# Tables in FK-dependency order
 TPCH_TABLES = [
     'region', 'nation', 'part', 'supplier',
     'customer', 'partsupp', 'orders', 'lineitem',
@@ -16,7 +13,6 @@ TPCH_TABLES = [
 
 
 def _fmt_size(nbytes: int) -> str:
-    """Format bytes as human-readable string."""
     for unit in ('B', 'KB', 'MB', 'GB'):
         if nbytes < 1024:
             return f"{nbytes:.1f} {unit}"
@@ -57,7 +53,6 @@ def load_tpch_data(
             raw = conn.connection
             cur = raw.cursor()
             try:
-                # Strip trailing pipe and stream into COPY
                 proc = subprocess.Popen(
                     ["sed", "s/|$//", str(tbl_file)],
                     stdout=subprocess.PIPE,

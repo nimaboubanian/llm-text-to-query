@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""Interactive REPL for text-to-SQL queries."""
 
 import sys
 
@@ -10,7 +9,6 @@ from text2query.core.config import DATABASE_URL, DEFAULT_MODEL
 
 
 def print_banner():
-    """Display welcome banner."""
     print("=" * 60)
     print("  LLM Text-to-SQL Query Interface")
     print("=" * 60)
@@ -20,7 +18,6 @@ def print_banner():
 
 
 def print_help():
-    """Display available commands."""
     print("Available commands:")
     print("  /help     - Show this help")
     print("  /schema   - Display database schema")
@@ -29,34 +26,31 @@ def print_help():
 
 
 def print_result(result, max_rows: int = 100):
-    """Display query result."""
     if isinstance(result, str):
-        print(f"❌ Error: {result}")
+        print(f"Error: {result}")
         return
 
     if result.empty:
-        print("✓ Empty result set")
+        print("(empty result set)")
         return
 
     if len(result) > max_rows:
-        print(f"📊 {len(result)} rows (showing first {max_rows}):")
+        print(f"{len(result)} rows (showing first {max_rows}):")
         print(result.head(max_rows).to_string(index=False))
         print(f"... ({len(result) - max_rows} more rows)")
     else:
-        print(f"📊 {len(result)} row{'s' if len(result) != 1 else ''}:")
+        print(f"{len(result)} row{'s' if len(result) != 1 else ''}:")
         print(result.to_string(index=False))
 
 
 def handle_schema(engine):
-    """Display /schema command output."""
     schema = get_database_schema_string(engine)
-    print("📋 Database Schema:")
+    print("Database Schema:")
     print(schema)
 
 
 def handle_query(question: str, engine, schema: str, model: str):
-    """Process a natural language question."""
-    print(f"🤔 Processing: {question}")
+    print(f"Processing: {question}")
     print()
 
     generated_sql = None
@@ -73,10 +67,10 @@ def handle_query(question: str, engine, schema: str, model: str):
             break
 
     if error or not generated_sql:
-        print(f"❌ Failed to generate SQL: {error or 'No SQL generated'}")
+        print(f"Failed to generate SQL: {error or 'No SQL generated'}")
         return
 
-    print(f"💾 Generated SQL:")
+    print(f"Generated SQL:")
     print(generated_sql)
     print()
 
@@ -85,22 +79,21 @@ def handle_query(question: str, engine, schema: str, model: str):
 
 
 def main():
-    """Run the interactive REPL loop."""
     print_banner()
     print_help()
 
     try:
         engine = create_engine_for_database(DATABASE_URL)
-        print("✅ Connected to database")
+        print("Connected to database")
     except Exception as e:
-        print(f"❌ Failed to connect to database: {e}")
+        print(f"Failed to connect to database: {e}")
         sys.exit(1)
 
     try:
         schema = get_database_schema_string(engine)
-        print("✅ Loaded database schema")
+        print("Loaded database schema")
     except Exception as e:
-        print(f"❌ Failed to load schema: {e}")
+        print(f"Failed to load schema: {e}")
         sys.exit(1)
 
     print()
@@ -109,13 +102,13 @@ def main():
 
     while True:
         try:
-            user_input = input("❓ Query> ").strip()
+            user_input = input("Query> ").strip()
 
             if not user_input:
                 continue
 
             if user_input == "/quit":
-                print("👋 Goodbye!")
+                print("Goodbye!")
                 break
             elif user_input == "/help":
                 print_help()
@@ -127,13 +120,13 @@ def main():
             print()
 
         except KeyboardInterrupt:
-            print("\n👋 Goodbye!")
+            print("\nGoodbye!")
             break
         except EOFError:
-            print("\n👋 Goodbye!")
+            print("\nGoodbye!")
             break
         except Exception as e:
-            print(f"❌ Unexpected error: {e}")
+            print(f"Unexpected error: {e}")
 
 
 if __name__ == "__main__":

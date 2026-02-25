@@ -1,4 +1,4 @@
-"""LLM-driven benchmark steps: SQL generation and execution (steps 6–7)."""
+"""LLM-driven benchmark: SQL generation and execution."""
 
 import re
 from pathlib import Path
@@ -9,13 +9,12 @@ from text2query.llm.service import get_sql_from_llm_streaming
 from text2query.benchmark.pipeline import _execute_queries_to_csv
 
 
-def step_6_run_core_benchmark(
+def run_llm_generation(
     questions_dir: Path,
     output_dir: Path,
     db_url: str,
     model: str,
 ) -> List[Dict]:
-    """Generate SQL via LLM for each question."""
     question_files = sorted(questions_dir.glob("*.md"))
     total = len(question_files)
 
@@ -28,7 +27,7 @@ def step_6_run_core_benchmark(
         print(f"  ✓ All {total} queries already generated in {output_dir}")
         return []
 
-    print(f"  🔨 Generating {len(to_process)}/{total} queries (skipping {len(existing)} cached)...")
+    print(f"  Generating {len(to_process)}/{total} queries (skipping {len(existing)} cached)...")
 
     engine = create_engine_for_database(db_url)
     schema = get_database_schema_string(engine)
@@ -70,7 +69,7 @@ def step_6_run_core_benchmark(
 
     success = sum(1 for r in results if r["status"] == "success")
     errors = sum(1 for r in results if r["status"] == "error")
-    print(f"  ✓ Generated {success} queries → {output_dir}")
+    print(f"  ✓ Generated {success} queries -> {output_dir}")
     if errors > 0:
         print(f"  ⚠ {errors} failed:")
         for r in results:
@@ -80,13 +79,11 @@ def step_6_run_core_benchmark(
     return results
 
 
-def step_7_execute_generated_queries(
+def execute_generated_queries(
     queries_dir: Path,
     answers_dir: Path,
     db_url: str,
 ) -> List[Dict]:
-    """Execute LLM-generated SQL queries (with caching)."""
-
     query_files = sorted(queries_dir.glob("*.sql"))
     total = len(query_files)
 
@@ -99,5 +96,5 @@ def step_7_execute_generated_queries(
         print(f"  ✓ All {total} answer files already exist in {answers_dir}")
         return []
 
-    print(f"  🔨 Executing {len(to_process)}/{total} queries (skipping {len(existing)} cached)...")
+    print(f"  Executing {len(to_process)}/{total} queries (skipping {len(existing)} cached)...")
     return _execute_queries_to_csv(to_process, answers_dir, db_url, write_error_csv=True)

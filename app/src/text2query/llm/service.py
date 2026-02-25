@@ -26,7 +26,6 @@ def get_available_models() -> list[str]:
 
 
 def abort_ollama_generation(model: str | None = None) -> bool:
-    """Stop generation by unloading model."""
     try:
         resp = requests.post(
             f"{OLLAMA_URL}/api/generate",
@@ -138,7 +137,6 @@ def get_sql_from_llm_streaming(
 
 
 def _build_prompt(user_query: str, schema_str: str) -> str:
-    """Build LLM prompt from template."""
     from text2query.llm.prompts import DEFAULT_SQL_GENERATION_TEMPLATE
     return DEFAULT_SQL_GENERATION_TEMPLATE.format(
         schema=schema_str,
@@ -147,21 +145,17 @@ def _build_prompt(user_query: str, schema_str: str) -> str:
 
 
 def _clean_sql_response(response: str) -> str | None:
-    """Extract SQL from LLM response."""
     if not response:
         return None
 
-    # Markdown code block
     match = re.search(r"```(?:sql)?\s*(.*?)```", response, re.DOTALL | re.IGNORECASE)
     if match:
         return match.group(1).strip()
 
-    # SQL with semicolon
     match = re.search(r"(SELECT|INSERT|UPDATE|DELETE|WITH)\s+.*?;", response, re.DOTALL | re.IGNORECASE)
     if match:
         return match.group(0).strip()
 
-    # SQL without semicolon
     match = re.search(r"(SELECT|INSERT|UPDATE|DELETE|WITH)\s+[^;]*", response, re.DOTALL | re.IGNORECASE)
     if match:
         sql = match.group(0).strip()
@@ -170,7 +164,6 @@ def _clean_sql_response(response: str) -> str | None:
                 sql = sql.split(stop)[0].strip()
         return sql
 
-    # First line if it looks like SQL
     first_line = response.split("\n")[0].strip()
     if first_line.upper().startswith(("SELECT", "INSERT", "UPDATE", "DELETE", "WITH")):
         return first_line

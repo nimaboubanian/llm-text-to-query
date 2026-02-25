@@ -1,10 +1,7 @@
-"""Database schema introspection via SQLAlchemy."""
-
 from sqlalchemy import create_engine, inspect, text
 
 
 def get_database_schema_string(engine) -> str:
-    """Get schema string for LLM context."""
     inspector = inspect(engine)
     lines = []
     for table in inspector.get_table_names():
@@ -19,6 +16,5 @@ def get_database_schema_string(engine) -> str:
 
 
 def create_engine_for_database(db_url: str):
-    """Create SQLAlchemy engine with connection pooling."""
     return create_engine(db_url, pool_pre_ping=True, pool_size=5, max_overflow=10, pool_recycle=3600)
 

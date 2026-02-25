@@ -1,8 +1,4 @@
-"""Pipeline setup and data preparation (steps 1-5).
-
-Steps 6-7: text2query.benchmark.llm_benchmark
-Steps 8-9: text2query.benchmark.reporting
-"""
+"""Benchmark setup and data preparation."""
 
 import os
 import subprocess
@@ -25,19 +21,16 @@ from text2query.benchmark.validation import (
 from text2query.benchmark.data_loader import load_tpch_data
 
 
-def step_1_generate_data(scale_factor: int, output_dir: Path) -> Path:
-    """Generate TPC-H data using tpchgen-cli with caching."""
+def generate_data(scale_factor: int, output_dir: Path) -> Path:
     output_dir = output_dir or Path(f"benchmark/.tpch/data/sf{scale_factor}")
 
-    # Check cache first
     if check_data_cache(output_dir):
         print(f"  ✓ Using cached data: {output_dir}")
         return output_dir
 
-    print(f"  🔨 Generating TPC-H data (scale factor: {scale_factor})...")
+    print(f"  Generating TPC-H data (scale factor: {scale_factor})...")
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Calculate relative path from benchmark/.tpch to output_dir
     cwd = Path("benchmark/.tpch").resolve()
     output_abs = output_dir.resolve()
     rel_path = os.path.relpath(output_abs, cwd)
@@ -58,21 +51,19 @@ def step_1_generate_data(scale_factor: int, output_dir: Path) -> Path:
     return output_dir
 
 
-def step_2_validate_directories(
+def validate_directories(
     questions_dir: Path,
     queries_dir: Path
 ) -> None:
-    """Validate questions and queries directories."""
-    print("  📁 Validating directories...")
+    print("  Validating directories...")
     check_directory(questions_dir, "md", 22)
     print(f"  ✓ Questions: {questions_dir}")
     check_directory(queries_dir, "sql", 22)
     print(f"  ✓ Queries: {queries_dir}")
 
 
-def step_3_check_database_readiness(db_url: str, **_) -> bool:
-    """Check if database has schema loaded and data present."""
-    print("  🗄️  Checking database readiness...")
+def check_database_readiness(db_url: str, **_) -> bool:
+    print("  Checking database readiness...")
     ready = check_database_ready(db_url)
     if ready:
         print("  ✓ Database is ready")
@@ -82,7 +73,6 @@ def step_3_check_database_readiness(db_url: str, **_) -> bool:
 
 
 def _parse_schema_sql(schema_file: Path) -> list[str]:
-    """Read a .sql file and return executable statements (comments stripped)."""
     if not schema_file.exists():
         raise FileNotFoundError(f"Schema file not found: {schema_file}")
 
@@ -92,7 +82,6 @@ def _parse_schema_sql(schema_file: Path) -> list[str]:
         stmt = stmt.strip()
         if not stmt:
             continue
-        # Strip SQL line comments (-- ...)
         lines = [line for line in stmt.split("\n")
                  if not line.strip().startswith("--")]
         cleaned = "\n".join(lines).strip()
@@ -101,14 +90,13 @@ def _parse_schema_sql(schema_file: Path) -> list[str]:
     return statements
 
 
-def step_4_setup_database(
+def setup_database(
     schema_file: Path,
     data_dir: Path,
     db_url: str,
     scale_factor: int
 ) -> None:
-    """Load schema and data into database."""
-    print("  📋 Loading database schema...")
+    print("  Loading database schema...")
 
     statements = _parse_schema_sql(schema_file)
     engine = create_engine_for_database(db_url)
@@ -129,7 +117,7 @@ def step_4_setup_database(
     except Exception as e:
         raise RuntimeError(f"Failed to load schema: {e}")
 
-    print("  📥 Loading TPC-H data from .tbl files...")
+    print("  Loading TPC-H data from .tbl files...")
     try:
         loaded_counts = load_tpch_data(data_dir, db_url)
 
@@ -142,7 +130,7 @@ def step_4_setup_database(
         raise RuntimeError(f"Failed to load data: {e}")
 
     # Build indexes after loading (faster than during COPY)
-    print("  📇 Building indexes...")
+    print("  Building indexes...")
     try:
         engine = create_engine_for_database(db_url)
         indexes_file = schema_file.parent / "indexes.sql"
@@ -159,13 +147,12 @@ def step_4_setup_database(
         print(f"  ⚠ Index creation failed (non-fatal): {e}")
 
 
-def step_5_generate_answers(
+def generate_answers(
     queries_dir: Path,
     answers_dir: Path,
     db_url: str
 ) -> List[Dict]:
-    """Generate answer CSV files from ground truth SQL queries."""
-    print("  📝 Checking answer files...")
+    print("  Checking answer files...")
 
     is_complete, missing_ids = check_answers_completeness(answers_dir, queries_dir)
 
@@ -174,7 +161,7 @@ def step_5_generate_answers(
         print(f"  ✓ All {query_count} answer files exist")
         return []
 
-    print(f"  🔨 Generating {len(missing_ids)} missing answer files...")
+    print(f"  Generating {len(missing_ids)} missing answer files...")
     query_files = [queries_dir / f"{qid}.sql" for qid in sorted(missing_ids)]
     return _execute_queries_to_csv(query_files, answers_dir, db_url, write_error_csv=False)
 
@@ -226,7 +213,7 @@ def _execute_queries_to_csv(
 
     success = sum(1 for r in results if r["status"] == "success")
     errors = sum(1 for r in results if r["status"] == "error")
-    print(f"  ✓ Executed {success} queries → {output_dir}")
+    print(f"  ✓ Executed {success} queries -> {output_dir}")
     if errors > 0:
         print(f"  ⚠ {errors} failed:")
         for r in results:

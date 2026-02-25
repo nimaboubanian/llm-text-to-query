@@ -1,5 +1,3 @@
-"""LLM prompt templates for SQL generation."""
-
 DEFAULT_SQL_GENERATION_TEMPLATE = """You are a PostgreSQL query generator.
 Given the following database schema:
 {schema}

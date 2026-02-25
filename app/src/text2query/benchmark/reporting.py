@@ -1,4 +1,4 @@
-"""Benchmark reporting and session archiving (steps 8-9)."""
+"""Benchmark reporting and session archiving."""
 
 import shutil
 from datetime import datetime
@@ -7,14 +7,15 @@ from pathlib import Path
 from text2query.benchmark.similarity import evaluate_query
 
 
-def _format_per_query_similarity(result: dict) -> str:
-    def _v(val: float | bool | None) -> str:
-        if val is None:
-            return "—"
-        if isinstance(val, bool):
-            return "✓" if val else "✗"
-        return f"{val:.4f}"
+def _v(val: float | bool | None) -> str:
+    if val is None:
+        return "—"
+    if isinstance(val, bool):
+        return "Yes" if val else "No"
+    return f"{val:.4f}"
 
+
+def _format_per_query_similarity(result: dict) -> str:
     lines = [
         "## Similarity Analysis\n",
         "| Metric | Value |",
@@ -24,24 +25,7 @@ def _format_per_query_similarity(result: dict) -> str:
         f"| Recall | {_v(result['result_recall'])} |",
         f"| Exact Match | {_v(result['exact_match'])} |",
         f"| AST Similarity | {_v(result['ast_similarity'])} |",
-        f"| Token Jaccard | {_v(result['token_jaccard'])} |",
     ]
-
-    comp = result.get("component_f1")
-    if comp is not None:
-        labels = {
-            "select": "SELECT",
-            "from_join": "FROM + JOIN",
-            "where": "WHERE",
-            "group_by": "GROUP BY",
-            "order_by": "ORDER BY",
-            "having": "HAVING",
-        }
-        lines.append("")
-        lines.append("| Clause | F1 |")
-        lines.append("|---|---|")
-        for key, label in labels.items():
-            lines.append(f"| {label} | {_v(comp.get(key))} |")
 
     return "\n".join(lines) + "\n"
 
@@ -55,41 +39,33 @@ def _format_summary_similarity(all_results: list[dict]) -> str:
     avg_f1 = sum(f1_vals) / len(f1_vals) if f1_vals else 0.0
     avg_ast = sum(ast_vals) / len(ast_vals) if ast_vals else 0.0
 
-    def _v(val: float | bool | None) -> str:
-        if val is None:
-            return "—"
-        if isinstance(val, bool):
-            return "✓" if val else "✗"
-        return f"{val:.4f}"
-
     lines = [
         "## Similarity Metrics\n",
         f"- **Exact matches:** {exact_count} / {total}",
         f"- **Average Result F1:** {avg_f1:.4f}",
         f"- **Average AST Similarity:** {avg_ast:.4f}",
         "",
-        "| Query | Status | Result F1 | Exact Match | AST Similarity | Token Jaccard |",
-        "|---|---|---|---|---|---|",
+        "| Query | Status | Result F1 | Exact Match | AST Similarity |",
+        "|---|---|---|---|---|",
     ]
 
     for r in all_results:
         qid = f"{r['query_id']:02d}"
         lines.append(
             f"| {qid} | {r['status']} | {_v(r['result_f1'])} | {_v(r['exact_match'])} "
-            f"| {_v(r['ast_similarity'])} | {_v(r['token_jaccard'])} |"
+            f"| {_v(r['ast_similarity'])} |"
         )
 
     return "\n".join(lines) + "\n"
 
 
-def step_8_generate_reports(
+def generate_reports(
     generated_queries_dir: Path,
     reference_queries_dir: Path,
     generated_answers_dir: Path,
     reference_answers_dir: Path,
     report_dir: Path,
 ) -> Path:
-    """Generate summary.md and per-query reports."""
     per_query_dir = report_dir / "per_query"
     per_query_dir.mkdir(parents=True, exist_ok=True)
 
@@ -110,7 +86,7 @@ def step_8_generate_reports(
             first_line = (generated_answers_dir / f"{qid}.csv").read_text().split("\n", 1)[0]
             is_error = first_line.strip() == "ERROR"
 
-        status = "✗ error" if is_error else ("✓ executed" if has_answer else "✗ not generated")
+        status = "error" if is_error else ("executed" if has_answer else "not generated")
 
         if is_error:
             errors += 1
@@ -151,18 +127,16 @@ def step_8_generate_reports(
     )
     (report_dir / "summary.md").write_text(summary)
 
-    print(f"  ✓ Reports generated → {report_dir}")
+    print(f"  Reports generated -> {report_dir}")
     return report_dir
 
 
-def step_9_archive_session(
+def archive_session(
     queries_dir: Path,
     answers_dir: Path,
     report_dir: Path,
     results_base: Path,
 ) -> Path:
-    """Archive session to timestamped directory and clean up sources."""
-
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     session_dir = results_base / timestamp
 
@@ -176,21 +150,21 @@ def step_9_archive_session(
     query_files = list(queries_dir.glob("*.sql"))
     for f in query_files:
         shutil.move(str(f), str(session_queries / f.name))
-    print(f"  📂 Moved {len(query_files)} queries → {session_queries}")
+    print(f"  Moved {len(query_files)} queries -> {session_queries}")
 
     answer_files = list(answers_dir.glob("*.csv"))
     for f in answer_files:
         shutil.move(str(f), str(session_answers / f.name))
-    print(f"  📂 Moved {len(answer_files)} answers → {session_answers}")
+    print(f"  Moved {len(answer_files)} answers -> {session_answers}")
 
     if report_dir.exists():
         shutil.copytree(str(report_dir), str(session_report), dirs_exist_ok=True)
         shutil.rmtree(str(report_dir))
-        print(f"  📂 Moved reports → {session_report}")
+        print(f"  Moved reports -> {session_report}")
 
     for d in [queries_dir, answers_dir]:
         if d.exists():
             shutil.rmtree(str(d))
 
-    print(f"  ✓ Session archived → {session_dir}")
+    print(f"  Session archived -> {session_dir}")
     return session_dir

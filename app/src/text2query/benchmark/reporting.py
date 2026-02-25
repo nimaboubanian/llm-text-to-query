@@ -1,5 +1,3 @@
-"""Benchmark reporting and session archiving."""
-
 import shutil
 from datetime import datetime
 from pathlib import Path

@@ -1,5 +1,3 @@
-"""LLM-driven benchmark: SQL generation and execution."""
-
 import re
 from pathlib import Path
 from typing import List, Dict

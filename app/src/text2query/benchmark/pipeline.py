@@ -1,5 +1,3 @@
-"""Benchmark setup and data preparation."""
-
 import os
 import subprocess
 from pathlib import Path

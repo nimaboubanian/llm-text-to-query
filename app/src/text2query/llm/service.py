@@ -1,5 +1,3 @@
-"""LLM service for SQL generation."""
-
 import json
 import re
 from typing import Generator, Callable

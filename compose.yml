@@ -1,5 +1,3 @@
-# Docker services - Convert natural language to SQL queries using local LLMs
-
 x-common-env: &common-env
   PYTHONPATH: /app/src
   DATABASE_URL: postgresql://user:password@postgres:5432/testdb

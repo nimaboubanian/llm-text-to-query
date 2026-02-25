@@ -14,7 +14,6 @@ services:
     volumes:
       - ollama_data:/root/.ollama
       - ./app/ollama-entrypoint.sh:/entrypoint.sh:ro,Z
-      - ./config.yaml:/config.yaml:ro,Z
     environment:
       DEFAULT_MODEL: qwen2.5-coder:7b
     entrypoint: [ "/entrypoint.sh" ]
@@ -56,8 +55,6 @@ services:
         condition: service_healthy
     environment:
       <<: *common-env
-    volumes:
-      - ./config.yaml:/app/config.yaml:ro,Z
     restart: unless-stopped
     command: ["sleep", "infinity"]
 
@@ -76,7 +73,6 @@ services:
       <<: *common-env
       PYTHONUNBUFFERED: "1"
     volumes:
-      - ./config.yaml:/app/config.yaml:ro,Z
       - ./benchmark:/app/benchmark:Z
       - benchmark_venv:/app/.venv
     restart: "no"

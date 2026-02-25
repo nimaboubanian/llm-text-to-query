@@ -15,9 +15,16 @@ dependencies = [
     "sqlglot>=26.0.0",
 ]
 
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
 [project.scripts]
 benchmark-orchestrator = "text2query.benchmark.orchestrator:main"
 text2query = "text2query.cli.repl:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["integration: requires running PostgreSQL"]
 
 [tool.setuptools]
 package-dir = {"" = "src"}

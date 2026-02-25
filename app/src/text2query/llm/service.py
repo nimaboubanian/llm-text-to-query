@@ -7,22 +7,9 @@ from typing import Generator, Callable
 import requests
 
 from text2query.core.config import (
-    OLLAMA_URL, OLLAMA_TIMEOUT, AVAILABLE_MODELS, DEFAULT_MODEL,
+    OLLAMA_URL, DEFAULT_MODEL,
     LLM_TEMPERATURE, LLM_MAX_TOKENS,
 )
-
-
-def get_available_models() -> list[str]:
-    """Fetch models from Ollama, fallback to config list."""
-    try:
-        resp = requests.get(f"{OLLAMA_URL}/api/tags", timeout=5)
-        if resp.status_code == 200:
-            models = [m["name"] for m in resp.json().get("models", [])]
-            supported = [m for m in models if any(am in m for am in AVAILABLE_MODELS)]
-            return supported or models
-    except requests.exceptions.RequestException:
-        pass
-    return AVAILABLE_MODELS
 
 
 def abort_ollama_generation(model: str | None = None) -> bool:
@@ -68,7 +55,7 @@ def get_sql_from_llm_streaming(
                     "num_predict": LLM_MAX_TOKENS,
                 },
             },
-            timeout=OLLAMA_TIMEOUT,
+            timeout=120,
             stream=True,
         )
         
@@ -156,16 +143,4 @@ def _clean_sql_response(response: str) -> str | None:
     if match:
         return match.group(0).strip()
 
-    match = re.search(r"(SELECT|INSERT|UPDATE|DELETE|WITH)\s+[^;]*", response, re.DOTALL | re.IGNORECASE)
-    if match:
-        sql = match.group(0).strip()
-        for stop in ["\n\nOR ", "\n\nNote:", "\n\nThis ", "\n\nIf ", "\n\n--"]:
-            if stop in sql:
-                sql = sql.split(stop)[0].strip()
-        return sql
-
-    first_line = response.split("\n")[0].strip()
-    if first_line.upper().startswith(("SELECT", "INSERT", "UPDATE", "DELETE", "WITH")):
-        return first_line
-    
     return None

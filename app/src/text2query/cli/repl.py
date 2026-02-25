@@ -8,15 +8,6 @@ from text2query.llm.service import get_sql_from_llm_streaming
 from text2query.core.config import DATABASE_URL, DEFAULT_MODEL
 
 
-def print_banner():
-    print("=" * 60)
-    print("  LLM Text-to-SQL Query Interface")
-    print("=" * 60)
-    print(f"  Model: {DEFAULT_MODEL}")
-    print(f"  Database: {DATABASE_URL}")
-    print()
-
-
 def print_help():
     print("Available commands:")
     print("  /help     - Show this help")
@@ -79,8 +70,8 @@ def handle_query(question: str, engine, schema: str, model: str):
 
 
 def main():
-    print_banner()
-    print_help()
+    print(f"Text-to-SQL  model={DEFAULT_MODEL}  db={DATABASE_URL}")
+    print()
 
     try:
         engine = create_engine_for_database(DATABASE_URL)

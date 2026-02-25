@@ -1,4 +1,4 @@
-# Quick Start: docker compose up -d
+# Docker services - Convert natural language to SQL queries using local LLMs
 
 x-common-env: &common-env
   PYTHONPATH: /app/src
@@ -58,7 +58,6 @@ services:
     restart: unless-stopped
     command: ["sleep", "infinity"]
 
-  # Orchestrator service runs only in benchmark profile
   orchestrator:
     build: ./app
     container_name: orchestrator
@@ -74,7 +73,6 @@ services:
       PYTHONUNBUFFERED: "1"
     volumes:
       - ./benchmark:/app/benchmark:Z
-      - benchmark_venv:/app/.venv
     restart: "no"
     profiles:
       - benchmark
@@ -85,8 +83,6 @@ volumes:
     name: llm_ollama_data
   pg_data:
     name: llm_pg_data
-  benchmark_venv:
-    name: llm_benchmark_venv
 
 networks:
   app-network:

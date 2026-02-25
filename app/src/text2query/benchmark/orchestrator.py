@@ -26,14 +26,13 @@ def main():
         DEFAULT_MODEL,
         BENCHMARK_SCALE_FACTOR,
         BENCHMARK_DATA_PATH,
-        BENCHMARK_SCHEMA_PATH,
-        BENCHMARK_OUTPUT_DIR,
     )
 
+    schema_file = Path("benchmark/.tpch/schema.sql")
     questions_dir = Path("benchmark/.tpch/questions")
     queries_dir = Path("benchmark/.tpch/queries")
     answers_dir = Path("benchmark/.tpch/answers")
-    output_dir = Path(BENCHMARK_OUTPUT_DIR)
+    output_dir = Path("benchmark/queries")
     generated_answers_dir = Path("benchmark/answers")
     report_dir = Path("benchmark/answers/report")
     results_base = Path("benchmark/results")
@@ -58,7 +57,7 @@ def main():
         print("Check Database Readiness")
         is_ready = check_database_readiness(
             db_url=DATABASE_URL,
-            schema_file=Path(BENCHMARK_SCHEMA_PATH),
+            schema_file=schema_file,
             scale_factor=BENCHMARK_SCALE_FACTOR
         )
         print()
@@ -66,7 +65,7 @@ def main():
         if not is_ready:
             print("Setup Database")
             setup_database(
-                schema_file=Path(BENCHMARK_SCHEMA_PATH),
+                schema_file=schema_file,
                 data_dir=data_dir,
                 db_url=DATABASE_URL,
                 scale_factor=BENCHMARK_SCALE_FACTOR

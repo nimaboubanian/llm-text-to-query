@@ -3,6 +3,7 @@
 .DS_Store
 .env
 .claude/
+.understand-anything/
 *.egg-info/
 *.pytest_cache/
 __pycache__/

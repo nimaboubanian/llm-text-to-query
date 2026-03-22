@@ -1,7 +1,7 @@
 import pytest
 from pathlib import Path
 
-from text2query.benchmark.similarity import _ast_similarity, _round, _result_set_comparison
+from text2query.benchmark.similarity import _ast_similarity, _normalize_sql, _round, _result_set_comparison
 
 
 class TestAstSimilarity:
@@ -24,6 +24,29 @@ class TestAstSimilarity:
 
     def test_empty_string_returns_none(self):
         assert _ast_similarity("", "") is None
+
+    def test_predicate_reorder_scores_high(self):
+        sql_a = "SELECT * FROM t WHERE a = 1 AND b = 2"
+        sql_b = "SELECT * FROM t WHERE b = 2 AND a = 1"
+        assert _ast_similarity(sql_a, sql_b) == 1.0
+
+    def test_between_vs_dual_inequality(self):
+        sql_between = "SELECT * FROM t WHERE x BETWEEN 1 AND 10"
+        sql_dual = "SELECT * FROM t WHERE x >= 1 AND x <= 10"
+        score = _ast_similarity(sql_between, sql_dual)
+        assert score is not None
+        assert score > 0.5
+
+
+class TestNormalizeSql:
+    def test_returns_original_on_nonsense(self):
+        assert _normalize_sql("not sql at all!!!") == "not sql at all!!!"
+
+    def test_preserves_valid_sql(self):
+        sql = "SELECT id FROM users"
+        result = _normalize_sql(sql)
+        assert "SELECT" in result.upper()
+        assert "users" in result.lower()
 
 
 def test_round_none():

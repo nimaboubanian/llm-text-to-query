@@ -25,6 +25,9 @@ def _format_per_query_similarity(result: dict) -> str:
         f"| AST Similarity | {_v(result['ast_similarity'])} |",
     ]
 
+    if result.get("error_category"):
+        lines.append(f"| Error Category | {result['error_category']} |")
+
     return "\n".join(lines) + "\n"
 
 
@@ -37,11 +40,25 @@ def _format_summary_similarity(all_results: list[dict]) -> str:
     avg_f1 = sum(f1_vals) / len(f1_vals) if f1_vals else 0.0
     avg_ast = sum(ast_vals) / len(ast_vals) if ast_vals else 0.0
 
+    error_results = [r for r in all_results if r.get("error_category")]
+    error_counts = {}
+    for r in error_results:
+        cat = r["error_category"]
+        error_counts[cat] = error_counts.get(cat, 0) + 1
+
     lines = [
         "## Similarity Metrics\n",
         f"- **Exact matches:** {exact_count} / {total}",
         f"- **Average Result F1:** {avg_f1:.4f}",
         f"- **Average AST Similarity:** {avg_ast:.4f}",
+    ]
+
+    if error_counts:
+        lines.append(f"- **Execution errors:** {len(error_results)}")
+        for cat, count in sorted(error_counts.items()):
+            lines.append(f"  - {cat}: {count}")
+
+    lines += [
         "",
         "| Query | Status | Result F1 | Exact Match | AST Similarity |",
         "|---|---|---|---|---|",

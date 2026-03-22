@@ -14,10 +14,12 @@ def evaluate_query(
     gt_sql: Path,
     llm_sql: Path,
 ) -> dict:
-    status, exact_match, precision, recall, f1 = _result_set_comparison(gt_csv, llm_csv)
-
     gt_sql_text = gt_sql.read_text() if gt_sql.exists() else ""
     llm_sql_text = llm_sql.read_text() if llm_sql.exists() else ""
+
+    status, exact_match, precision, recall, f1 = _result_set_comparison(
+        gt_csv, llm_csv, ref_sql=gt_sql_text,
+    )
 
     ast_sim = _ast_similarity(gt_sql_text, llm_sql_text)
 
@@ -37,7 +39,7 @@ def _round(value: float | None) -> float | None:
 
 
 def _result_set_comparison(
-    gt_csv: Path, llm_csv: Path,
+    gt_csv: Path, llm_csv: Path, ref_sql: str = "",
 ) -> tuple[str, bool | None, float | None, float | None, float | None]:
     if not llm_csv.exists():
         return "missing", None, None, None, None
@@ -49,6 +51,9 @@ def _result_set_comparison(
     gt_df = pd.read_csv(gt_csv)
     llm_df = pd.read_csv(llm_csv)
 
+    if len(gt_df) == 0 and len(llm_df) == 0:
+        return "ok", True, 1.0, 1.0, 1.0
+
     if len(gt_df.columns) != len(llm_df.columns):
         return "ok", False, 0.0, 0.0, 0.0
 
@@ -57,15 +62,28 @@ def _result_set_comparison(
             df[col] = df[col].round(4)
         df.fillna("NULL", inplace=True)
 
-    gt_rows = Counter(tuple(row) for row in gt_df.itertuples(index=False, name=None))
-    llm_rows = Counter(tuple(row) for row in llm_df.itertuples(index=False, name=None))
+    ref_upper = ref_sql.upper()
+    use_ordered = "ORDER BY" in ref_upper and "LIMIT" in ref_upper
 
-    matched = sum((gt_rows & llm_rows).values())
-    total_llm = sum(llm_rows.values())
-    total_gt = sum(gt_rows.values())
+    if use_ordered:
+        min_len = min(len(gt_df), len(llm_df))
+        matches = sum(
+            tuple(gt_df.iloc[i]) == tuple(llm_df.iloc[i])
+            for i in range(min_len)
+        )
+        precision = matches / len(llm_df) if len(llm_df) > 0 else 0.0
+        recall = matches / len(gt_df) if len(gt_df) > 0 else 0.0
+    else:
+        gt_rows = Counter(tuple(row) for row in gt_df.itertuples(index=False, name=None))
+        llm_rows = Counter(tuple(row) for row in llm_df.itertuples(index=False, name=None))
 
-    precision = matched / total_llm if total_llm > 0 else 0.0
-    recall = matched / total_gt if total_gt > 0 else 0.0
+        matched = sum((gt_rows & llm_rows).values())
+        total_llm = sum(llm_rows.values())
+        total_gt = sum(gt_rows.values())
+
+        precision = matched / total_llm if total_llm > 0 else 0.0
+        recall = matched / total_gt if total_gt > 0 else 0.0
+
     f1 = (2 * precision * recall / (precision + recall)) if (precision + recall) > 0 else 0.0
     exact_match = f1 == 1.0
 

@@ -115,3 +115,38 @@ class TestResultSetComparison:
         assert status == "ok"
         assert exact is False
         assert f1 == 0.0
+
+    def test_both_empty_result_sets(self, tmp_path):
+        gt = tmp_path / "gt.csv"
+        llm = tmp_path / "llm.csv"
+        gt.write_text("id,name\n")
+        llm.write_text("id,name\n")
+
+        status, exact, prec, rec, f1 = _result_set_comparison(gt, llm)
+        assert status == "ok"
+        assert exact is True
+        assert f1 == 1.0
+
+    def test_ordered_comparison_correct_order(self, tmp_path):
+        gt = tmp_path / "gt.csv"
+        llm = tmp_path / "llm.csv"
+        gt.write_text("id\n1\n2\n3\n")
+        llm.write_text("id\n1\n2\n3\n")
+
+        status, exact, prec, rec, f1 = _result_set_comparison(
+            gt, llm, ref_sql="SELECT id FROM t ORDER BY id LIMIT 3",
+        )
+        assert status == "ok"
+        assert f1 == 1.0
+
+    def test_ordered_comparison_wrong_order(self, tmp_path):
+        gt = tmp_path / "gt.csv"
+        llm = tmp_path / "llm.csv"
+        gt.write_text("id\n1\n2\n3\n")
+        llm.write_text("id\n3\n2\n1\n")
+
+        status, exact, prec, rec, f1 = _result_set_comparison(
+            gt, llm, ref_sql="SELECT id FROM t ORDER BY id LIMIT 3",
+        )
+        assert status == "ok"
+        assert f1 < 1.0

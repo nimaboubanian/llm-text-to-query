@@ -23,6 +23,7 @@ def _format_per_query_similarity(result: dict) -> str:
         f"| Recall | {_v(result['result_recall'])} |",
         f"| Exact Match | {_v(result['exact_match'])} |",
         f"| AST Similarity | {_v(result['ast_similarity'])} |",
+        f"| Composite Score | {_v(result.get('composite_score'))} |",
     ]
 
     if result.get("error_category"):
@@ -53,6 +54,10 @@ def _format_summary_similarity(all_results: list[dict]) -> str:
         f"- **Average AST Similarity:** {avg_ast:.4f}",
     ]
 
+    comp_vals = [r["composite_score"] for r in all_results if r.get("composite_score") is not None]
+    avg_comp = sum(comp_vals) / len(comp_vals) if comp_vals else 0.0
+    lines.append(f"- **Average Composite Score:** {avg_comp:.4f}")
+
     if error_counts:
         lines.append(f"- **Execution errors:** {len(error_results)}")
         for cat, count in sorted(error_counts.items()):
@@ -60,15 +65,15 @@ def _format_summary_similarity(all_results: list[dict]) -> str:
 
     lines += [
         "",
-        "| Query | Status | Result F1 | Exact Match | AST Similarity |",
-        "|---|---|---|---|---|",
+        "| Query | Status | Result F1 | Exact Match | AST Similarity | Composite |",
+        "|---|---|---|---|---|---|",
     ]
 
     for r in all_results:
         qid = f"{r['query_id']:02d}"
         lines.append(
             f"| {qid} | {r['status']} | {_v(r['result_f1'])} | {_v(r['exact_match'])} "
-            f"| {_v(r['ast_similarity'])} |"
+            f"| {_v(r['ast_similarity'])} | {_v(r.get('composite_score'))} |"
         )
 
     return "\n".join(lines) + "\n"

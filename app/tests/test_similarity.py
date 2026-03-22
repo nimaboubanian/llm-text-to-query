@@ -2,7 +2,8 @@ import pytest
 from pathlib import Path
 
 from text2query.benchmark.similarity import (
-    _ast_similarity, _classify_error, _normalize_sql, _round, _result_set_comparison,
+    _ast_similarity, _classify_error, _composite_score,
+    _normalize_sql, _round, _result_set_comparison,
 )
 
 
@@ -83,6 +84,20 @@ class TestClassifyError:
     def test_unknown_error(self):
         sql = "SELECT * FROM t"
         assert _classify_error(sql, "something completely unexpected") == "Unknown"
+
+
+class TestCompositeScore:
+    def test_all_components(self):
+        score = _composite_score(result_f1=1.0, ast_sim=1.0, embed_sim=1.0, bleu=1.0)
+        assert score == pytest.approx(1.0)
+
+    def test_missing_f1_renormalizes(self):
+        score = _composite_score(result_f1=None, ast_sim=1.0, embed_sim=1.0, bleu=1.0)
+        assert score == pytest.approx(1.0)
+
+    def test_all_zero(self):
+        score = _composite_score(result_f1=0.0, ast_sim=0.0)
+        assert score == 0.0
 
 
 class TestResultSetComparison:

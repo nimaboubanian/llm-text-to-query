@@ -28,6 +28,11 @@ def evaluate_query(
 
     ast_sim = _ast_similarity(gt_sql_text, llm_sql_text)
 
+    composite = _composite_score(
+        result_f1=f1,
+        ast_sim=ast_sim if ast_sim is not None else 0.0,
+    )
+
     return {
         "query_id": query_id,
         "status": status,
@@ -37,11 +42,33 @@ def evaluate_query(
         "result_f1": _round(f1),
         "ast_similarity": _round(ast_sim),
         "error_category": error_category,
+        "composite_score": _round(composite),
     }
 
 
 def _round(value: float | None) -> float | None:
     return round(value, 4) if value is not None else None
+
+
+_DEFAULT_WEIGHTS = {"f1": 0.45, "ast": 0.25, "embed": 0.20, "bleu": 0.10}
+
+
+def _composite_score(
+    result_f1: float | None,
+    ast_sim: float,
+    embed_sim: float = 0.0,
+    bleu: float = 0.0,
+    weights: dict | None = None,
+) -> float:
+    w = weights or _DEFAULT_WEIGHTS
+    components = {"ast": ast_sim, "embed": embed_sim, "bleu": bleu}
+    w_total = w["ast"] + w["embed"] + w["bleu"]
+
+    if result_f1 is not None:
+        components["f1"] = result_f1
+        w_total += w["f1"]
+
+    return sum(w[k] * v for k, v in components.items()) / w_total if w_total > 0 else 0.0
 
 
 def _classify_error(sql: str, error_text: str) -> str:

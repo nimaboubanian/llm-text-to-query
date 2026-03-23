@@ -24,10 +24,21 @@ def _format_per_query_similarity(result: dict) -> str:
         f"| Exact Match | {_v(result['exact_match'])} |",
         f"| AST Similarity | {_v(result['ast_similarity'])} |",
         f"| Composite Score | {_v(result.get('composite_score'))} |",
+        f"| BLEU | {_v(result.get('bleu'))} |",
+        f"| Token Jaccard | {_v(result.get('token_jaccard'))} |",
     ]
 
     if result.get("error_category"):
         lines.append(f"| Error Category | {result['error_category']} |")
+
+    clause = result.get("clause_scores")
+    if clause:
+        lines.append("")
+        lines.append("### Clause Breakdown\n")
+        lines.append("| Clause | Match |")
+        lines.append("|---|---|")
+        for name, score in clause.items():
+            lines.append(f"| {name} | {_v(score)} |")
 
     return "\n".join(lines) + "\n"
 
@@ -65,15 +76,16 @@ def _format_summary_similarity(all_results: list[dict]) -> str:
 
     lines += [
         "",
-        "| Query | Status | Result F1 | Exact Match | AST Similarity | Composite |",
-        "|---|---|---|---|---|---|",
+        "| Query | Status | Result F1 | AST Sim | Composite | BLEU | Jaccard |",
+        "|---|---|---|---|---|---|---|",
     ]
 
     for r in all_results:
         qid = f"{r['query_id']:02d}"
         lines.append(
-            f"| {qid} | {r['status']} | {_v(r['result_f1'])} | {_v(r['exact_match'])} "
-            f"| {_v(r['ast_similarity'])} | {_v(r.get('composite_score'))} |"
+            f"| {qid} | {r['status']} | {_v(r['result_f1'])} "
+            f"| {_v(r['ast_similarity'])} | {_v(r.get('composite_score'))} "
+            f"| {_v(r.get('bleu'))} | {_v(r.get('token_jaccard'))} |"
         )
 
     return "\n".join(lines) + "\n"

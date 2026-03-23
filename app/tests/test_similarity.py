@@ -2,8 +2,8 @@ import pytest
 from pathlib import Path
 
 from text2query.benchmark.similarity import (
-    _ast_similarity, _classify_error, _composite_score,
-    _normalize_sql, _round, _result_set_comparison,
+    _ast_similarity, _classify_error, _clause_level_scores, _composite_score,
+    _normalize_sql, _round, _result_set_comparison, _sql_bleu, _token_jaccard,
 )
 
 
@@ -64,6 +64,25 @@ def test_round_preserves_short():
     assert _round(0.5) == 0.5
 
 
+class TestBleuAndJaccard:
+    def test_bleu_identical(self):
+        sql = "SELECT id, name FROM users WHERE active = true"
+        score = _sql_bleu(sql, sql)
+        assert score > 0.9
+
+    def test_bleu_different(self):
+        score = _sql_bleu("SELECT id FROM users", "DELETE FROM orders WHERE x = 1")
+        assert score < 0.3
+
+    def test_jaccard_identical(self):
+        sql = "SELECT id FROM users"
+        assert _token_jaccard(sql, sql) == 1.0
+
+    def test_jaccard_disjoint(self):
+        score = _token_jaccard("SELECT a FROM x", "INSERT INTO y VALUES 1")
+        assert score < 0.2
+
+
 class TestClassifyError:
     def test_schema_mismatch(self):
         sql = "SELECT x FROM nonexistent"
@@ -98,6 +117,33 @@ class TestCompositeScore:
     def test_all_zero(self):
         score = _composite_score(result_f1=0.0, ast_sim=0.0)
         assert score == 0.0
+
+
+class TestClauseLevelScores:
+    def test_identical_sql(self):
+        sql = "SELECT id FROM users WHERE active = true"
+        scores = _clause_level_scores(sql, sql)
+        assert scores is not None
+        assert scores["select"] == 1.0
+        assert scores["from"] == 1.0
+        assert scores["where"] == 1.0
+
+    def test_different_where(self):
+        ref = "SELECT id FROM users WHERE active = true"
+        gen = "SELECT id FROM users WHERE active = false"
+        scores = _clause_level_scores(ref, gen)
+        assert scores["select"] == 1.0
+        assert scores["from"] == 1.0
+        assert scores["where"] == 0.0
+
+    def test_missing_clause_both_absent(self):
+        sql = "SELECT id FROM users"
+        scores = _clause_level_scores(sql, sql)
+        assert scores["where"] == 1.0  # both absent = correct omission
+        assert scores["group_by"] == 1.0
+
+    def test_empty_sql_returns_none(self):
+        assert _clause_level_scores("", "") is None
 
 
 class TestResultSetComparison:
@@ -190,3 +236,26 @@ class TestResultSetComparison:
         )
         assert status == "ok"
         assert f1 < 1.0
+
+    def test_column_reorder_alignment(self, tmp_path):
+        gt = tmp_path / "gt.csv"
+        llm = tmp_path / "llm.csv"
+        gt.write_text("a,b\n1,x\n2,y\n")
+        llm.write_text("b,a\nx,1\ny,2\n")
+
+        status, exact, prec, rec, f1, err = _result_set_comparison(gt, llm)
+        assert status == "ok"
+        assert f1 == 1.0
+
+    def test_custom_epsilon(self, tmp_path):
+        gt = tmp_path / "gt.csv"
+        llm = tmp_path / "llm.csv"
+        gt.write_text("val\n1.1234\n")
+        llm.write_text("val\n1.1256\n")
+
+        # Default epsilon 1e-4 (4 decimal places): 1.1234 != 1.1256
+        status1, _, _, _, f1_strict, _ = _result_set_comparison(gt, llm)
+        # Loose epsilon 1e-1 (1 decimal place): both round to 1.1
+        status2, _, _, _, f1_loose, _ = _result_set_comparison(gt, llm, float_epsilon=1e-1)
+        assert f1_strict == 0.0
+        assert f1_loose == 1.0

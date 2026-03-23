@@ -76,7 +76,7 @@ def _format_summary_similarity(all_results: list[dict]) -> str:
 
     lines += [
         "",
-        "| Query | Status | Result F1 | AST Sim | Composite | BLEU | Jaccard |",
+        "| Query | Status | Result F1 | AST Sim | BLEU | Jaccard | Composite |",
         "|---|---|---|---|---|---|---|",
     ]
 
@@ -84,8 +84,8 @@ def _format_summary_similarity(all_results: list[dict]) -> str:
         qid = f"{r['query_id']:02d}"
         lines.append(
             f"| {qid} | {r['status']} | {_v(r['result_f1'])} "
-            f"| {_v(r['ast_similarity'])} | {_v(r.get('composite_score'))} "
-            f"| {_v(r.get('bleu'))} | {_v(r.get('token_jaccard'))} |"
+            f"| {_v(r['ast_similarity'])} | {_v(r.get('bleu'))} "
+            f"| {_v(r.get('token_jaccard'))} | {_v(r.get('composite_score'))} |"
         )
 
     return "\n".join(lines) + "\n"

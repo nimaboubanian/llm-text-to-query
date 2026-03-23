@@ -36,3 +36,15 @@ The automated TPC-H benchmark runs in three phases:
 
 6. Evaluates each query using similarity criteria
 7. Generates the reports to `benchmark/results/YYYY-MM-DD_HH-MM-SS/`
+
+### Evaluation Metrics
+
+| Metric | Purpose |
+|---|---|
+| **Result F1** | Did the query produce the correct data? Primary correctness measure. |
+| **AST Similarity** | How structurally close is the SQL to the reference? |
+| **BLEU** | N-gram overlap between SQL token sequences. |
+| **Token Jaccard** | Set-based keyword overlap between queries. |
+| **Clause Scores** | Per-clause breakdown (SELECT, WHERE, etc.) to identify which parts failed. |
+| **Error Category** | Classifies execution failures (SyntaxError, SchemaMismatch, RuntimeError, Timeout). |
+| **Composite** | Weighted aggregate of F1 (45%), AST (25%), Embed (20%), BLEU (10%) for ranking. |

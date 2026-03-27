@@ -1,6 +1,7 @@
-from pathlib import Path
-
-from text2query.benchmark.reporting import _v, _format_per_query_similarity, _format_summary_similarity, archive_session
+from text2query.benchmark.reporting import (
+    _v, _format_per_query_similarity, _format_summary_similarity,
+    _compute_stats, archive_session,
+)
 
 
 def test_v_formats_float():
@@ -41,6 +42,33 @@ def test_summary_computes_averages():
     assert "1 / 2" in output
     assert "0.7500" in output  # avg F1 = (1.0 + 0.5) / 2
     assert "0.7000" in output  # avg AST = (0.8 + 0.6) / 2
+
+
+def test_compute_stats_basic():
+    result = _compute_stats([0.85, 0.72, 0.88, 0.65, 0.90])
+    assert abs(result["mean"] - 0.8) < 0.001
+    assert result["std"] > 0
+    assert result["ci_lower"] < result["mean"]
+    assert result["ci_upper"] > result["mean"]
+
+
+def test_compute_stats_single_value():
+    result = _compute_stats([0.85])
+    assert result["mean"] == 0.85
+    assert result["std"] == 0.0
+    assert result["ci_lower"] == result["ci_upper"] == 0.85
+
+
+def test_compute_stats_empty():
+    result = _compute_stats([])
+    assert result["mean"] is None
+    assert result["std"] is None
+
+
+def test_compute_stats_with_nones():
+    result = _compute_stats([0.5, None, 0.7])
+    # Should filter out None and compute on [0.5, 0.7]
+    assert abs(result["mean"] - 0.6) < 0.001
 
 
 def test_archive_moves_files(tmp_path):

@@ -71,6 +71,7 @@ services:
     environment:
       <<: *common-env
       PYTHONUNBUFFERED: "1"
+      BENCHMARK_NUM_SEEDS: "5"
     volumes:
       - ./benchmark:/app/benchmark:Z
     restart: "no"

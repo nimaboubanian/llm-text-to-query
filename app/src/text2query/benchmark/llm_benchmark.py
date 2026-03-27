@@ -12,6 +12,33 @@ def run_llm_generation(
     output_dir: Path,
     db_url: str,
     model: str,
+    seeds: List[int] | None = None,
+) -> List[Dict]:
+    if seeds and len(seeds) > 1:
+        all_results = []
+        for seed in seeds:
+            seed_dir = output_dir / f"seed_{seed}"
+            print(f"\n  --- Seed {seed} ---")
+            results = _run_single_generation(
+                questions_dir, seed_dir, db_url, model, seed=seed,
+            )
+            all_results.extend(
+                {**r, "seed": seed} for r in results
+            )
+        return all_results
+    else:
+        seed = seeds[0] if seeds else None
+        return _run_single_generation(
+            questions_dir, output_dir, db_url, model, seed=seed,
+        )
+
+
+def _run_single_generation(
+    questions_dir: Path,
+    output_dir: Path,
+    db_url: str,
+    model: str,
+    seed: int | None = None,
 ) -> List[Dict]:
     question_files = sorted(questions_dir.glob("*.md"))
     total = len(question_files)
@@ -25,7 +52,8 @@ def run_llm_generation(
         print(f"  ✓ All {total} queries already generated in {output_dir}")
         return []
 
-    print(f"  Generating {len(to_process)}/{total} queries (skipping {len(existing)} cached)...")
+    seed_label = f" (seed={seed})" if seed is not None else ""
+    print(f"  Generating {len(to_process)}/{total} queries{seed_label} (skipping {len(existing)} cached)...")
 
     engine = create_engine_for_database(db_url)
     schema = get_database_schema_string(engine)
@@ -48,7 +76,7 @@ def run_llm_generation(
         generated_sql = None
         error = None
 
-        for chunk in get_sql_from_llm_streaming(question, schema, "postgresql", model):
+        for chunk in get_sql_from_llm_streaming(question, schema, "postgresql", model, seed=seed):
             if chunk["type"] == "done":
                 generated_sql = chunk.get("sql")
                 break
@@ -78,6 +106,27 @@ def run_llm_generation(
 
 
 def execute_generated_queries(
+    queries_dir: Path,
+    answers_dir: Path,
+    db_url: str,
+    seeds: List[int] | None = None,
+) -> List[Dict]:
+    if seeds and len(seeds) > 1:
+        all_results = []
+        for seed in seeds:
+            seed_queries = queries_dir / f"seed_{seed}"
+            seed_answers = answers_dir / f"seed_{seed}"
+            print(f"\n  --- Seed {seed} ---")
+            results = _execute_single(seed_queries, seed_answers, db_url)
+            all_results.extend(
+                {**r, "seed": seed} for r in results
+            )
+        return all_results
+    else:
+        return _execute_single(queries_dir, answers_dir, db_url)
+
+
+def _execute_single(
     queries_dir: Path,
     answers_dir: Path,
     db_url: str,

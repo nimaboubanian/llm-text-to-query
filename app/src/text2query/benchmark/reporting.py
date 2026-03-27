@@ -1,6 +1,9 @@
+import math
 import shutil
+import statistics
 from datetime import datetime
 from pathlib import Path
+from typing import List
 
 from text2query.benchmark.similarity import evaluate_query
 
@@ -11,6 +14,23 @@ def _v(val: float | bool | None) -> str:
     if isinstance(val, bool):
         return "Yes" if val else "No"
     return f"{val:.4f}"
+
+
+def _compute_stats(values: list[float]) -> dict:
+    """Compute mean, std, and 95% confidence interval for a list of values."""
+    values = [v for v in values if v is not None]
+    if not values:
+        return {"mean": None, "std": None, "ci_lower": None, "ci_upper": None}
+    n = len(values)
+    mean = statistics.mean(values)
+    std = statistics.stdev(values) if n > 1 else 0.0
+    ci_margin = 1.96 * std / math.sqrt(n) if n > 1 else 0.0
+    return {
+        "mean": round(mean, 4),
+        "std": round(std, 4),
+        "ci_lower": round(mean - ci_margin, 4),
+        "ci_upper": round(mean + ci_margin, 4),
+    }
 
 
 def _format_per_query_similarity(result: dict) -> str:
@@ -39,6 +59,49 @@ def _format_per_query_similarity(result: dict) -> str:
         lines.append("|---|---|")
         for name, score in clause.items():
             lines.append(f"| {name} | {_v(score)} |")
+
+    return "\n".join(lines) + "\n"
+
+
+def _format_per_query_multiseed(seed_results: list[dict]) -> str:
+    """Format per-query report for multi-seed runs showing all seeds + aggregated stats."""
+    lines = [
+        "## Per-Seed Results\n",
+        "| Seed | Status | Result F1 | AST Sim | BLEU | Jaccard | Composite |",
+        "|---|---|---|---|---|---|---|",
+    ]
+
+    for r in seed_results:
+        lines.append(
+            f"| {r['seed']} | {r['status']} | {_v(r['result_f1'])} "
+            f"| {_v(r['ast_similarity'])} | {_v(r.get('bleu'))} "
+            f"| {_v(r.get('token_jaccard'))} | {_v(r.get('composite_score'))} |"
+        )
+
+    lines.append("")
+    lines.append("## Aggregated Statistics\n")
+
+    metrics = ["result_f1", "ast_similarity", "bleu", "token_jaccard", "composite_score"]
+    metric_labels = {
+        "result_f1": "Result F1",
+        "ast_similarity": "AST Similarity",
+        "bleu": "BLEU",
+        "token_jaccard": "Token Jaccard",
+        "composite_score": "Composite Score",
+    }
+
+    lines.append("| Metric | Mean | Std | 95% CI |")
+    lines.append("|---|---|---|---|")
+
+    for metric in metrics:
+        vals = [r.get(metric) for r in seed_results if r.get(metric) is not None]
+        stats = _compute_stats(vals)
+        if stats["mean"] is not None:
+            ci = f"[{stats['ci_lower']:.4f}, {stats['ci_upper']:.4f}]"
+            lines.append(
+                f"| {metric_labels[metric]} | {stats['mean']:.4f} "
+                f"| {stats['std']:.4f} | {ci} |"
+            )
 
     return "\n".join(lines) + "\n"
 
@@ -91,13 +154,83 @@ def _format_summary_similarity(all_results: list[dict]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _format_summary_multiseed(aggregated: list[dict], num_seeds: int) -> str:
+    """Format summary report for multi-seed runs with mean±std columns."""
+    total = len(aggregated)
+
+    # Global aggregates across all queries
+    f1_means = [q["result_f1"]["mean"] for q in aggregated if q["result_f1"]["mean"] is not None]
+    ast_means = [q["ast_similarity"]["mean"] for q in aggregated if q["ast_similarity"]["mean"] is not None]
+    comp_means = [q["composite_score"]["mean"] for q in aggregated if q["composite_score"]["mean"] is not None]
+
+    global_f1 = _compute_stats(f1_means)
+    global_ast = _compute_stats(ast_means)
+    global_comp = _compute_stats(comp_means)
+
+    lines = [
+        f"## Similarity Metrics ({num_seeds} seeds)\n",
+        f"- **Queries evaluated:** {total}",
+    ]
+
+    if global_f1["mean"] is not None:
+        lines.append(f"- **Average Result F1:** {global_f1['mean']:.4f} ± {global_f1['std']:.4f}")
+    if global_ast["mean"] is not None:
+        lines.append(f"- **Average AST Similarity:** {global_ast['mean']:.4f} ± {global_ast['std']:.4f}")
+    if global_comp["mean"] is not None:
+        lines.append(f"- **Average Composite Score:** {global_comp['mean']:.4f} ± {global_comp['std']:.4f}")
+
+    lines += [
+        "",
+        "| Query | F1 (mean±std) | AST (mean±std) | Composite (mean±std) | F1 95% CI |",
+        "|---|---|---|---|---|",
+    ]
+
+    for q in aggregated:
+        qid = f"{q['query_id']:02d}"
+        f1 = q["result_f1"]
+        ast = q["ast_similarity"]
+        comp = q["composite_score"]
+
+        f1_str = f"{f1['mean']:.4f} ± {f1['std']:.4f}" if f1["mean"] is not None else "—"
+        ast_str = f"{ast['mean']:.4f} ± {ast['std']:.4f}" if ast["mean"] is not None else "—"
+        comp_str = f"{comp['mean']:.4f} ± {comp['std']:.4f}" if comp["mean"] is not None else "—"
+        ci_str = f"[{f1['ci_lower']:.4f}, {f1['ci_upper']:.4f}]" if f1["mean"] is not None else "—"
+
+        lines.append(f"| {qid} | {f1_str} | {ast_str} | {comp_str} | {ci_str} |")
+
+    return "\n".join(lines) + "\n"
+
+
 def generate_reports(
     generated_queries_dir: Path,
     reference_queries_dir: Path,
     generated_answers_dir: Path,
     reference_answers_dir: Path,
     report_dir: Path,
+    seeds: List[int] | None = None,
 ) -> Path:
+    if seeds and len(seeds) > 1:
+        return _generate_multiseed_reports(
+            generated_queries_dir, reference_queries_dir,
+            generated_answers_dir, reference_answers_dir,
+            report_dir, seeds,
+        )
+    else:
+        return _generate_single_reports(
+            generated_queries_dir, reference_queries_dir,
+            generated_answers_dir, reference_answers_dir,
+            report_dir,
+        )
+
+
+def _generate_single_reports(
+    generated_queries_dir: Path,
+    reference_queries_dir: Path,
+    generated_answers_dir: Path,
+    reference_answers_dir: Path,
+    report_dir: Path,
+) -> Path:
+    """Original single-seed report generation (backward compatible)."""
     per_query_dir = report_dir / "per_query"
     per_query_dir.mkdir(parents=True, exist_ok=True)
 
@@ -163,6 +296,79 @@ def generate_reports(
     return report_dir
 
 
+def _generate_multiseed_reports(
+    generated_queries_dir: Path,
+    reference_queries_dir: Path,
+    generated_answers_dir: Path,
+    reference_answers_dir: Path,
+    report_dir: Path,
+    seeds: List[int],
+) -> Path:
+    """Generate reports aggregating multiple seed runs with statistical analysis."""
+    per_query_dir = report_dir / "per_query"
+    per_query_dir.mkdir(parents=True, exist_ok=True)
+
+    query_ids = sorted(
+        f.stem for f in reference_queries_dir.glob("*.sql")
+    )
+
+    aggregated = []
+    metrics_to_aggregate = [
+        "result_f1", "result_precision", "result_recall",
+        "ast_similarity", "composite_score", "bleu", "token_jaccard",
+    ]
+
+    for qid in query_ids:
+        seed_results = []
+
+        for seed in seeds:
+            seed_queries = generated_queries_dir / f"seed_{seed}"
+            seed_answers = generated_answers_dir / f"seed_{seed}"
+
+            sim_result = evaluate_query(
+                query_id=int(qid),
+                gt_csv=reference_answers_dir / f"{qid}.csv",
+                llm_csv=seed_answers / f"{qid}.csv",
+                gt_sql=reference_queries_dir / f"{qid}.sql",
+                llm_sql=seed_queries / f"{qid}.sql",
+            )
+            sim_result["seed"] = seed
+            seed_results.append(sim_result)
+
+        # Aggregate statistics across seeds
+        query_agg = {"query_id": int(qid)}
+        for metric in metrics_to_aggregate:
+            vals = [r.get(metric) for r in seed_results if r.get(metric) is not None]
+            query_agg[metric] = _compute_stats(vals)
+
+        query_agg["per_seed"] = seed_results
+        aggregated.append(query_agg)
+
+        # Per-query report with all seeds
+        report = (
+            f"# Query {qid} — Multi-Seed Report ({len(seeds)} seeds)\n\n"
+            + _format_per_query_multiseed(seed_results)
+        )
+        (per_query_dir / f"{qid}.md").write_text(report)
+        print(f"  [{qid}] evaluated across {len(seeds)} seeds")
+
+    total = len(query_ids)
+
+    summary = (
+        f"# Benchmark Summary (Multi-Seed)\n\n"
+        f"| Metric | Value |\n"
+        f"|---|---|\n"
+        f"| Total queries | {total} |\n"
+        f"| Seeds per query | {len(seeds)} |\n"
+        f"| Total evaluations | {total * len(seeds)} |\n\n"
+        + _format_summary_multiseed(aggregated, len(seeds))
+    )
+    (report_dir / "summary.md").write_text(summary)
+
+    print(f"  Reports generated -> {report_dir}")
+    return report_dir
+
+
 def archive_session(
     queries_dir: Path,
     answers_dir: Path,
@@ -179,15 +385,11 @@ def archive_session(
     session_queries.mkdir(parents=True, exist_ok=True)
     session_answers.mkdir(parents=True, exist_ok=True)
 
-    query_files = list(queries_dir.glob("*.sql"))
-    for f in query_files:
-        shutil.move(str(f), str(session_queries / f.name))
-    print(f"  Moved {len(query_files)} queries -> {session_queries}")
+    # Move queries — handle both flat files and seed subdirectories
+    _move_contents(queries_dir, session_queries, "queries")
 
-    answer_files = list(answers_dir.glob("*.csv"))
-    for f in answer_files:
-        shutil.move(str(f), str(session_answers / f.name))
-    print(f"  Moved {len(answer_files)} answers -> {session_answers}")
+    # Move answers — handle both flat files and seed subdirectories
+    _move_contents(answers_dir, session_answers, "answers")
 
     if report_dir.exists():
         shutil.copytree(str(report_dir), str(session_report), dirs_exist_ok=True)
@@ -200,3 +402,25 @@ def archive_session(
 
     print(f"  Session archived -> {session_dir}")
     return session_dir
+
+
+def _move_contents(src_dir: Path, dst_dir: Path, label: str) -> None:
+    """Move files and seed subdirectories from src to dst."""
+    if not src_dir.exists():
+        return
+
+    # Move seed subdirectories
+    seed_dirs = sorted(src_dir.glob("seed_*"))
+    if seed_dirs:
+        for sd in seed_dirs:
+            target = dst_dir / sd.name
+            shutil.copytree(str(sd), str(target), dirs_exist_ok=True)
+        print(f"  Moved {len(seed_dirs)} seed dirs of {label} -> {dst_dir}")
+        return
+
+    # Move flat files (single-seed / backward compat)
+    files = list(src_dir.glob("*.sql")) + list(src_dir.glob("*.csv"))
+    for f in files:
+        shutil.move(str(f), str(dst_dir / f.name))
+    if files:
+        print(f"  Moved {len(files)} {label} -> {dst_dir}")

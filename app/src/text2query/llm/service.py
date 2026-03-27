@@ -28,6 +28,7 @@ def get_sql_from_llm_streaming(
     db_type: str = "postgresql",
     model: str | None = None,
     stop_check: Callable[[], bool] | None = None,
+    seed: int | None = None,
 ) -> Generator[dict, None, None]:
     """Stream SQL generation. Yields token/done/stopped/error dicts."""
     selected_model = model or DEFAULT_MODEL
@@ -37,6 +38,13 @@ def get_sql_from_llm_streaming(
     stopped = False
     session = None
     response = None
+
+    options = {
+        "temperature": LLM_TEMPERATURE,
+        "num_predict": LLM_MAX_TOKENS,
+    }
+    if seed is not None:
+        options["seed"] = seed
     
     try:
         session = requests.Session()
@@ -48,10 +56,7 @@ def get_sql_from_llm_streaming(
                 "model": selected_model,
                 "prompt": prompt,
                 "stream": True,
-                "options": {
-                    "temperature": LLM_TEMPERATURE,
-                    "num_predict": LLM_MAX_TOKENS,
-                },
+                "options": options,
             },
             timeout=120,
             stream=True,

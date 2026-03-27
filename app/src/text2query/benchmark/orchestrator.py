@@ -26,6 +26,7 @@ def main():
         DEFAULT_MODEL,
         BENCHMARK_SCALE_FACTOR,
         BENCHMARK_DATA_PATH,
+        BENCHMARK_NUM_SEEDS,
     )
 
     schema_file = Path("benchmark/.tpch/schema.sql")
@@ -37,6 +38,9 @@ def main():
     report_dir = Path("benchmark/answers/report")
     results_base = Path("benchmark/results")
     data_dir = Path(BENCHMARK_DATA_PATH) if BENCHMARK_DATA_PATH else Path(f"benchmark/.tpch/data/sf{BENCHMARK_SCALE_FACTOR}")
+
+    # Build seeds list
+    seeds = list(range(1, BENCHMARK_NUM_SEEDS + 1)) if BENCHMARK_NUM_SEEDS > 1 else None
 
     try:
         print("\n--- Setup & Validation ---\n")
@@ -79,18 +83,21 @@ def main():
         generate_answers(queries_dir=queries_dir, answers_dir=answers_dir, db_url=DATABASE_URL)
         print()
 
-        print("\n--- LLM SQL Generation (model: {}) ---\n".format(DEFAULT_MODEL))
+        seed_info = f", seeds: {BENCHMARK_NUM_SEEDS}" if seeds else ""
+        print(f"\n--- LLM SQL Generation (model: {DEFAULT_MODEL}{seed_info}) ---\n")
 
         print("Generate SQL Queries via LLM")
         run_llm_generation(
             questions_dir=questions_dir, output_dir=output_dir,
             db_url=DATABASE_URL, model=DEFAULT_MODEL,
+            seeds=seeds,
         )
         print()
 
         print("Execute LLM-Generated Queries")
         execute_generated_queries(
             queries_dir=output_dir, answers_dir=generated_answers_dir, db_url=DATABASE_URL,
+            seeds=seeds,
         )
         print()
 
@@ -101,6 +108,7 @@ def main():
             generated_queries_dir=output_dir, reference_queries_dir=queries_dir,
             generated_answers_dir=generated_answers_dir, reference_answers_dir=answers_dir,
             report_dir=report_dir,
+            seeds=seeds,
         )
         print()
 
@@ -121,6 +129,8 @@ def main():
         print(f"  - Reference ans:   {len(list(answers_dir.glob('*.csv')))} files")
         print(f"  - Session:         {session_dir}")
         print(f"  - Model:           {DEFAULT_MODEL}")
+        if seeds:
+            print(f"  - Seeds:           {BENCHMARK_NUM_SEEDS} ({seeds})")
         print(f"  - Database:        {DATABASE_URL}")
         print()
 

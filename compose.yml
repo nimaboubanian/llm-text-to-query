@@ -18,7 +18,7 @@ services:
     restart: always
     healthcheck:
       test: [ "CMD", "sh", "-c", "ollama show \"$$DEFAULT_MODEL\" > /dev/null 2>&1" ]
-      start_period: 240s
+      start_period: 600s
       interval: 10s
       timeout: 10s
       retries: 10
@@ -34,6 +34,7 @@ services:
       POSTGRES_DB: testdb
     volumes:
       - pg_data:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d:ro,Z
     restart: always
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U user -d testdb" ]
@@ -53,6 +54,7 @@ services:
         condition: service_healthy
     environment:
       <<: *common-env
+      DATABASE_URL: postgresql://user:password@postgres:5432/minidb
     restart: unless-stopped
     command: ["sleep", "infinity"]
 

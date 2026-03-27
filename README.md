@@ -2,15 +2,63 @@
 
 Convert natural language to SQL queries using local LLMs.
 
-## Interactive Shell
+## Quick Start
 
 ```bash
-# Start all services
+# Start all services (includes default mini database)
 docker compose up -d
 
 # Enter interactive REPL
 docker compose exec app uv run text2query
 ```
+
+## Default Mini Database
+
+A simple e-commerce database loads automatically on first startup for testing:
+
+| Table | Rows | Description |
+|-------|------|-------------|
+| `customers` | 30 | Customer profiles (name, email, city) |
+| `products` | 20 | Product catalog (name, category, price, cost, stock) |
+| `orders` | 100 | Order records (customer, product, quantity, date, total) |
+
+**Example queries to try:**
+
+- "What are the customers' names?"
+- "Which product has the highest price?"
+- "How many orders does each customer have?"
+- "Show total sales per product"
+- "Which customers are from New York?"
+- "What products have never been ordered?"
+- "Top 3 best-selling products"
+- "Show customers who spent more than $500 total"
+
+The mini database persists in the Docker volume. To reset it, run `docker compose down -v`.
+
+## Using an External Database
+
+To connect to a PostgreSQL database outside of Docker, edit `DATABASE_URL` in the `app` service in `compose.yml` and remove the `postgres` dependency. For example:
+
+```yaml
+# compose.yml — app service
+environment:
+  <<: *common-env
+  DATABASE_URL: postgresql://user:pass@192.168.1.10:5432/mydb
+# depends_on:          # remove or comment out postgres dependency
+#   ollama:
+#     condition: service_healthy
+#   postgres:
+#     condition: service_healthy
+```
+
+If the external database runs on the Docker host machine (not inside a container), add `extra_hosts` to the `app` service and use `host.docker.internal` as the hostname:
+
+```yaml
+extra_hosts:
+  - "host.docker.internal:host-gateway"
+```
+
+The internal `postgres` service can be removed from `compose.yml` when unused.
 
 ## Benchmark
 

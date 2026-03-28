@@ -14,6 +14,7 @@ services:
       - ./app/ollama-entrypoint.sh:/entrypoint.sh:ro,Z
     environment:
       DEFAULT_MODEL: qwen2.5-coder:7b
+      # BENCHMARK_MODELS: "llama3.2:3b,qwen2.5-coder:7b,deepseek-coder:6.7b"
     entrypoint: [ "/entrypoint.sh" ]
     restart: always
     healthcheck:
@@ -72,6 +73,7 @@ services:
       <<: *common-env
       PYTHONUNBUFFERED: "1"
       BENCHMARK_NUM_SEEDS: "5"
+      # BENCHMARK_MODELS: "llama3.2:3b,qwen2.5-coder:7b,deepseek-coder:6.7b"
     volumes:
       - ./benchmark:/app/benchmark:Z
     restart: "no"

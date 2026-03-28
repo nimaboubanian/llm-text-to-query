@@ -17,6 +17,18 @@ sleep 5
 echo "Pulling model: $DEFAULT_MODEL"
 ollama pull "$DEFAULT_MODEL" || echo "Model pull failed (may already exist)"
 
+# Pull benchmark models (if configured)
+if [ -n "$BENCHMARK_MODELS" ]; then
+  echo "Pulling benchmark models: $BENCHMARK_MODELS"
+  echo "$BENCHMARK_MODELS" | tr ',' '\n' | while read -r model; do
+    model=$(echo "$model" | xargs)
+    if [ -n "$model" ] && [ "$model" != "$DEFAULT_MODEL" ]; then
+      echo "Pulling benchmark model: $model"
+      ollama pull "$model" || echo "Pull failed for: $model"
+    fi
+  done
+fi
+
 echo "Ollama is ready with model: $DEFAULT_MODEL"
 
 # Bring server to foreground

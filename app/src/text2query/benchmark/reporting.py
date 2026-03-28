@@ -1,3 +1,4 @@
+import csv
 import math
 import shutil
 import statistics
@@ -6,6 +7,11 @@ from pathlib import Path
 from typing import List
 
 from text2query.benchmark.similarity import evaluate_query
+
+
+def model_slug(model_name: str) -> str:
+    """Convert model name to a filesystem-safe slug."""
+    return model_name.replace(":", "_").replace("/", "_")
 
 
 def _v(val: float | bool | None) -> str:
@@ -369,6 +375,159 @@ def _generate_multiseed_reports(
     return report_dir
 
 
+def generate_cross_model_report(
+    models: list[str],
+    reference_queries_dir: Path,
+    reference_answers_dir: Path,
+    generated_queries_base: Path,
+    generated_answers_base: Path,
+    report_dir: Path,
+    seeds: list[int] | None = None,
+) -> Path:
+    """Generate cross-model comparison report and CSV export."""
+    query_ids = sorted(f.stem for f in reference_queries_dir.glob("*.sql"))
+    seeds_list = seeds or [None]
+    multi_seed = seeds is not None and len(seeds) > 1
+
+    # Collect all raw results
+    all_rows = []
+    # {model: {qid: {metric: stats_dict}}}
+    model_aggregated = {}
+
+    metrics_to_aggregate = [
+        "result_f1", "ast_similarity", "composite_score", "bleu", "token_jaccard",
+    ]
+
+    for model in models:
+        slug = model_slug(model)
+        model_queries = generated_queries_base / slug
+        model_answers = generated_answers_base / slug
+        model_aggregated[model] = {}
+
+        for qid in query_ids:
+            seed_results = []
+
+            for seed in seeds_list:
+                if multi_seed:
+                    q_dir = model_queries / f"seed_{seed}"
+                    a_dir = model_answers / f"seed_{seed}"
+                else:
+                    q_dir = model_queries
+                    a_dir = model_answers
+
+                sim = evaluate_query(
+                    query_id=int(qid),
+                    gt_csv=reference_answers_dir / f"{qid}.csv",
+                    llm_csv=a_dir / f"{qid}.csv",
+                    gt_sql=reference_queries_dir / f"{qid}.sql",
+                    llm_sql=q_dir / f"{qid}.sql",
+                )
+                sim["seed"] = seed
+                seed_results.append(sim)
+
+                all_rows.append({
+                    "model": model,
+                    "query_id": qid,
+                    "seed": seed if seed is not None else "",
+                    "status": sim["status"],
+                    "result_f1": sim.get("result_f1", ""),
+                    "result_precision": sim.get("result_precision", ""),
+                    "result_recall": sim.get("result_recall", ""),
+                    "ast_similarity": sim.get("ast_similarity", ""),
+                    "bleu": sim.get("bleu", ""),
+                    "token_jaccard": sim.get("token_jaccard", ""),
+                    "composite_score": sim.get("composite_score", ""),
+                    "exact_match": sim.get("exact_match", ""),
+                    "error_category": sim.get("error_category", ""),
+                })
+
+            agg = {}
+            for metric in metrics_to_aggregate:
+                vals = [r.get(metric) for r in seed_results if r.get(metric) is not None]
+                agg[metric] = _compute_stats(vals)
+            model_aggregated[model][qid] = agg
+
+    # Write CSV
+    csv_path = report_dir / "results.csv"
+    csv_path.parent.mkdir(parents=True, exist_ok=True)
+    fieldnames = [
+        "model", "query_id", "seed", "status",
+        "result_f1", "result_precision", "result_recall",
+        "ast_similarity", "bleu", "token_jaccard", "composite_score",
+        "exact_match", "error_category",
+    ]
+    with open(csv_path, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(all_rows)
+    print(f"  CSV export -> {csv_path} ({len(all_rows)} rows)")
+
+    # Write comparison.md
+    num_seeds = len(seeds) if seeds else 1
+
+    lines = [
+        f"# Cross-Model Comparison ({len(models)} models, {num_seeds} seed{'s' if num_seeds > 1 else ''})\n",
+        "## Model Summary\n",
+        "| Model | Avg F1 | Avg AST Sim | Avg Composite |",
+        "|---|---|---|---|",
+    ]
+
+    def _stat_str(s):
+        if s["mean"] is None:
+            return "—"
+        return f"{s['mean']:.4f} ± {s['std']:.4f}" if num_seeds > 1 else f"{s['mean']:.4f}"
+
+    for model in models:
+        f1_means = [
+            model_aggregated[model][qid]["result_f1"]["mean"]
+            for qid in query_ids
+            if model_aggregated[model][qid]["result_f1"]["mean"] is not None
+        ]
+        ast_means = [
+            model_aggregated[model][qid]["ast_similarity"]["mean"]
+            for qid in query_ids
+            if model_aggregated[model][qid]["ast_similarity"]["mean"] is not None
+        ]
+        comp_means = [
+            model_aggregated[model][qid]["composite_score"]["mean"]
+            for qid in query_ids
+            if model_aggregated[model][qid]["composite_score"]["mean"] is not None
+        ]
+        lines.append(
+            f"| {model} | {_stat_str(_compute_stats(f1_means))} "
+            f"| {_stat_str(_compute_stats(ast_means))} "
+            f"| {_stat_str(_compute_stats(comp_means))} |"
+        )
+
+    # Per-query comparison table (F1)
+    lines += [
+        "",
+        "## Per-Query F1 Comparison\n",
+    ]
+    header = "| Query | " + " | ".join(m for m in models) + " |"
+    sep = "|---|" + "|".join("---" for _ in models) + "|"
+    lines += [header, sep]
+
+    for qid in query_ids:
+        row = f"| {qid} "
+        for model in models:
+            f1 = model_aggregated[model][qid]["result_f1"]
+            if f1["mean"] is None:
+                row += "| — "
+            elif num_seeds > 1:
+                row += f"| {f1['mean']:.4f} ± {f1['std']:.4f} "
+            else:
+                row += f"| {f1['mean']:.4f} "
+        row += "|"
+        lines.append(row)
+
+    comparison_path = report_dir / "comparison.md"
+    comparison_path.write_text("\n".join(lines) + "\n")
+    print(f"  Comparison report -> {comparison_path}")
+
+    return report_dir
+
+
 def archive_session(
     queries_dir: Path,
     answers_dir: Path,
@@ -405,22 +564,23 @@ def archive_session(
 
 
 def _move_contents(src_dir: Path, dst_dir: Path, label: str) -> None:
-    """Move files and seed subdirectories from src to dst."""
+    """Move files and subdirectories from src to dst."""
     if not src_dir.exists():
         return
 
-    # Move seed subdirectories
-    seed_dirs = sorted(src_dir.glob("seed_*"))
-    if seed_dirs:
-        for sd in seed_dirs:
+    # Move subdirectories (model dirs, seed dirs, or any nested structure)
+    subdirs = sorted(d for d in src_dir.iterdir() if d.is_dir())
+    if subdirs:
+        for sd in subdirs:
             target = dst_dir / sd.name
             shutil.copytree(str(sd), str(target), dirs_exist_ok=True)
-        print(f"  Moved {len(seed_dirs)} seed dirs of {label} -> {dst_dir}")
+        print(f"  Moved {len(subdirs)} dirs of {label} -> {dst_dir}")
         return
 
-    # Move flat files (single-seed / backward compat)
+    # Move flat files (single-seed, single-model / backward compat)
     files = list(src_dir.glob("*.sql")) + list(src_dir.glob("*.csv"))
     for f in files:
         shutil.move(str(f), str(dst_dir / f.name))
     if files:
         print(f"  Moved {len(files)} {label} -> {dst_dir}")
+

@@ -11,4 +11,7 @@ BENCHMARK_SCALE_FACTOR = 1
 BENCHMARK_NUM_SEEDS = int(os.getenv("BENCHMARK_NUM_SEEDS", "1"))
 BENCHMARK_DATA_PATH = os.getenv("BENCHMARK_DATA_PATH")
 
+_models_raw = os.getenv("BENCHMARK_MODELS", "")
+BENCHMARK_MODELS = [m.strip() for m in _models_raw.split(",") if m.strip()][:3]
+
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://user:password@postgres:5432/testdb")

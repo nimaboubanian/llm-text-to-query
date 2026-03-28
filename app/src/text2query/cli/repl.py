@@ -4,7 +4,7 @@ import sys
 
 from text2query.database.schema import create_engine_for_database, get_database_schema_string
 from text2query.database.executor import execute_sql_query
-from text2query.llm.service import get_sql_from_llm_streaming
+from text2query.llm.service import get_sql_from_llm_streaming, list_available_models
 from text2query.core.config import DATABASE_URL, DEFAULT_MODEL
 
 
@@ -12,6 +12,8 @@ def print_help():
     print("Available commands:")
     print("  /help     - Show this help")
     print("  /schema   - Display database schema")
+    print("  /model    - Show current model and list available models")
+    print("  /model X  - Switch to model X")
     print("  /quit     - Exit the REPL")
     print()
 
@@ -69,8 +71,35 @@ def handle_query(question: str, engine, schema: str, model: str):
     print_result(result)
 
 
+def handle_model_command(args: str, current_model: str) -> str:
+    """Handle /model command. Returns the (possibly changed) current model."""
+    if not args:
+        # Show current model and list available
+        print(f"  Current: {current_model}")
+        available = list_available_models()
+        if available:
+            print("  Available:")
+            for m in available:
+                marker = " (active)" if m == current_model else ""
+                print(f"    - {m}{marker}")
+        else:
+            print("  Could not fetch available models from Ollama")
+        return current_model
+
+    # Switch to specified model
+    target = args.strip()
+    available = list_available_models()
+    if available and target not in available:
+        print(f"  Model '{target}' not found. Available: {', '.join(available)}")
+        return current_model
+
+    print(f"  Switched to: {target}")
+    return target
+
+
 def main():
-    print(f"Text-to-SQL  model={DEFAULT_MODEL}  db={DATABASE_URL}")
+    current_model = DEFAULT_MODEL
+    print(f"Text-to-SQL  model={current_model}  db={DATABASE_URL}")
     print()
 
     try:
@@ -105,8 +134,11 @@ def main():
                 print_help()
             elif user_input == "/schema":
                 handle_schema(engine)
+            elif user_input.startswith("/model"):
+                args = user_input[6:].strip()
+                current_model = handle_model_command(args, current_model)
             else:
-                handle_query(user_input, engine, schema, DEFAULT_MODEL)
+                handle_query(user_input, engine, schema, current_model)
 
             print()
 

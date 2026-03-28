@@ -22,6 +22,18 @@ def abort_ollama_generation(model: str | None = None) -> bool:
         return False
 
 
+def list_available_models() -> list[str]:
+    """Query Ollama for all locally available models."""
+    try:
+        resp = requests.get(f"{OLLAMA_URL}/api/tags", timeout=10)
+        if resp.status_code == 200:
+            data = resp.json()
+            return [m["name"] for m in data.get("models", [])]
+    except requests.exceptions.RequestException:
+        pass
+    return []
+
+
 def get_sql_from_llm_streaming(
     user_query: str,
     schema_str: str,

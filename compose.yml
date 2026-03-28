@@ -5,7 +5,7 @@ x-common-env: &common-env
 
 x-model-env: &model-env
   DEFAULT_MODEL: qwen2.5-coder:7b
-  # BENCHMARK_MODELS: "llama3.2:3b,qwen2.5-coder:7b,deepseek-coder:6.7b"
+  BENCHMARK_MODELS: "llama3.2:3b,qwen2.5-coder:7b,deepseek-coder:6.7b"
 
 services:
   ollama:
@@ -22,10 +22,10 @@ services:
     restart: always
     healthcheck:
       test: [ "CMD", "sh", "-c", "ollama show \"$$DEFAULT_MODEL\" > /dev/null 2>&1" ]
-      start_period: 600s
+      start_period: 60s
       interval: 10s
       timeout: 10s
-      retries: 10
+      retries: 60
 
   postgres:
     image: postgres:15-alpine
@@ -57,10 +57,10 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      <<: *common-env
+      <<: [ *common-env, *model-env ]
       DATABASE_URL: postgresql://user:password@postgres:5432/minidb
     restart: unless-stopped
-    command: ["sleep", "infinity"]
+    command: [ "sleep", "infinity" ]
 
   orchestrator:
     build: ./app
@@ -73,7 +73,7 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      <<: [*common-env, *model-env]
+      <<: [ *common-env, *model-env ]
       PYTHONUNBUFFERED: "1"
       BENCHMARK_NUM_SEEDS: "5"
     volumes:

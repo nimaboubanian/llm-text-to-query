@@ -3,6 +3,10 @@ x-common-env: &common-env
   DATABASE_URL: postgresql://user:password@postgres:5432/testdb
   UV_PROJECT_ENVIRONMENT: /tmp/.venv
 
+x-model-env: &model-env
+  DEFAULT_MODEL: qwen2.5-coder:7b
+  # BENCHMARK_MODELS: "llama3.2:3b,qwen2.5-coder:7b,deepseek-coder:6.7b"
+
 services:
   ollama:
     image: ollama/ollama:0.5.7
@@ -13,8 +17,7 @@ services:
       - ollama_data:/root/.ollama
       - ./app/ollama-entrypoint.sh:/entrypoint.sh:ro,Z
     environment:
-      DEFAULT_MODEL: qwen2.5-coder:7b
-      # BENCHMARK_MODELS: "llama3.2:3b,qwen2.5-coder:7b,deepseek-coder:6.7b"
+      <<: *model-env
     entrypoint: [ "/entrypoint.sh" ]
     restart: always
     healthcheck:
@@ -70,10 +73,9 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      <<: *common-env
+      <<: [*common-env, *model-env]
       PYTHONUNBUFFERED: "1"
       BENCHMARK_NUM_SEEDS: "5"
-      # BENCHMARK_MODELS: "llama3.2:3b,qwen2.5-coder:7b,deepseek-coder:6.7b"
     volumes:
       - ./benchmark:/app/benchmark:Z
     restart: "no"

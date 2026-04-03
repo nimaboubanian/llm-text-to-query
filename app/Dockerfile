@@ -2,9 +2,9 @@ FROM python:3.12-slim
 
 # System dependencies for database drivers
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc \
-    libpq-dev \
-    curl \
+    gcc=4:12.* \
+    libpq-dev=15.* \
+    curl=7.* \
     && rm -rf /var/lib/apt/lists/*
 
 # Install uv

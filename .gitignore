@@ -22,3 +22,4 @@ benchmark/queries/*
 benchmark/results/*
 benchmark/answers/*
 reports/*
+AGENTS.md

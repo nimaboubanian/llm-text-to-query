@@ -13,6 +13,7 @@ FG_MUTED = "\033[38;5;60m"      # ≈ #4C566A
 FG_RED = "\033[38;5;131m"       # ≈ #BF616A
 FG_YELLOW = "\033[38;5;173m"    # ≈ #D08770
 FG_GREEN = "\033[38;5;108m"     # ≈ #A3BE8C
+FG_FROST = "\033[38;5;109m"     # ≈ #8FBCBB — system response text
 
 BOLD = "\033[1m"
 DIM = "\033[2m"
@@ -28,6 +29,53 @@ WARN = "⚠"
 SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
 
 _ANSI_RE = re.compile(r'\033\[[0-9;]*m')
+
+_SQL_KW_RE = re.compile(
+    r'\b(SELECT|FROM|WHERE|JOIN|LEFT|RIGHT|INNER|OUTER|FULL|CROSS|ON|'
+    r'AND|OR|NOT|IN|EXISTS|BETWEEN|LIKE|IS|NULL|'
+    r'GROUP\s+BY|ORDER\s+BY|HAVING|LIMIT|OFFSET|'
+    r'AS|DISTINCT|COUNT|SUM|AVG|MAX|MIN|'
+    r'CASE|WHEN|THEN|ELSE|END|'
+    r'WITH|UNION|ALL|ASC|DESC|'
+    r'INSERT|UPDATE|DELETE|INTO|VALUES|SET)\b',
+    re.IGNORECASE,
+)
+
+
+def highlight_sql(sql: str) -> str:
+    """Color SQL keywords in cyan, leave the rest as base text."""
+    return _SQL_KW_RE.sub(lambda m: f"{FG_CYAN}{m.group()}{FG_TEXT}", sql)
+
+
+def format_table(df, max_rows=100):
+    """Format a DataFrame as an aligned, indented table with styled headers."""
+    truncated = len(df) > max_rows
+    show = df.head(max_rows) if truncated else df
+
+    headers = [str(c) for c in show.columns]
+    rows = [[str(v) if str(v) != "nan" else "" for v in vals] for vals in show.values]
+
+    widths = []
+    for i, h in enumerate(headers):
+        col_max = max((len(r[i]) for r in rows), default=0)
+        widths.append(max(len(h), col_max))
+
+    lines = []
+    hdr = "   ".join(f"{h:<{w}}" for h, w in zip(headers, widths))
+    lines.append(f"    {FG_MUTED}{hdr}{RESET}")
+
+    sep = "   ".join("─" * w for w in widths)
+    lines.append(f"    {FG_MUTED}{sep}{RESET}")
+
+    for row in rows:
+        data = "   ".join(f"{v:<{w}}" for v, w in zip(row, widths))
+        lines.append(f"    {FG_TEXT}{data}{RESET}")
+
+    if truncated:
+        remaining = len(df) - max_rows
+        lines.append(f"    {FG_MUTED}… {remaining} more rows{RESET}")
+
+    return "\n".join(lines)
 
 
 def _cols():

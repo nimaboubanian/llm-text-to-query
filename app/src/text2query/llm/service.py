@@ -34,6 +34,30 @@ def list_available_models() -> list[str]:
     return []
 
 
+def chat_with_model(
+    messages: list[dict],
+    model: str,
+    temperature: float = 0.4,
+) -> str | None:
+    """Send a chat-style request to Ollama. Returns the response text or None."""
+    try:
+        resp = requests.post(
+            f"{OLLAMA_URL}/api/chat",
+            json={
+                "model": model,
+                "messages": messages,
+                "stream": False,
+                "options": {"temperature": temperature},
+            },
+            timeout=30,
+        )
+        if resp.status_code != 200:
+            return None
+        return resp.json().get("message", {}).get("content")
+    except requests.exceptions.RequestException:
+        return None
+
+
 def get_sql_from_llm_streaming(
     user_query: str,
     schema_str: str,

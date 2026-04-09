@@ -5,12 +5,13 @@ import sys
 from text2query.database.schema import create_engine_for_database, get_database_schema_string
 from text2query.database.executor import execute_sql_query
 from text2query.llm.service import get_sql_from_llm_streaming, list_available_models
-from text2query.core.config import DATABASE_URL, DEFAULT_MODEL
+from text2query.core.config import DATABASE_URL, DEFAULT_MODEL, FRONTDESK_MODEL
+from text2query.cli.frontdesk import quick_classify, classify_intent, summarize_results
 from text2query.cli.style import (
-    BG_BASE, FG_CYAN, FG_MUTED, FG_RED, FG_YELLOW, FG_GREEN, FG_TEXT, BOLD, RESET,
-    PROMPT, ERROR, WARN, SPINNER,
+    BG_BASE, FG_CYAN, FG_FROST, FG_MUTED, FG_RED, FG_YELLOW, FG_GREEN, FG_TEXT, BOLD, RESET,
+    PROMPT, ERROR, WARN, SPINNER, FULL_RESET,
     rule, header, panel, out, write_spinner, clear_line,
-    init_screen, set_scroll_region, cleanup_screen,
+    init_screen, highlight_sql, format_table,
 )
 
 
@@ -20,10 +21,11 @@ def print_help():
     out(f"  {FG_CYAN}/help{RESET}     {FG_MUTED}Show this help{RESET}")
     out(f"  {FG_CYAN}/schema{RESET}   {FG_MUTED}Show database schema{RESET}")
     out(f"  {FG_CYAN}/model{RESET}    {FG_MUTED}Show or switch model  (/model <name>){RESET}")
+    out(f"  {FG_CYAN}/sql{RESET}      {FG_MUTED}Toggle SQL display in results{RESET}")
     out(f"  {FG_CYAN}/exit{RESET}     {FG_MUTED}Exit{RESET}")
 
 
-def print_result(result, max_rows: int = 100):
+def print_result(result, max_rows: int = 20):
     if isinstance(result, str):
         out(f"  {FG_RED}{ERROR}{RESET} {result}")
         return
@@ -33,14 +35,11 @@ def print_result(result, max_rows: int = 100):
         return
 
     count = len(result)
-    label = f"{count} row{'s' if count != 1 else ''}"
+    row_label = f"{count} row{'s' if count != 1 else ''}"
     if count > max_rows:
-        out(header("Results", f"showing {max_rows} of {count} rows"))
-        out(result.head(max_rows).to_string(index=False))
-        out(f"  {FG_MUTED}... ({count - max_rows} more rows){RESET}")
-    else:
-        out(header("Results", label))
-        out(result.to_string(index=False))
+        row_label = f"showing {max_rows} of {count} rows"
+    out(f"  {FG_MUTED}Result  {row_label}{RESET}")
+    out(format_table(result, max_rows))
 
 
 def handle_schema(engine):
@@ -59,7 +58,13 @@ def handle_schema(engine):
         out()
 
 
-def handle_query(question: str, engine, schema: str, model: str):
+def handle_query(
+    question: str, engine, schema: str, model: str,
+    show_sql: bool = True,
+    frontdesk_model: str | None = None,
+    db_name: str | None = None,
+    tables: list[str] | None = None,
+):
     generated_sql = None
     error = None
     spinner_idx = 0
@@ -82,12 +87,29 @@ def handle_query(question: str, engine, schema: str, model: str):
         out(f"  {FG_RED}{ERROR}{RESET} Failed to generate SQL: {error or 'No SQL generated'}")
         return
 
-    out(header("Generated SQL"))
-    out(f"  {generated_sql}")
-    out()
+    if show_sql:
+        out(f"  {FG_MUTED}SQL{RESET}")
+        for line in generated_sql.split('\n'):
+            out(f"    {FG_TEXT}{highlight_sql(line)}{RESET}")
+        out()
 
     result = execute_sql_query(engine, generated_sql)
-    print_result(result)
+
+    if frontdesk_model and db_name and tables:
+        if show_sql:
+            print_result(result)
+        write_spinner(f"  {FG_CYAN}{SPINNER[0]}{RESET} {FG_MUTED}Summarizing...{RESET}")
+        summary = summarize_results(question, result, db_name, tables, frontdesk_model)
+        clear_line()
+        if summary:
+            out()
+            for line in summary.split('\n'):
+                out(f"  {FG_FROST}{line}{RESET}")
+        elif not show_sql:
+            # Summarization failed — fall back to raw table
+            print_result(result)
+    else:
+        print_result(result)
 
 
 def handle_model_command(args: str, current_model: str) -> str:
@@ -119,6 +141,7 @@ def handle_model_command(args: str, current_model: str) -> str:
 
 def main():
     current_model = DEFAULT_MODEL
+    show_sql = False
 
     # Initialize before entering alt screen — errors show in normal terminal
     try:
@@ -138,19 +161,35 @@ def main():
     tables = inspector.get_table_names()
     db_name = DATABASE_URL.rsplit("/", 1)[-1]
 
+    # Check front-desk model availability
+    frontdesk_model = FRONTDESK_MODEL
+    available = list_available_models()
+    if available and frontdesk_model not in available:
+        frontdesk_model = None
+
     init_screen()
+
+    if frontdesk_model:
+        assist_line = f"  {FG_MUTED}Assist{RESET}  {FG_CYAN}{frontdesk_model}{RESET}"
+    else:
+        assist_line = f"  {FG_MUTED}Assist  (unavailable){RESET}"
+
     header_lines = [
         "",
         f"  {BOLD}{FG_TEXT}text2sql{RESET}",
         "",
         f"  {FG_MUTED}Model{RESET}   {FG_CYAN}{current_model}{RESET}",
+        assist_line,
         f"  {FG_MUTED}DB{RESET}      {FG_TEXT}{db_name}{RESET}  {FG_MUTED}·  {len(tables)} tables ({', '.join(tables)}){RESET}",
         "",
-        f"  {FG_MUTED}/help · /schema · /model <name> · /exit{RESET}",
+        f"  {FG_MUTED}/help · /schema · /model <name> · /sql · /exit{RESET}",
         "",
     ]
     panel(header_lines)
-    set_scroll_region(len(header_lines) + 1)
+
+    if not frontdesk_model:
+        out(f"  {FG_YELLOW}{WARN}{RESET} Front-desk model not available. Running in direct SQL mode.")
+        out()
 
     try:
         while True:
@@ -169,9 +208,35 @@ def main():
                 elif user_input.startswith("/model"):
                     args = user_input[6:].strip()
                     current_model = handle_model_command(args, current_model)
+                elif user_input == "/sql":
+                    show_sql = not show_sql
+                    state = f"{FG_GREEN}on{RESET}" if show_sql else f"{FG_MUTED}off{RESET}"
+                    out(f"  SQL display: {state}")
                 else:
-                    handle_query(user_input, engine, schema, current_model)
+                    if frontdesk_model:
+                        quick = quick_classify(user_input, tables)
+                        if quick == "sql":
+                            handle_query(user_input, engine, schema, current_model,
+                                         show_sql, frontdesk_model, db_name, tables)
+                        elif quick == "conversation":
+                            write_spinner(f"  {FG_CYAN}{SPINNER[0]}{RESET} {FG_MUTED}Routing...{RESET}")
+                            _, response = classify_intent(user_input, db_name, tables, frontdesk_model)
+                            clear_line()
+                            out(f"  {FG_FROST}{response or 'I can help you query this database.'}{RESET}")
+                        else:
+                            write_spinner(f"  {FG_CYAN}{SPINNER[0]}{RESET} {FG_MUTED}Routing...{RESET}")
+                            intent, response = classify_intent(user_input, db_name, tables, frontdesk_model)
+                            clear_line()
+                            if intent == "conversation":
+                                out(f"  {FG_FROST}{response or 'I can help you query this database.'}{RESET}")
+                            else:
+                                handle_query(user_input, engine, schema, current_model,
+                                             show_sql, frontdesk_model, db_name, tables)
+                    else:
+                        handle_query(user_input, engine, schema, current_model, show_sql=True)
 
+                out()
+                out(rule())
                 out()
 
             except KeyboardInterrupt:
@@ -181,7 +246,8 @@ def main():
             except Exception as e:
                 out(f"  {FG_RED}{ERROR}{RESET} Unexpected error: {e}")
     finally:
-        cleanup_screen()
+        sys.stdout.write(FULL_RESET + "\n")
+        sys.stdout.flush()
 
 
 if __name__ == "__main__":

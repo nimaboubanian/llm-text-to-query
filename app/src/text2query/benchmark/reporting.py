@@ -575,7 +575,6 @@ def _move_contents(src_dir: Path, dst_dir: Path, label: str) -> None:
             target = dst_dir / sd.name
             shutil.copytree(str(sd), str(target), dirs_exist_ok=True)
         print(f"  Moved {len(subdirs)} dirs of {label} -> {dst_dir}")
-        return
 
     # Move flat files (single-seed, single-model / backward compat)
     files = list(src_dir.glob("*.sql")) + list(src_dir.glob("*.csv"))

@@ -93,7 +93,7 @@ def main():
     answers_dir = Path("benchmark/.tpch/answers")
     output_dir = Path("benchmark/queries")
     generated_answers_dir = Path("benchmark/answers")
-    report_dir = Path("benchmark/answers/report")
+    report_dir = Path("benchmark/reports")
     results_base = Path("benchmark/results")
     data_dir = Path(BENCHMARK_DATA_PATH) if BENCHMARK_DATA_PATH else Path(f"benchmark/.tpch/data/sf{BENCHMARK_SCALE_FACTOR}")
 

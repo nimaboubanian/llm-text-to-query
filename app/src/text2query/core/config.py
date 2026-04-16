@@ -5,7 +5,7 @@ OLLAMA_URL = "http://ollama:11434"
 LLM_TEMPERATURE = 0.1
 LLM_MAX_TOKENS = 2048
 
-DEFAULT_MODEL = "qwen2.5-coder:7b"
+DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "qwen2.5-coder:7b")
 
 FRONTDESK_MODEL = os.getenv("FRONTDESK_MODEL", "qwen2.5:3b")
 FRONTDESK_TEMPERATURE = 0.4

@@ -1,27 +1,33 @@
-x-common-env: &common-env
-  PYTHONPATH: /app/src
-  DATABASE_URL: postgresql://user:password@postgres:5432/testdb
+# ─── User Configuration ────────────────────────────────────────
+# Edit these values to customize your setup.
+# All services inherit from these blocks automatically.
 
-x-model-env: &model-env
-  DEFAULT_MODEL: qwen2.5-coder:7b
-  FRONTDESK_MODEL: qwen2.5:3b
-  # BENCHMARK_MODELS: "llama3.2:3b,qwen2.5-coder:7b,deepseek-coder:6.7b"
+x-config: &config
+  DEFAULT_MODEL:       "qwen2.5-coder:7b"
+  FRONTDESK_MODEL:     "qwen2.5:3b"
+  # BENCHMARK_MODELS:  "llama3.2:3b,qwen2.5-coder:7b,deepseek-coder:6.7b"
+  BENCHMARK_NUM_SEEDS: "1"
+
+x-db: &db-credentials
+  POSTGRES_USER:     "user"
+  POSTGRES_PASSWORD: "password"
+  POSTGRES_DB:       "testdb"
+
+# ───────────────────────────────────────────────────────────────
 
 services:
   ollama:
     image: ollama/ollama:0.5.7
-    container_name: ollama
-    networks:
-      - app-network
+    container_name: text2query-ollama
     volumes:
       - ollama_data:/root/.ollama
       - ./app/ollama-entrypoint.sh:/entrypoint.sh:ro,Z
     environment:
-      <<: *model-env
-    entrypoint: [ "/entrypoint.sh" ]
+      <<: *config
+    entrypoint: ["/entrypoint.sh"]
     restart: always
     healthcheck:
-      test: [ "CMD", "sh", "-c", "ollama show \"$$DEFAULT_MODEL\" > /dev/null 2>&1" ]
+      test: ["CMD", "sh", "-c", "ollama show \"$$DEFAULT_MODEL\" > /dev/null 2>&1"]
       start_period: 60s
       interval: 10s
       timeout: 10s
@@ -29,66 +35,54 @@ services:
 
   postgres:
     image: postgres:15-alpine
-    container_name: postgres
-    networks:
-      - app-network
+    container_name: text2query-postgres
     environment:
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: password
-      POSTGRES_DB: testdb
+      <<: *db-credentials
     volumes:
       - pg_data:/var/lib/postgresql/data
       - ./db/init:/docker-entrypoint-initdb.d:ro,Z
     restart: always
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U user -d testdb" ]
+      test: ["CMD-SHELL", "pg_isready -U user -d testdb"]
       interval: 5s
       timeout: 5s
       retries: 5
 
   app:
     build: ./app
-    container_name: app
-    networks:
-      - app-network
+    container_name: text2query-app
     depends_on:
       ollama:
         condition: service_healthy
       postgres:
         condition: service_healthy
     environment:
-      <<: [ *common-env, *model-env ]
-      DATABASE_URL: postgresql://user:password@postgres:5432/minidb
+      <<: *config
+      DATABASE_URL: "postgresql://user:password@postgres:5432/minidb"
     restart: unless-stopped
-    command: [ "sleep", "infinity" ]
+    command: ["sleep", "infinity"]
 
   orchestrator:
     build: ./app
-    container_name: orchestrator
-    networks:
-      - app-network
+    container_name: text2query-orchestrator
     depends_on:
       ollama:
         condition: service_healthy
       postgres:
         condition: service_healthy
     environment:
-      <<: [ *common-env, *model-env ]
+      <<: *config
+      DATABASE_URL: "postgresql://user:password@postgres:5432/testdb"
       PYTHONUNBUFFERED: "1"
-      BENCHMARK_NUM_SEEDS: "1"
     volumes:
       - ./benchmark:/app/benchmark:Z
     restart: "no"
     profiles:
       - benchmark
-    command: [ "uv", "run", "benchmark-orchestrator" ]
+    command: ["benchmark-orchestrator"]
 
 volumes:
   ollama_data:
-    name: llm_ollama_data
+    name: text2query_ollama_data
   pg_data:
-    name: llm_pg_data
-
-networks:
-  app-network:
-    driver: bridge
+    name: text2query_pg_data

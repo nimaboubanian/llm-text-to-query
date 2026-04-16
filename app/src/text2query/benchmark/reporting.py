@@ -4,7 +4,7 @@ import shutil
 import statistics
 from datetime import datetime
 from pathlib import Path
-from typing import List
+
 
 from text2query.benchmark.similarity import evaluate_query
 
@@ -213,7 +213,7 @@ def generate_reports(
     generated_answers_dir: Path,
     reference_answers_dir: Path,
     report_dir: Path,
-    seeds: List[int] | None = None,
+    seeds: list[int] | None = None,
 ) -> Path:
     if seeds and len(seeds) > 1:
         return _generate_multiseed_reports(
@@ -308,7 +308,7 @@ def _generate_multiseed_reports(
     generated_answers_dir: Path,
     reference_answers_dir: Path,
     report_dir: Path,
-    seeds: List[int],
+    seeds: list[int],
 ) -> Path:
     """Generate reports aggregating multiple seed runs with statistical analysis."""
     per_query_dir = report_dir / "per_query"

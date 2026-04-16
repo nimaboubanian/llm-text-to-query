@@ -1,6 +1,5 @@
 from pathlib import Path
 from sqlalchemy import inspect, text
-from typing import Tuple, Set
 
 from text2query.benchmark.data_loader import TPCH_TABLES
 
@@ -53,7 +52,7 @@ def check_data_cache(data_dir: Path) -> bool:
 def check_answers_completeness(
     answers_dir: Path,
     queries_dir: Path,
-) -> Tuple[bool, Set[str]]:
+) -> tuple[bool, set[str]]:
     expected = {q.stem for q in queries_dir.glob("*.sql")}
     if not answers_dir.exists():
         return False, expected

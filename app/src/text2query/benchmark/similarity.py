@@ -60,19 +60,18 @@ def _round(value: float | None) -> float | None:
     return round(value, 4) if value is not None else None
 
 
-_DEFAULT_WEIGHTS = {"f1": 0.45, "ast": 0.25, "embed": 0.20, "bleu": 0.10}
+_DEFAULT_WEIGHTS = {"f1": 0.50, "ast": 0.30, "bleu": 0.20}
 
 
 def _composite_score(
     result_f1: float | None,
     ast_sim: float,
-    embed_sim: float = 0.0,
     bleu: float = 0.0,
     weights: dict | None = None,
 ) -> float:
     w = weights or _DEFAULT_WEIGHTS
-    components = {"ast": ast_sim, "embed": embed_sim, "bleu": bleu}
-    w_total = w["ast"] + w["embed"] + w["bleu"]
+    components = {"ast": ast_sim, "bleu": bleu}
+    w_total = w["ast"] + w["bleu"]
 
     if result_f1 is not None:
         components["f1"] = result_f1
@@ -81,15 +80,6 @@ def _composite_score(
     return sum(w[k] * v for k, v in components.items()) / w_total if w_total > 0 else 0.0
 
 
-_CLAUSE_TYPES = {
-    "select": exp.Select,
-    "from": exp.From,
-    "where": exp.Where,
-    "group_by": exp.Group,
-    "having": exp.Having,
-    "order_by": exp.Order,
-    "limit": exp.Limit,
-}
 
 
 def _clause_level_scores(ref_sql: str, gen_sql: str) -> dict | None:

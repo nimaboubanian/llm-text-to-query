@@ -107,11 +107,11 @@ class TestClassifyError:
 
 class TestCompositeScore:
     def test_all_components(self):
-        score = _composite_score(result_f1=1.0, ast_sim=1.0, embed_sim=1.0, bleu=1.0)
+        score = _composite_score(result_f1=1.0, ast_sim=1.0, bleu=1.0)
         assert score == pytest.approx(1.0)
 
     def test_missing_f1_renormalizes(self):
-        score = _composite_score(result_f1=None, ast_sim=1.0, embed_sim=1.0, bleu=1.0)
+        score = _composite_score(result_f1=None, ast_sim=1.0, bleu=1.0)
         assert score == pytest.approx(1.0)
 
     def test_all_zero(self):

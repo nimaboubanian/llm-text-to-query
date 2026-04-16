@@ -16,7 +16,6 @@ FG_GREEN = "\033[38;5;108m"     # ≈ #A3BE8C
 FG_FROST = "\033[38;5;109m"     # ≈ #8FBCBB — system response text
 
 BOLD = "\033[1m"
-DIM = "\033[2m"
 RESET = f"\033[0m{BG_BASE}"     # Reset styling but keep base background
 FULL_RESET = "\033[0m"          # True reset — only for screen cleanup
 
@@ -145,24 +144,4 @@ def clear_line():
 def init_screen():
     """Clear screen and fill with background color (normal screen mode)."""
     sys.stdout.write(f"{BG_BASE}\033[2J\033[H")
-    sys.stdout.flush()
-
-
-def set_scroll_region(top_row):
-    """Pin everything above top_row; content below scrolls naturally.
-
-    The terminal's native scrollback (mouse wheel, Shift+PgUp) remains
-    available for reviewing previous output.
-    """
-    sys.stdout.write(f"\033[{top_row};{_rows()}r")
-    sys.stdout.write(f"\033[{top_row};1H")
-    sys.stdout.flush()
-
-
-def cleanup_screen():
-    """Reset scroll region, move cursor to bottom, and restore colors."""
-    sys.stdout.write("\033[r")                  # reset scroll region
-    sys.stdout.write(f"\033[{_rows()};1H")      # cursor to bottom
-    sys.stdout.write(FULL_RESET)                # restore terminal colors
-    sys.stdout.write("\n")
     sys.stdout.flush()

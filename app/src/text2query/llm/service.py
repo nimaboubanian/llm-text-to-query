@@ -1,6 +1,6 @@
 import json
 import re
-from typing import Generator, Callable
+from collections.abc import Generator, Callable
 
 import requests
 
@@ -61,7 +61,6 @@ def chat_with_model(
 def get_sql_from_llm_streaming(
     user_query: str,
     schema_str: str,
-    db_type: str = "postgresql",
     model: str | None = None,
     stop_check: Callable[[], bool] | None = None,
     seed: int | None = None,

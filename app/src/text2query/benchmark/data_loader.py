@@ -2,9 +2,6 @@ import os
 import subprocess
 from pathlib import Path
 from sqlalchemy import text
-import logging
-
-logger = logging.getLogger(__name__)
 
 TPCH_TABLES = [
     'region', 'nation', 'part', 'supplier',
@@ -72,6 +69,5 @@ def load_tpch_data(
             cur.close()
 
         print(f" ✓ {loaded[table]:,} rows", flush=True)
-        logger.info(f"Loaded {loaded[table]:,} rows into {table}")
 
     return loaded

@@ -1,10 +1,9 @@
 import re
 from pathlib import Path
-from typing import List, Dict
 
 from text2query.database.schema import create_engine_for_database, get_database_schema_string
 from text2query.llm.service import get_sql_from_llm_streaming
-from text2query.benchmark.pipeline import _execute_queries_to_csv
+from text2query.benchmark.pipeline import execute_queries_to_csv
 
 
 def run_llm_generation(
@@ -12,8 +11,8 @@ def run_llm_generation(
     output_dir: Path,
     db_url: str,
     model: str,
-    seeds: List[int] | None = None,
-) -> List[Dict]:
+    seeds: list[int] | None = None,
+) -> list[dict]:
     if seeds and len(seeds) > 1:
         all_results = []
         for seed in seeds:
@@ -39,7 +38,7 @@ def _run_single_generation(
     db_url: str,
     model: str,
     seed: int | None = None,
-) -> List[Dict]:
+) -> list[dict]:
     question_files = sorted(questions_dir.glob("*.md"))
     total = len(question_files)
 
@@ -76,7 +75,7 @@ def _run_single_generation(
         generated_sql = None
         error = None
 
-        for chunk in get_sql_from_llm_streaming(question, schema, "postgresql", model, seed=seed):
+        for chunk in get_sql_from_llm_streaming(question, schema, model, seed=seed):
             if chunk["type"] == "done":
                 generated_sql = chunk.get("sql")
                 break
@@ -109,8 +108,8 @@ def execute_generated_queries(
     queries_dir: Path,
     answers_dir: Path,
     db_url: str,
-    seeds: List[int] | None = None,
-) -> List[Dict]:
+    seeds: list[int] | None = None,
+) -> list[dict]:
     if seeds and len(seeds) > 1:
         all_results = []
         for seed in seeds:
@@ -130,7 +129,7 @@ def _execute_single(
     queries_dir: Path,
     answers_dir: Path,
     db_url: str,
-) -> List[Dict]:
+) -> list[dict]:
     query_files = sorted(queries_dir.glob("*.sql"))
     total = len(query_files)
 
@@ -144,4 +143,4 @@ def _execute_single(
         return []
 
     print(f"  Executing {len(to_process)}/{total} queries (skipping {len(existing)} cached)...")
-    return _execute_queries_to_csv(to_process, answers_dir, db_url, write_error_csv=True)
+    return execute_queries_to_csv(to_process, answers_dir, db_url, write_error_csv=True)

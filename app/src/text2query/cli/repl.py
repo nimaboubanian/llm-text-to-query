@@ -69,7 +69,7 @@ def handle_query(
     error = None
     spinner_idx = 0
 
-    for chunk in get_sql_from_llm_streaming(question, schema, "postgresql", model):
+    for chunk in get_sql_from_llm_streaming(question, schema, model):
         if chunk["type"] == "token":
             frame = SPINNER[spinner_idx % len(SPINNER)]
             write_spinner(f"  {FG_CYAN}{frame}{RESET} {FG_MUTED}Thinking...{RESET}")

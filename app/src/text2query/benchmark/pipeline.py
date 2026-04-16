@@ -1,7 +1,6 @@
 import os
 import subprocess
 from pathlib import Path
-from typing import List, Dict
 
 import pandas as pd
 from sqlalchemy import text
@@ -149,7 +148,7 @@ def generate_answers(
     queries_dir: Path,
     answers_dir: Path,
     db_url: str
-) -> List[Dict]:
+) -> list[dict]:
     print("  Checking answer files...")
 
     is_complete, missing_ids = check_answers_completeness(answers_dir, queries_dir)
@@ -161,16 +160,16 @@ def generate_answers(
 
     print(f"  Generating {len(missing_ids)} missing answer files...")
     query_files = [queries_dir / f"{qid}.sql" for qid in sorted(missing_ids)]
-    return _execute_queries_to_csv(query_files, answers_dir, db_url, write_error_csv=False)
+    return execute_queries_to_csv(query_files, answers_dir, db_url, write_error_csv=False)
 
 
-def _execute_queries_to_csv(
-    query_files: List[Path],
+def execute_queries_to_csv(
+    query_files: list[Path],
     output_dir: Path,
     db_url: str,
     *,
     write_error_csv: bool = False,
-) -> List[Dict]:
+) -> list[dict]:
     """Execute SQL files and save results as CSV.
 
     Args:

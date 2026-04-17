@@ -1,9 +1,6 @@
 # GPU override for NVIDIA GPUs.
 # Usage: docker compose -f compose.yml -f compose.nvidia.yml up -d
 #
-# This only adds GPU access to the ollama service.
-# All other settings (models, seeds, etc.) from compose.yml are preserved.
-#
 # Prerequisite: NVIDIA Container Toolkit
 #   https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html
 

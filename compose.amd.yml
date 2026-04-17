@@ -1,9 +1,6 @@
 # GPU override for AMD GPUs (ROCm).
 # Usage: docker compose -f compose.yml -f compose.amd.yml up -d
 #
-# This only changes the ollama image to ROCm and adds GPU devices.
-# All other settings (models, seeds, etc.) from compose.yml are preserved.
-#
 # Prerequisite: AMD ROCm drivers
 #   https://rocm.docs.amd.com/projects/install-on-linux/en/latest/
 

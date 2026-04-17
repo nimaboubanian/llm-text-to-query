@@ -1,6 +1,6 @@
 # LLM Text-to-Query
 
-Convert natural language to SQL queries using local LLMs.
+Convert natural language to SQL queries using local LLMs. Using TPC-H benchmark to evaluate the models.
 
 ## Quick Start
 
@@ -8,8 +8,11 @@ Convert natural language to SQL queries using local LLMs.
 # Start all services
 docker compose up -d
 
-# Enter interactive REPL
+# Enter interactive mode
 docker compose exec app text2query
+
+# Start benchmark
+docker compose --profile benchmark up --build orchestrator
 ```
 
 ## Configuration
@@ -18,10 +21,10 @@ All user-configurable settings are at the top of `compose.yml` in the `x-config`
 
 ```yaml
 x-config: &config
-  DEFAULT_MODEL:       "qwen2.5-coder:7b"    # SQL generation model
+  DEFAULT_MODEL:       "qwen2.5-coder:7b"     # SQL generation model
   FRONTDESK_MODEL:     "qwen2.5:3b"           # Intent routing model
-  # BENCHMARK_MODELS:  "llama3.2:3b,qwen2.5-coder:7b"
-  BENCHMARK_NUM_SEEDS: "1"
+  BENCHMARK_MODELS:    "llama3.2:3b,qwen2.5-coder:7b"
+  BENCHMARK_NUM_SEEDS: "1" # Number of repetitation for more reliable results
 ```
 
 After changing models, recreate the Ollama container to pull them:
@@ -45,6 +48,7 @@ Reset with `docker compose down -v`.
 |---|---|
 | `/help` | Show available commands |
 | `/schema` | Display the database schema |
+| `/sql` | Display the SQL query |
 | `/model` | List available models and the active one |
 | `/model <name>` | Switch to a different model |
 | `/quit` | Exit |

@@ -1,17 +1,17 @@
 # ─── User Configuration ────────────────────────────────────────
 # Edit these values to customize your setup.
-# All services inherit from these blocks automatically.
 
 x-config: &config
-  DEFAULT_MODEL:       "qwen2.5-coder:7b"
-  FRONTDESK_MODEL:     "qwen2.5:3b"
+  DEFAULT_MODEL: "qwen2.5-coder:7b"
+  FRONTDESK_MODEL: "qwen2.5:3b"
   # BENCHMARK_MODELS:  "llama3.2:3b,qwen2.5-coder:7b,deepseek-coder:6.7b"
   BENCHMARK_NUM_SEEDS: "1"
 
+# Default database for Interactive mode.
 x-db: &db-credentials
-  POSTGRES_USER:     "user"
+  POSTGRES_USER: "user"
   POSTGRES_PASSWORD: "password"
-  POSTGRES_DB:       "testdb"
+  POSTGRES_DB: "testdb"
 
 # ───────────────────────────────────────────────────────────────
 
@@ -24,10 +24,10 @@ services:
       - ./app/ollama-entrypoint.sh:/entrypoint.sh:ro,Z
     environment:
       <<: *config
-    entrypoint: ["/entrypoint.sh"]
+    entrypoint: [ "/entrypoint.sh" ]
     restart: always
     healthcheck:
-      test: ["CMD", "sh", "-c", "ollama show \"$$DEFAULT_MODEL\" > /dev/null 2>&1"]
+      test: [ "CMD", "sh", "-c", "ollama show \"$$DEFAULT_MODEL\" > /dev/null 2>&1" ]
       start_period: 60s
       interval: 10s
       timeout: 10s
@@ -43,7 +43,7 @@ services:
       - ./db/init:/docker-entrypoint-initdb.d:ro,Z
     restart: always
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U user -d testdb"]
+      test: [ "CMD-SHELL", "pg_isready -U user -d testdb" ]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -60,7 +60,7 @@ services:
       <<: *config
       DATABASE_URL: "postgresql://user:password@postgres:5432/minidb"
     restart: unless-stopped
-    command: ["sleep", "infinity"]
+    command: [ "sleep", "infinity" ]
 
   orchestrator:
     build: ./app
@@ -79,7 +79,7 @@ services:
     restart: "no"
     profiles:
       - benchmark
-    command: ["benchmark-orchestrator"]
+    command: [ "benchmark-orchestrator" ]
 
 volumes:
   ollama_data:

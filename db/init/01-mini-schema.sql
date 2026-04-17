@@ -1,7 +1,7 @@
 \c minidb
 
 -- Mini Database Schema for Text-to-Query Testing
--- A simple 3-table schema for beginners to test LLM query generation
+-- A simple 3-table schema for users to test LLM query generation
 
 CREATE TABLE customers (
     customer_id SERIAL PRIMARY KEY,

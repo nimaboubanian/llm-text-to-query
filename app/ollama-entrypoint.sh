@@ -17,13 +17,13 @@ sleep 5
 echo "Pulling model: $DEFAULT_MODEL"
 ollama pull "$DEFAULT_MODEL" || echo "Model pull failed (may already exist)"
 
-# Pull front-desk model (if configured and different from default)
+# Pull front-desk model
 if [ -n "$FRONTDESK_MODEL" ] && [ "$FRONTDESK_MODEL" != "$DEFAULT_MODEL" ]; then
   echo "Pulling front-desk model: $FRONTDESK_MODEL"
   ollama pull "$FRONTDESK_MODEL" || echo "Pull failed for: $FRONTDESK_MODEL"
 fi
 
-# Pull benchmark models (if configured)
+# Pull benchmark models
 if [ -n "$BENCHMARK_MODELS" ]; then
   echo "Pulling benchmark models: $BENCHMARK_MODELS"
   echo "$BENCHMARK_MODELS" | tr ',' '\n' | while read -r model; do

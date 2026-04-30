@@ -203,18 +203,19 @@ def generate_reports(
     reference_answers_dir: Path,
     report_dir: Path,
     seeds: list[int] | None = None,
+    model: str | None = None,
 ) -> Path:
     if seeds and len(seeds) > 1:
         return _generate_multiseed_reports(
             generated_queries_dir, reference_queries_dir,
             generated_answers_dir, reference_answers_dir,
-            report_dir, seeds,
+            report_dir, seeds, model=model,
         )
     else:
         return _generate_single_reports(
             generated_queries_dir, reference_queries_dir,
             generated_answers_dir, reference_answers_dir,
-            report_dir,
+            report_dir, model=model,
         )
 
 
@@ -224,6 +225,7 @@ def _generate_single_reports(
     generated_answers_dir: Path,
     reference_answers_dir: Path,
     report_dir: Path,
+    model: str | None = None,
 ) -> Path:
     """Original single-seed report generation (backward compatible)."""
     per_query_dir = report_dir / "per_query"
@@ -250,8 +252,11 @@ def _generate_single_reports(
         llm_sql = llm_sql_path.read_text().strip() if llm_sql_path.exists() else None
 
         status = sim_result["status"]
+        meta = f"- **Model:** {model}\n" if model else ""
         report = (
             f"# Query {qid} — Report\n\n"
+            f"{meta}"
+            f"- **Benchmark:** TPC-H\n"
             f"- **Status:** {status}\n\n"
             f"## Reference SQL\n\n```sql\n{ref_sql}\n```\n\n"
             f"## LLM-Generated SQL\n\n"
@@ -266,10 +271,13 @@ def _generate_single_reports(
     errors = sum(1 for r in all_results if r["status"] == "exec_error")
     not_generated = sum(1 for r in all_results if r["status"] == "missing")
 
+    model_line = f"| Model | {model} |\n" if model else ""
     summary = (
         f"# Benchmark Summary\n\n"
         f"| Metric | Count |\n"
         f"|---|---|\n"
+        f"{model_line}"
+        f"| Benchmark | TPC-H |\n"
         f"| Total queries | {total} |\n"
         f"| Executed successfully | {executed} |\n"
         f"| Execution errors | {errors} |\n"
@@ -289,6 +297,7 @@ def _generate_multiseed_reports(
     reference_answers_dir: Path,
     report_dir: Path,
     seeds: list[int],
+    model: str | None = None,
 ) -> Path:
     """Generate reports aggregating multiple seed runs with statistical analysis."""
     per_query_dir = report_dir / "per_query"
@@ -340,8 +349,11 @@ def _generate_multiseed_reports(
             else:
                 seed_sql_sections += f"### Seed {seed}\n\n*(not generated)*\n\n"
 
+        meta = f"- **Model:** {model}\n" if model else ""
         report = (
             f"# Query {qid} — Multi-Seed Report ({len(seeds)} seeds)\n\n"
+            f"{meta}"
+            f"- **Benchmark:** TPC-H\n\n"
             f"## Reference SQL\n\n```sql\n{ref_sql}\n```\n\n"
             + _format_per_query_multiseed(seed_results)
             + seed_sql_sections
@@ -351,10 +363,13 @@ def _generate_multiseed_reports(
 
     total = len(query_ids)
 
+    model_line = f"| Model | {model} |\n" if model else ""
     summary = (
         f"# Benchmark Summary (Multi-Seed)\n\n"
         f"| Metric | Value |\n"
         f"|---|---|\n"
+        f"{model_line}"
+        f"| Benchmark | TPC-H |\n"
         f"| Total queries | {total} |\n"
         f"| Seeds per query | {len(seeds)} |\n"
         f"| Total evaluations | {total * len(seeds)} |\n\n"

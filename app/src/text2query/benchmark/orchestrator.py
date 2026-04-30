@@ -71,6 +71,7 @@ def _run_single_model_benchmark(
         generated_answers_dir=generated_answers_dir, reference_answers_dir=answers_dir,
         report_dir=report_dir,
         seeds=seeds,
+        model=model,
     )
     print()
 

@@ -59,7 +59,7 @@ services:
         condition: service_healthy
     environment:
       <<: *config
-      DATABASE_URL: "postgresql://user:password@postgres:5432/minidb"
+      DATABASE_URL: "postgresql://user:password@postgres:5432/testdb"
     restart: unless-stopped
     command: [ "sleep", "infinity" ]
 

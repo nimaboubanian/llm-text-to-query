@@ -44,7 +44,7 @@ def test_quick_classify_ambiguous_returns_none():
 @patch("text2query.cli.frontdesk.chat_with_model")
 def test_classify_routes_sql_intent(mock_chat):
     mock_chat.return_value = "SQL_QUERY"
-    intent, response = classify_intent("how many orders?", "minidb", TABLES, "qwen2.5:3b")
+    intent, response = classify_intent("how many orders?", "testdb", TABLES, "qwen2.5:3b")
     assert intent == "sql"
     assert response is None
 
@@ -52,7 +52,7 @@ def test_classify_routes_sql_intent(mock_chat):
 @patch("text2query.cli.frontdesk.chat_with_model")
 def test_classify_routes_conversation(mock_chat):
     mock_chat.return_value = "CONVERSATION\nHello! I can help you query the database."
-    intent, response = classify_intent("hi there", "minidb", TABLES, "qwen2.5:3b")
+    intent, response = classify_intent("hi there", "testdb", TABLES, "qwen2.5:3b")
     assert intent == "conversation"
     assert "Hello" in response
 
@@ -60,14 +60,14 @@ def test_classify_routes_conversation(mock_chat):
 @patch("text2query.cli.frontdesk.chat_with_model")
 def test_classify_defaults_to_sql_on_garbage(mock_chat):
     mock_chat.return_value = "asdf random garbage"
-    intent, response = classify_intent("something weird", "minidb", TABLES, "qwen2.5:3b")
+    intent, response = classify_intent("something weird", "testdb", TABLES, "qwen2.5:3b")
     assert intent == "sql"
 
 
 @patch("text2query.cli.frontdesk.chat_with_model")
 def test_classify_defaults_to_sql_on_failure(mock_chat):
     mock_chat.return_value = None
-    intent, _ = classify_intent("anything", "minidb", TABLES, "qwen2.5:3b")
+    intent, _ = classify_intent("anything", "testdb", TABLES, "qwen2.5:3b")
     assert intent == "sql"
 
 
@@ -77,7 +77,7 @@ def test_classify_defaults_to_sql_on_failure(mock_chat):
 def test_summarize_small_dataframe(mock_chat):
     mock_chat.return_value = "There are 3 customers."
     df = pd.DataFrame({"name": ["Alice", "Bob", "Charlie"], "age": [30, 25, 35]})
-    result = summarize_results("how many customers?", df, "minidb", TABLES, "qwen2.5:3b")
+    result = summarize_results("how many customers?", df, "testdb", TABLES, "qwen2.5:3b")
     assert result == "There are 3 customers."
     # Verify the full table was passed in the prompt (not a summary)
     prompt = mock_chat.call_args[0][0][0]["content"]
@@ -89,7 +89,7 @@ def test_summarize_small_dataframe(mock_chat):
 def test_summarize_large_dataframe_uses_head(mock_chat):
     mock_chat.return_value = "Summary of 50 rows."
     df = pd.DataFrame({"id": range(50), "value": range(50)})
-    summarize_results("show all", df, "minidb", TABLES, "qwen2.5:3b")
+    summarize_results("show all", df, "testdb", TABLES, "qwen2.5:3b")
     prompt = mock_chat.call_args[0][0][0]["content"]
     assert "First 5 rows" in prompt
     assert "Numeric summary" in prompt
@@ -99,12 +99,12 @@ def test_summarize_large_dataframe_uses_head(mock_chat):
 def test_summarize_empty_dataframe(mock_chat):
     mock_chat.return_value = "No matching results found."
     df = pd.DataFrame()
-    result = summarize_results("find something", df, "minidb", TABLES, "qwen2.5:3b")
+    result = summarize_results("find something", df, "testdb", TABLES, "qwen2.5:3b")
     assert result == "No matching results found."
     prompt = mock_chat.call_args[0][0][0]["content"]
     assert "no results" in prompt.lower()
 
 
 def test_summarize_error_returns_none():
-    result = summarize_results("query", "SQL error: table not found", "minidb", TABLES, "qwen2.5:3b")
+    result = summarize_results("query", "SQL error: table not found", "testdb", TABLES, "qwen2.5:3b")
     assert result is None

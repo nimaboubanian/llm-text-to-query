@@ -1,5 +1,3 @@
-\c minidb
-
 -- Mini Database Sample Data for Text-to-Query Testing
 -- Synthetic data: ~30 customers, ~20 products, ~100 orders
 

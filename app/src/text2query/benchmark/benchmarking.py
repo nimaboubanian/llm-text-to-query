@@ -35,7 +35,7 @@ def _run_single_model_benchmark(
     db_url: str,
     seeds: list[int] | None,
     multi_model: bool,
-) -> Path:
+) -> tuple[Path, list[dict]]:
     """Run the full benchmark (generate + execute + report) for one model."""
     if multi_model:
         slug = model_slug(model)
@@ -66,7 +66,7 @@ def _run_single_model_benchmark(
     print()
 
     print("Generate Reports")
-    generate_reports(
+    _, results = generate_reports(
         generated_queries_dir=output_dir, reference_queries_dir=queries_dir,
         generated_answers_dir=generated_answers_dir, reference_answers_dir=answers_dir,
         report_dir=report_dir,
@@ -75,7 +75,7 @@ def _run_single_model_benchmark(
     )
     print()
 
-    return report_dir
+    return report_dir, results
 
 
 def main():
@@ -150,13 +150,14 @@ def main():
             print(f"  Multi-Model Benchmark: {len(models)} models")
             print(f"{'=' * 60}\n")
 
+        precomputed = {}
         for i, model in enumerate(models, 1):
             if multi_model:
                 print(f"\n{'=' * 60}")
                 print(f"  Model {i}/{len(models)}: {model}")
                 print(f"{'=' * 60}")
 
-            _run_single_model_benchmark(
+            _, results = _run_single_model_benchmark(
                 model=model,
                 questions_dir=questions_dir,
                 queries_dir=queries_dir,
@@ -168,6 +169,7 @@ def main():
                 seeds=seeds,
                 multi_model=multi_model,
             )
+            precomputed[model] = results
 
         # === Cross-model comparison (if multi-model) ===
         if multi_model:
@@ -180,6 +182,7 @@ def main():
                 generated_answers_base=generated_answers_dir,
                 report_dir=report_dir,
                 seeds=seeds,
+                precomputed=precomputed,
             )
             print()
 

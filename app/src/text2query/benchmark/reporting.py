@@ -204,7 +204,7 @@ def generate_reports(
     report_dir: Path,
     seeds: list[int] | None = None,
     model: str | None = None,
-) -> Path:
+) -> tuple[Path, list[dict]]:
     if seeds and len(seeds) > 1:
         return _generate_multiseed_reports(
             generated_queries_dir, reference_queries_dir,
@@ -245,6 +245,7 @@ def _generate_single_reports(
             gt_sql=reference_queries_dir / f"{qid}.sql",
             llm_sql=generated_queries_dir / f"{qid}.sql",
         )
+        sim_result["seed"] = None
         all_results.append(sim_result)
 
         ref_sql = (reference_queries_dir / f"{qid}.sql").read_text().strip()
@@ -287,7 +288,7 @@ def _generate_single_reports(
     (report_dir / "summary.md").write_text(summary)
 
     print(f"  Reports generated -> {report_dir}")
-    return report_dir
+    return report_dir, all_results
 
 
 def _generate_multiseed_reports(
@@ -308,6 +309,7 @@ def _generate_multiseed_reports(
     )
 
     aggregated = []
+    all_flat_results = []
     metrics_to_aggregate = [
         "result_f1", "result_precision", "result_recall",
         "ast_similarity",
@@ -329,6 +331,7 @@ def _generate_multiseed_reports(
             )
             sim_result["seed"] = seed
             seed_results.append(sim_result)
+        all_flat_results.extend(seed_results)
 
         # Aggregate statistics across seeds
         query_agg = {"query_id": int(qid)}
@@ -378,7 +381,7 @@ def _generate_multiseed_reports(
     (report_dir / "summary.md").write_text(summary)
 
     print(f"  Reports generated -> {report_dir}")
-    return report_dir
+    return report_dir, all_flat_results
 
 
 def generate_cross_model_report(
@@ -389,6 +392,7 @@ def generate_cross_model_report(
     generated_answers_base: Path,
     report_dir: Path,
     seeds: list[int] | None = None,
+    precomputed: dict[str, list[dict]] | None = None,
 ) -> Path:
     """Generate cross-model comparison report and CSV export."""
     query_ids = sorted(f.stem for f in reference_queries_dir.glob("*.sql"))
@@ -410,25 +414,35 @@ def generate_cross_model_report(
         model_answers = generated_answers_base / slug
         model_aggregated[model] = {}
 
+        # Build (query_id_int, seed) → sim lookup from precomputed results
+        precomputed_lookup: dict[tuple, dict] = {}
+        if precomputed and model in precomputed:
+            for r in precomputed[model]:
+                precomputed_lookup[(r["query_id"], r.get("seed"))] = r
+
         for qid in query_ids:
             seed_results = []
 
             for seed in seeds_list:
-                if multi_seed:
-                    q_dir = model_queries / f"seed_{seed}"
-                    a_dir = model_answers / f"seed_{seed}"
+                key = (int(qid), seed)
+                if key in precomputed_lookup:
+                    sim = precomputed_lookup[key]
                 else:
-                    q_dir = model_queries
-                    a_dir = model_answers
+                    if multi_seed:
+                        q_dir = model_queries / f"seed_{seed}"
+                        a_dir = model_answers / f"seed_{seed}"
+                    else:
+                        q_dir = model_queries
+                        a_dir = model_answers
 
-                sim = evaluate_query(
-                    query_id=int(qid),
-                    gt_csv=reference_answers_dir / f"{qid}.csv",
-                    llm_csv=a_dir / f"{qid}.csv",
-                    gt_sql=reference_queries_dir / f"{qid}.sql",
-                    llm_sql=q_dir / f"{qid}.sql",
-                )
-                sim["seed"] = seed
+                    sim = evaluate_query(
+                        query_id=int(qid),
+                        gt_csv=reference_answers_dir / f"{qid}.csv",
+                        llm_csv=a_dir / f"{qid}.csv",
+                        gt_sql=reference_queries_dir / f"{qid}.sql",
+                        llm_sql=q_dir / f"{qid}.sql",
+                    )
+                    sim["seed"] = seed
                 seed_results.append(sim)
 
                 all_rows.append({

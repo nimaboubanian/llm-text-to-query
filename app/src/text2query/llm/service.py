@@ -129,10 +129,6 @@ def get_sql_from_llm_streaming(
                         "type": "done",
                         "full_response": full_response,
                         "sql": _clean_sql_response(full_response),
-                        "eval_count": data.get("eval_count", 0),
-                        "eval_duration": data.get("eval_duration", 0),
-                        "total_duration": data.get("total_duration", 0),
-                        "prompt_eval_count": data.get("prompt_eval_count", 0),
                     }
                     return
             except json.JSONDecodeError:
@@ -143,10 +139,6 @@ def get_sql_from_llm_streaming(
             "type": "done",
             "full_response": full_response,
             "sql": _clean_sql_response(full_response),
-            "eval_count": 0,
-            "eval_duration": 0,
-            "total_duration": 0,
-            "prompt_eval_count": 0,
         }
         
     except requests.exceptions.Timeout:

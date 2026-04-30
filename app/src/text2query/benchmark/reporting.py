@@ -522,6 +522,27 @@ def generate_cross_model_report(
         row += "|"
         lines.append(row)
 
+    # Per-query comparison table (AST Similarity)
+    lines += [
+        "",
+        "## Per-Query AST Similarity Comparison\n",
+    ]
+    lines += [header, sep]
+
+    for qid in query_ids:
+        row = f"| {qid} "
+        for model in models:
+            agg = model_aggregated[model][qid]
+            ast = agg["ast_similarity"]
+            if ast["mean"] is None:
+                row += "| — "
+            elif num_seeds > 1:
+                row += f"| {ast['mean']:.4f} ± {ast['std']:.4f} "
+            else:
+                row += f"| {ast['mean']:.4f} "
+        row += "|"
+        lines.append(row)
+
     comparison_path = report_dir / "comparison.md"
     comparison_path.write_text("\n".join(lines) + "\n")
     print(f"  Comparison report -> {comparison_path}")

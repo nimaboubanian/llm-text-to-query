@@ -116,8 +116,8 @@ def _format_summary_similarity(all_results: list[dict]) -> str:
     exact_count = sum(1 for r in all_results if r.get("exact_match") is True)
     total = len(all_results)
 
-    f1_vals = [r["result_f1"] for r in all_results if r["result_f1"] is not None]
-    ast_vals = [r["ast_similarity"] for r in all_results if r["ast_similarity"] is not None]
+    f1_vals = [r["result_f1"] if r["result_f1"] is not None else 0.0 for r in all_results]
+    ast_vals = [r["ast_similarity"] if r["ast_similarity"] is not None else 0.0 for r in all_results]
     avg_f1 = sum(f1_vals) / len(f1_vals) if f1_vals else 0.0
     avg_ast = sum(ast_vals) / len(ast_vals) if ast_vals else 0.0
 
@@ -134,7 +134,7 @@ def _format_summary_similarity(all_results: list[dict]) -> str:
         f"- **Average AST Similarity:** {avg_ast:.4f}",
     ]
 
-    comp_vals = [r["composite_score"] for r in all_results if r.get("composite_score") is not None]
+    comp_vals = [r["composite_score"] if r.get("composite_score") is not None else 0.0 for r in all_results]
     avg_comp = sum(comp_vals) / len(comp_vals) if comp_vals else 0.0
     lines.append(f"- **Average Composite Score:** {avg_comp:.4f}")
 
@@ -165,9 +165,9 @@ def _format_summary_multiseed(aggregated: list[dict], num_seeds: int) -> str:
     total = len(aggregated)
 
     # Global aggregates across all queries
-    f1_means = [q["result_f1"]["mean"] for q in aggregated if q["result_f1"]["mean"] is not None]
-    ast_means = [q["ast_similarity"]["mean"] for q in aggregated if q["ast_similarity"]["mean"] is not None]
-    comp_means = [q["composite_score"]["mean"] for q in aggregated if q["composite_score"]["mean"] is not None]
+    f1_means = [q["result_f1"]["mean"] if q["result_f1"]["mean"] is not None else 0.0 for q in aggregated]
+    ast_means = [q["ast_similarity"]["mean"] if q["ast_similarity"]["mean"] is not None else 0.0 for q in aggregated]
+    comp_means = [q["composite_score"]["mean"] if q["composite_score"]["mean"] is not None else 0.0 for q in aggregated]
 
     global_f1 = _compute_stats(f1_means)
     global_ast = _compute_stats(ast_means)
@@ -479,19 +479,16 @@ def generate_cross_model_report(
 
     for model in models:
         f1_means = [
-            model_aggregated[model][qid]["result_f1"]["mean"]
+            model_aggregated[model][qid]["result_f1"]["mean"] if model_aggregated[model][qid]["result_f1"]["mean"] is not None else 0.0
             for qid in query_ids
-            if model_aggregated[model][qid]["result_f1"]["mean"] is not None
         ]
         ast_means = [
-            model_aggregated[model][qid]["ast_similarity"]["mean"]
+            model_aggregated[model][qid]["ast_similarity"]["mean"] if model_aggregated[model][qid]["ast_similarity"]["mean"] is not None else 0.0
             for qid in query_ids
-            if model_aggregated[model][qid]["ast_similarity"]["mean"] is not None
         ]
         comp_means = [
-            model_aggregated[model][qid]["composite_score"]["mean"]
+            model_aggregated[model][qid]["composite_score"]["mean"] if model_aggregated[model][qid]["composite_score"]["mean"] is not None else 0.0
             for qid in query_ids
-            if model_aggregated[model][qid]["composite_score"]["mean"] is not None
         ]
         lines.append(
             f"| {model} | {_stat_str(_compute_stats(f1_means))} "

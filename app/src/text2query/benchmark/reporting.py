@@ -165,20 +165,21 @@ def _format_summary_multiseed(aggregated: list[dict], num_seeds: int) -> str:
 
     lines += [
         "",
-        "| Query | F1 (mean±std) | AST (mean±std) | F1 95% CI |",
-        "|---|---|---|---|",
+        "| Query | Seeds ok | F1 (mean±std) | AST (mean±std) | F1 95% CI |",
+        "|---|---|---|---|---|",
     ]
 
     for q in aggregated:
         qid = f"{q['query_id']:02d}"
         f1 = q["result_f1"]
         ast = q["ast_similarity"]
+        ok_count = sum(1 for r in q["per_seed"] if r["status"] == "ok")
 
         f1_str = f"{f1['mean']:.4f} ± {f1['std']:.4f}" if f1["mean"] is not None else "—"
         ast_str = f"{ast['mean']:.4f} ± {ast['std']:.4f}" if ast["mean"] is not None else "—"
         ci_str = f"[{f1['ci_lower']:.4f}, {f1['ci_upper']:.4f}]" if f1["mean"] is not None else "—"
 
-        lines.append(f"| {qid} | {f1_str} | {ast_str} | {ci_str} |")
+        lines.append(f"| {qid} | {ok_count}/{num_seeds} | {f1_str} | {ast_str} | {ci_str} |")
 
     return "\n".join(lines) + "\n"
 

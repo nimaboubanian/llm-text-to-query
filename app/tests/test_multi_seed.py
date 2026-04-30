@@ -102,28 +102,34 @@ def test_run_llm_generation_caching_per_seed(tmp_path):
 
 
 def test_format_summary_multiseed():
-    """Summary format should include mean±std and CI columns."""
+    """Summary format should include mean±std, CI columns, and per-query seeds-ok count."""
     aggregated = [
         {
             "query_id": 1,
             "result_f1": _compute_stats([0.85, 0.72, 0.88]),
             "ast_similarity": _compute_stats([0.75, 0.80, 0.78]),
-            "composite_score": _compute_stats([0.70, 0.65, 0.72]),
+            "per_seed": [
+                {"status": "ok"}, {"status": "ok"}, {"status": "ok"},
+            ],
         },
         {
             "query_id": 2,
             "result_f1": _compute_stats([0.0, 0.0, 0.0]),
             "ast_similarity": _compute_stats([0.10, 0.12, 0.08]),
-            "composite_score": _compute_stats([0.03, 0.04, 0.02]),
+            "per_seed": [
+                {"status": "ok"}, {"status": "exec_error"}, {"status": "missing"},
+            ],
         },
     ]
 
     output = _format_summary_multiseed(aggregated, num_seeds=3)
 
     assert "3 seeds" in output
-    assert "mean±std" in output.lower() or "±" in output
+    assert "±" in output
     assert "01" in output
     assert "02" in output
+    assert "3/3" in output   # query 1: all ok
+    assert "1/3" in output   # query 2: only one ok
 
 
 def test_format_per_query_multiseed():

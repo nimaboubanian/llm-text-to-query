@@ -72,3 +72,11 @@ def test_bare_multi_statement_extracts_only_first():
 def test_allows_single_statement_with_trailing_semicolon():
     response = "```sql\nSELECT id FROM users;\n```"
     assert _clean_sql_response(response) == "SELECT id FROM users;"
+
+
+def test_string_literal_semicolon_falsely_rejected():
+    """Known limitation: semicolons inside string literals trigger false rejection."""
+    response = "```sql\nSELECT * FROM t WHERE name = 'foo;bar'\n```"
+    # BUG: _is_single_statement sees the ; inside the string and rejects it.
+    # This test documents the current (broken) behavior.
+    assert _clean_sql_response(response) is None

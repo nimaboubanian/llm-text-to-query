@@ -39,6 +39,11 @@ def test_quick_classify_ambiguous_returns_none():
     assert quick_classify("what is the weather like?", TABLES) is None
 
 
+def test_quick_classify_data_word_without_table_is_ambiguous():
+    """Data-intent words present but no table name mentioned → ambiguous, not sql."""
+    assert quick_classify("how many things are there", TABLES) is None
+
+
 # ── LLM intent classification ────────────────────────────────────────
 
 @patch("text2query.cli.frontdesk.chat_with_model")

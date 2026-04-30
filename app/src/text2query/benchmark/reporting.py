@@ -107,10 +107,13 @@ def _format_summary_similarity(all_results: list[dict]) -> str:
     ok_results = [r for r in all_results if r["status"] == "ok"]
     failed_results = [r for r in all_results if r["status"] != "ok"]
 
-    f1_vals = [r["result_f1"] for r in ok_results if r["result_f1"] is not None]
+    # Failure-adjusted: treat missing/failed queries as F1=0
+    f1_vals = [r["result_f1"] if r["result_f1"] is not None else 0.0 for r in all_results]
     ast_vals = [r["ast_similarity"] for r in all_results if r["ast_similarity"] is not None]
     avg_f1 = sum(f1_vals) / len(f1_vals) if f1_vals else None
     avg_ast = sum(ast_vals) / len(ast_vals) if ast_vals else None
+
+    exact_matches = sum(1 for v in f1_vals if v == 1.0)
 
     error_results = [r for r in all_results if r.get("error_category")]
     error_counts = {}
@@ -121,12 +124,13 @@ def _format_summary_similarity(all_results: list[dict]) -> str:
     lines = ["## Similarity Metrics\n"]
 
     if avg_f1 is not None:
-        lines.append(f"- **Average Result F1:** {avg_f1:.4f} (over {len(ok_results)} executed queries)")
+        lines.append(f"- **Average Result F1:** {avg_f1:.4f} (over {total} queries, {len(ok_results)} executed)")
+    lines.append(f"- **Exact matches:** {exact_matches} / {total}")
     if avg_ast is not None:
         lines.append(f"- **Average AST Similarity:** {avg_ast:.4f} (over {len(ast_vals)} queries)")
 
     if failed_results:
-        lines.append(f"- **Failed queries:** {len(failed_results)} / {total}")
+        lines.append(f"- **Execution errors:** {len([r for r in failed_results if r['status'] == 'exec_error'])}")
         if error_counts:
             for cat, count in sorted(error_counts.items()):
                 lines.append(f"  - {cat}: {count}")

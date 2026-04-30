@@ -54,17 +54,17 @@ def test_summary_computes_averages():
     assert "2 executed" in output
 
 
-def test_summary_separates_failed_from_executed():
+def test_summary_includes_failures_in_average():
     results = [
         {"query_id": 1, "status": "ok", "result_f1": 0.8, "ast_similarity": 0.7, "result_precision": 0.8, "result_recall": 0.8, "error_category": None},
         {"query_id": 2, "status": "exec_error", "result_f1": 0.0, "ast_similarity": 0.2, "result_precision": 0.0, "result_recall": 0.0, "error_category": "SchemaMismatch"},
         {"query_id": 3, "status": "missing", "result_f1": None, "ast_similarity": None, "result_precision": None, "result_recall": None, "error_category": None},
     ]
     output = _format_summary_similarity(results)
-    # avg F1 only over the one ok query
-    assert "0.8000" in output
-    assert "1 executed" in output
-    assert "2 / 3" in output   # failed count
+    # avg F1 over ALL queries: (0.8 + 0.0 + 0.0) / 3 = 0.2667
+    assert "0.2667" in output
+    assert "3 queries" in output  # total queries in label
+    assert "1 executed" in output  # executed count
     assert "SchemaMismatch" in output
     assert "not generated: 1" in output
 

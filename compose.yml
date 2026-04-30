@@ -3,9 +3,9 @@
 
 x-config: &config
   DEFAULT_MODEL: "qwen2.5-coder:7b"
-  FRONTDESK_MODEL: "qwen2.5:3b"
-  BENCHMARK_MODELS:  "llama3.2:3b,qwen2.5-coder:7b,deepseek-coder:6.7b"
-  BENCHMARK_NUM_SEEDS: "3"
+  FRONTDESK_MODEL: "llama3.2:3b"
+  BENCHMARK_MODELS: "qwen2.5:3b,qwen2.5-coder:7b,a-kore/Arctic-Text2SQL-R1-7B"
+  BENCHMARK_NUM_SEEDS: "1"
 
 # Default database for Interactive mode.
 x-db: &db-credentials
@@ -22,16 +22,17 @@ services:
     volumes:
       - ollama_data:/root/.ollama
       - ./app/ollama-entrypoint.sh:/entrypoint.sh:ro,Z
+      - ./app/pull-models.sh:/usr/local/bin/pull-models:ro,Z
     environment:
       <<: *config
     entrypoint: [ "/entrypoint.sh" ]
     restart: always
     healthcheck:
-      test: [ "CMD", "sh", "-c", "ollama show \"$$DEFAULT_MODEL\" > /dev/null 2>&1" ]
-      start_period: 60s
-      interval: 10s
-      timeout: 10s
-      retries: 60
+      test: [ "CMD", "ollama", "list" ]
+      start_period: 5s
+      interval: 3s
+      timeout: 5s
+      retries: 10
 
   postgres:
     image: postgres:15-alpine

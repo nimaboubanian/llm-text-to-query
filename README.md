@@ -5,14 +5,14 @@ Convert natural language to SQL queries using local LLMs. Using TPC-H benchmark 
 ## Quick Start
 
 ```bash
-# Start all services
+# Start services
 docker compose up -d
+
+# Pull models (first run only)
+docker compose exec ollama pull-models chat
 
 # Enter interactive mode
 docker compose exec app text2query
-
-# Start benchmark
-docker compose --profile benchmark up --build orchestrator
 ```
 
 ## Configuration
@@ -40,7 +40,7 @@ A simple e-commerce database (customers, products, orders) loads automatically f
 
 **Example queries:** "What are the customers' names?", "Top 3 best-selling products", "Show customers who spent more than $500 total"
 
-Reset with `docker compose down -v`.
+Reset with `docker compose --profile benchmark down -v`.
 
 ## REPL Commands
 
@@ -67,9 +67,14 @@ For databases on the Docker host, add `extra_hosts: ["host.docker.internal:host-
 
 ## Benchmark
 
+Edit `BENCHMARK_MODELS` in the `x-config` block of `compose.yml` to choose which models to compare (comma-separated, up to 3). Then pull them and run:
+
 ```bash
+docker compose exec ollama pull-models benchmark
 docker compose --profile benchmark up --build orchestrator
 ```
+
+If you haven't changed `BENCHMARK_MODELS`, the benchmark runs with the default model — just make sure you've already run `pull-models chat`.
 
 Runs a three-phase TPC-H pipeline: **Setup** (data generation, schema loading) → **Generation** (LLM query generation and execution) → **Analysis** (similarity metrics, reports, archiving).
 

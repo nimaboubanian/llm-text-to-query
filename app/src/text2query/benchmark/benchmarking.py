@@ -10,7 +10,7 @@ from text2query.benchmark.pipeline import (
     setup_database,
     generate_answers,
 )
-from text2query.benchmark.llm_benchmark import (
+from text2query.benchmark.runner import (
     run_llm_generation,
     execute_generated_queries,
 )

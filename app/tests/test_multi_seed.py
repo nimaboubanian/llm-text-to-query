@@ -3,7 +3,7 @@ import csv
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
-from text2query.benchmark.llm_benchmark import run_llm_generation, execute_generated_queries
+from text2query.benchmark.runner import run_llm_generation, execute_generated_queries
 from text2query.benchmark.reporting import (
     _format_summary_multiseed, _format_per_query_multiseed, _compute_stats,
     archive_session, model_slug, generate_cross_model_report,
@@ -26,9 +26,9 @@ def test_run_llm_generation_single_seed_no_subdirs(tmp_path):
     def mock_streaming(*args, **kwargs):
         yield {"type": "done", "sql": "SELECT name FROM customers;"}
 
-    with patch("text2query.benchmark.llm_benchmark.get_sql_from_llm_streaming", side_effect=mock_streaming), \
-         patch("text2query.benchmark.llm_benchmark.create_engine_for_database"), \
-         patch("text2query.benchmark.llm_benchmark.get_database_schema_string", return_value="schema"):
+    with patch("text2query.benchmark.runner.get_sql_from_llm_streaming", side_effect=mock_streaming), \
+         patch("text2query.benchmark.runner.create_engine_for_database"), \
+         patch("text2query.benchmark.runner.get_database_schema_string", return_value="schema"):
 
         run_llm_generation(questions_dir, output_dir, "db://url", "test-model", seeds=None)
 
@@ -49,9 +49,9 @@ def test_run_llm_generation_multi_seed_creates_subdirs(tmp_path):
         captured_seeds.append(kwargs.get("seed"))
         yield {"type": "done", "sql": f"SELECT name FROM customers; -- seed={kwargs.get('seed')}"}
 
-    with patch("text2query.benchmark.llm_benchmark.get_sql_from_llm_streaming", side_effect=mock_streaming), \
-         patch("text2query.benchmark.llm_benchmark.create_engine_for_database"), \
-         patch("text2query.benchmark.llm_benchmark.get_database_schema_string", return_value="schema"):
+    with patch("text2query.benchmark.runner.get_sql_from_llm_streaming", side_effect=mock_streaming), \
+         patch("text2query.benchmark.runner.create_engine_for_database"), \
+         patch("text2query.benchmark.runner.get_database_schema_string", return_value="schema"):
 
         results = run_llm_generation(
             questions_dir, output_dir, "db://url", "test-model", seeds=[1, 2, 3],
@@ -88,9 +88,9 @@ def test_run_llm_generation_caching_per_seed(tmp_path):
         call_count += 1
         yield {"type": "done", "sql": "SELECT name FROM customers;"}
 
-    with patch("text2query.benchmark.llm_benchmark.get_sql_from_llm_streaming", side_effect=mock_streaming), \
-         patch("text2query.benchmark.llm_benchmark.create_engine_for_database"), \
-         patch("text2query.benchmark.llm_benchmark.get_database_schema_string", return_value="schema"):
+    with patch("text2query.benchmark.runner.get_sql_from_llm_streaming", side_effect=mock_streaming), \
+         patch("text2query.benchmark.runner.create_engine_for_database"), \
+         patch("text2query.benchmark.runner.get_database_schema_string", return_value="schema"):
 
         run_llm_generation(
             questions_dir, output_dir, "db://url", "test-model", seeds=[1, 2],

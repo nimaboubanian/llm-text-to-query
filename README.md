@@ -71,7 +71,7 @@ Edit `BENCHMARK_MODELS` in the `x-config` block of `compose.yml` to choose which
 
 ```bash
 docker compose exec ollama pull-models benchmark
-docker compose --profile benchmark up --build orchestrator
+docker compose --profile benchmark up --build benchmark
 ```
 
 If you haven't changed `BENCHMARK_MODELS`, the benchmark runs with the default model — just make sure you've already run `pull-models chat`.

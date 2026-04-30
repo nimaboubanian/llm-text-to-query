@@ -63,9 +63,9 @@ services:
     restart: unless-stopped
     command: [ "sleep", "infinity" ]
 
-  orchestrator:
+  benchmark:
     build: ./app
-    container_name: text2query-orchestrator
+    container_name: text2query-benchmark
     depends_on:
       ollama:
         condition: service_healthy
@@ -80,7 +80,7 @@ services:
     restart: "no"
     profiles:
       - benchmark
-    command: [ "benchmark-orchestrator" ]
+    command: [ "benchmark" ]
 
 volumes:
   ollama_data:

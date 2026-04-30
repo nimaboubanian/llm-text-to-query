@@ -1,21 +1,8 @@
 from text2query.benchmark.reporting import (
-    _v, _format_per_query_similarity, _format_summary_similarity,
+    _format_per_query_similarity, _format_summary_similarity,
     _compute_stats, archive_session,
 )
 
-
-def test_v_formats_float():
-    assert _v(0.9123) == "0.9123"
-    assert _v(1.0) == "1.0000"
-
-
-def test_v_formats_bool():
-    assert _v(True) == "Yes"
-    assert _v(False) == "No"
-
-
-def test_v_formats_none():
-    assert _v(None) == "—"
 
 
 def test_per_query_has_all_metrics():

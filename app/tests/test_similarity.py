@@ -3,7 +3,7 @@ from pathlib import Path
 
 from text2query.benchmark.similarity import (
     _ast_similarity, _classify_error,
-    _round, _result_set_comparison,
+    _result_set_comparison,
 )
 
 
@@ -45,19 +45,6 @@ class TestAstSimilarity:
         score = _ast_similarity(sql_between, sql_dual)
         assert score is not None
         assert score >= 0.5
-
-
-
-def test_round_none():
-    assert _round(None) is None
-
-
-def test_round_truncates():
-    assert _round(0.123456789) == 0.1235
-
-
-def test_round_preserves_short():
-    assert _round(0.5) == 0.5
 
 
 

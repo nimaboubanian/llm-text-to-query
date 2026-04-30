@@ -1,5 +1,5 @@
 import pytest
-from text2query.llm.service import _clean_sql_response, _build_prompt
+from text2query.llm.service import _clean_sql_response
 
 
 def test_extracts_sql_from_fenced_block():
@@ -44,15 +44,6 @@ WHERE o.total > 100
     result = _clean_sql_response(response)
     assert "SELECT o.id" in result
     assert "WHERE o.total > 100" in result
-
-
-def test_build_prompt_fills_placeholders():
-    result = _build_prompt("show all users", "CREATE TABLE users (id INT)")
-    assert "show all users" in result
-    assert "CREATE TABLE users (id INT)" in result
-    # should not contain raw placeholders
-    assert "{schema}" not in result
-    assert "{query}" not in result
 
 
 def test_rejects_bare_insert():

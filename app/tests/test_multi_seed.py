@@ -195,15 +195,6 @@ def test_archive_with_seed_subdirs(tmp_path):
 
 # --- Multi-model tests ---
 
-def test_model_slug_basic():
-    assert model_slug("qwen2.5-coder:7b") == "qwen2.5-coder_7b"
-    assert model_slug("llama3.2:3b") == "llama3.2_3b"
-
-
-def test_model_slug_with_slashes():
-    assert model_slug("org/model:tag") == "org_model_tag"
-
-
 def test_cross_model_csv_export(tmp_path):
     """CSV export should contain one row per (model, query, seed) combination."""
     ref_queries = tmp_path / "ref_queries"

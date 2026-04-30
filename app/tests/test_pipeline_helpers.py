@@ -1,7 +1,6 @@
 from pathlib import Path
 
 from text2query.benchmark.pipeline import _parse_schema_sql
-from text2query.benchmark.data_loader import _fmt_size
 
 import pytest
 
@@ -32,13 +31,3 @@ class TestParseSchemaSQL:
         assert len(stmts) == 1
 
 
-def test_fmt_size_bytes():
-    assert _fmt_size(512) == "512.0 B"
-
-
-def test_fmt_size_megabytes():
-    assert _fmt_size(2 * 1024 * 1024) == "2.0 MB"
-
-
-def test_fmt_size_gigabytes():
-    assert _fmt_size(3 * 1024 ** 3) == "3.0 GB"

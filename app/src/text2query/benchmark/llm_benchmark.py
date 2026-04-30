@@ -44,6 +44,8 @@ def _run_single_generation(
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    # Cache: skip queries whose .sql file already exists. Assumes model/prompt/schema
+    # haven't changed since the file was generated — safe for resuming interrupted runs.
     existing = {f.stem for f in output_dir.glob("*.sql")}
     to_process = [q for q in question_files if q.stem not in existing]
 

@@ -161,16 +161,24 @@ def _build_prompt(user_query: str, schema_str: str) -> str:
     )
 
 
+def _is_single_statement(sql: str) -> bool:
+    """Reject multi-statement SQL to prevent piggyback attacks."""
+    stripped = sql.strip().rstrip(";")
+    return ";" not in stripped
+
+
 def _clean_sql_response(response: str) -> str | None:
     if not response:
         return None
 
     match = re.search(r"```(?:sql)?\s*(.*?)```", response, re.DOTALL | re.IGNORECASE)
     if match:
-        return match.group(1).strip()
+        sql = match.group(1).strip()
+        return sql if _is_single_statement(sql) else None
 
     match = re.search(r"(SELECT|WITH)\s+.*?;", response, re.DOTALL | re.IGNORECASE)
     if match:
-        return match.group(0).strip()
+        sql = match.group(0).strip()
+        return sql if _is_single_statement(sql) else None
 
     return None

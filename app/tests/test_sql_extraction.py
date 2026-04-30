@@ -65,3 +65,19 @@ def test_rejects_bare_update():
 
 def test_rejects_bare_delete():
     assert _clean_sql_response("DELETE FROM users WHERE id = 1;") is None
+
+
+def test_rejects_multi_statement_in_fence():
+    response = "```sql\nSELECT 1; DROP TABLE users;\n```"
+    assert _clean_sql_response(response) is None
+
+
+def test_bare_multi_statement_extracts_only_first():
+    """The regex captures only the first SELECT...;, ignoring trailing statements."""
+    response = "SELECT 1; DROP TABLE users;"
+    assert _clean_sql_response(response) == "SELECT 1;"
+
+
+def test_allows_single_statement_with_trailing_semicolon():
+    response = "```sql\nSELECT id FROM users;\n```"
+    assert _clean_sql_response(response) == "SELECT id FROM users;"

@@ -428,6 +428,12 @@ def generate_cross_model_report(
             for metric in metrics_to_aggregate:
                 vals = [r.get(metric) for r in seed_results if r.get(metric) is not None]
                 agg[metric] = _compute_stats(vals)
+            ok_count = sum(1 for r in seed_results if r["status"] == "ok")
+            n = len(seed_results)
+            if n == 1:
+                agg["status_summary"] = seed_results[0]["status"]
+            else:
+                agg["status_summary"] = f"{ok_count}/{n} ok"
             model_aggregated[model][qid] = agg
 
     # Write CSV
@@ -485,13 +491,15 @@ def generate_cross_model_report(
     for qid in query_ids:
         row = f"| {qid} "
         for model in models:
-            f1 = model_aggregated[model][qid]["result_f1"]
+            agg = model_aggregated[model][qid]
+            f1 = agg["result_f1"]
+            status = agg.get("status_summary", "")
             if f1["mean"] is None:
-                row += "| — "
+                row += f"| {status} "
             elif num_seeds > 1:
-                row += f"| {f1['mean']:.4f} ± {f1['std']:.4f} "
+                row += f"| {status} · {f1['mean']:.4f} ± {f1['std']:.4f} "
             else:
-                row += f"| {f1['mean']:.4f} "
+                row += f"| {status} · {f1['mean']:.4f} "
         row += "|"
         lines.append(row)
 

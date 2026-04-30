@@ -287,6 +287,7 @@ def test_cross_model_comparison_report(tmp_path):
     assert "beta" in comparison
     assert "Cross-Model" in comparison
     assert "2 models" in comparison
+    assert "ok" in comparison  # status embedded in per-query F1 cells
 
 
 def test_archive_with_model_subdirs(tmp_path):

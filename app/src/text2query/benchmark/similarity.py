@@ -29,7 +29,6 @@ def evaluate_query(
         error_category = _classify_error(llm_sql_text, error_detail)
 
     ast_sim = _ast_similarity(gt_sql_text, llm_sql_text)
-    clause_scores = _clause_level_scores(gt_sql_text, llm_sql_text)
     composite = _composite_score(
         result_f1=f1,
         ast_sim=ast_sim if ast_sim is not None else 0.0,
@@ -45,7 +44,6 @@ def evaluate_query(
         "ast_similarity": _round(ast_sim),
         "error_category": error_category,
         "composite_score": _round(composite),
-        "clause_scores": clause_scores,
     }
 
 
@@ -72,41 +70,6 @@ def _composite_score(
     return sum(w[k] * v for k, v in components.items()) / w_total if w_total > 0 else 0.0
 
 
-
-
-def _clause_level_scores(ref_sql: str, gen_sql: str) -> dict | None:
-    def extract(sql):
-        try:
-            tree = sqlglot.parse_one(sql, dialect="postgres")
-        except Exception:
-            return None
-        select_node = tree.find(exp.Select)
-        select_str = ", ".join(e.sql() for e in select_node.expressions) if select_node else None
-        return {
-            "select": select_str,
-            "from": str(tree.find(exp.From)) if tree.find(exp.From) else None,
-            "where": str(tree.find(exp.Where)) if tree.find(exp.Where) else None,
-            "group_by": str(tree.find(exp.Group)) if tree.find(exp.Group) else None,
-            "having": str(tree.find(exp.Having)) if tree.find(exp.Having) else None,
-            "order_by": str(tree.find(exp.Order)) if tree.find(exp.Order) else None,
-            "limit": str(tree.find(exp.Limit)) if tree.find(exp.Limit) else None,
-        }
-
-    ref = extract(ref_sql)
-    gen = extract(gen_sql)
-    if ref is None or gen is None:
-        return None
-
-    scores = {}
-    for clause in ("select", "from", "where", "group_by", "having", "order_by", "limit"):
-        r, g = ref[clause], gen[clause]
-        if r is None and g is None:
-            scores[clause] = 1.0
-        elif r is None or g is None:
-            scores[clause] = 0.0
-        else:
-            scores[clause] = 1.0 if r == g else 0.0
-    return scores
 
 
 

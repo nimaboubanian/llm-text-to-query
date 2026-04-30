@@ -84,7 +84,6 @@ Runs a three-phase TPC-H pipeline: **Setup** (data generation, schema loading) â
 |---|---|
 | **Result F1** | Primary correctness â€” did the query produce the right data? |
 | **AST Similarity** | Structural closeness of SQL to reference |
-| **Clause Scores** | Per-clause breakdown (SELECT, WHERE, etc.) |
 | **Composite** | Weighted aggregate: F1 (60%), AST (40%) |
 
 ### Multi-Seed Mode

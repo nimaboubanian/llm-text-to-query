@@ -2,7 +2,7 @@ import pytest
 from pathlib import Path
 
 from text2query.benchmark.similarity import (
-    _ast_similarity, _classify_error, _clause_level_scores, _composite_score,
+    _ast_similarity, _classify_error, _composite_score,
     _round, _result_set_comparison,
 )
 
@@ -96,32 +96,6 @@ class TestCompositeScore:
         score = _composite_score(result_f1=0.0, ast_sim=0.0)
         assert score == 0.0
 
-
-class TestClauseLevelScores:
-    def test_identical_sql(self):
-        sql = "SELECT id FROM users WHERE active = true"
-        scores = _clause_level_scores(sql, sql)
-        assert scores is not None
-        assert scores["select"] == 1.0
-        assert scores["from"] == 1.0
-        assert scores["where"] == 1.0
-
-    def test_different_where(self):
-        ref = "SELECT id FROM users WHERE active = true"
-        gen = "SELECT id FROM users WHERE active = false"
-        scores = _clause_level_scores(ref, gen)
-        assert scores["select"] == 1.0
-        assert scores["from"] == 1.0
-        assert scores["where"] == 0.0
-
-    def test_missing_clause_both_absent(self):
-        sql = "SELECT id FROM users"
-        scores = _clause_level_scores(sql, sql)
-        assert scores["where"] == 1.0  # both absent = correct omission
-        assert scores["group_by"] == 1.0
-
-    def test_empty_sql_returns_none(self):
-        assert _clause_level_scores("", "") is None
 
 
 class TestResultSetComparison:

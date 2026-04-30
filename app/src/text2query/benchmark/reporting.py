@@ -55,15 +55,6 @@ def _format_per_query_similarity(result: dict) -> str:
     if result.get("error_category"):
         lines.append(f"| Error Category | {result['error_category']} |")
 
-    clause = result.get("clause_scores")
-    if clause:
-        lines.append("")
-        lines.append("### Clause Breakdown\n")
-        lines.append("| Clause | Match |")
-        lines.append("|---|---|")
-        for name, score in clause.items():
-            lines.append(f"| {name} | {_v(score)} |")
-
     return "\n".join(lines) + "\n"
 
 

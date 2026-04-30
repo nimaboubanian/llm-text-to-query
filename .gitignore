@@ -6,6 +6,7 @@ app/.venv/
 benchmark/.tpch/.venv/
 benchmark/.tpch/data/*
 benchmark/.tpch/answers/*
-benchmark/queries/*
-benchmark/results/*
 benchmark/answers/*
+benchmark/queries/*
+benchmark/reports/*
+benchmark/results/*

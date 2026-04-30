@@ -245,11 +245,18 @@ def _generate_single_reports(
         )
         all_results.append(sim_result)
 
+        ref_sql = (reference_queries_dir / f"{qid}.sql").read_text().strip()
+        llm_sql_path = generated_queries_dir / f"{qid}.sql"
+        llm_sql = llm_sql_path.read_text().strip() if llm_sql_path.exists() else None
+
         report = (
             f"# Query {qid} — Report\n\n"
             f"- **Status:** {status}\n"
             f"- **LLM query generated:** {'yes' if has_generated else 'no'}\n"
             f"- **LLM answer produced:** {'yes' if has_answer and not is_error else 'no'}\n\n"
+            f"## Reference SQL\n\n```sql\n{ref_sql}\n```\n\n"
+            f"## LLM-Generated SQL\n\n"
+            + (f"```sql\n{llm_sql}\n```\n\n" if llm_sql else "*(not generated)*\n\n")
             + _format_per_query_similarity(sim_result)
         )
         (per_query_dir / f"{qid}.md").write_text(report)
@@ -322,10 +329,21 @@ def _generate_multiseed_reports(
         query_agg["per_seed"] = seed_results
         aggregated.append(query_agg)
 
-        # Per-query report with all seeds
+        ref_sql = (reference_queries_dir / f"{qid}.sql").read_text().strip()
+
+        seed_sql_sections = "\n## LLM-Generated SQL by Seed\n\n"
+        for seed in seeds:
+            seed_sql_path = generated_queries_dir / f"seed_{seed}" / f"{qid}.sql"
+            if seed_sql_path.exists():
+                seed_sql_sections += f"### Seed {seed}\n\n```sql\n{seed_sql_path.read_text().strip()}\n```\n\n"
+            else:
+                seed_sql_sections += f"### Seed {seed}\n\n*(not generated)*\n\n"
+
         report = (
             f"# Query {qid} — Multi-Seed Report ({len(seeds)} seeds)\n\n"
+            f"## Reference SQL\n\n```sql\n{ref_sql}\n```\n\n"
             + _format_per_query_multiseed(seed_results)
+            + seed_sql_sections
         )
         (per_query_dir / f"{qid}.md").write_text(report)
         print(f"  [{qid}] evaluated across {len(seeds)} seeds")

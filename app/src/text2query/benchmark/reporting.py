@@ -216,26 +216,9 @@ def _generate_single_reports(
         f.stem for f in reference_queries_dir.glob("*.sql")
     )
 
-    executed = 0
-    errors = 0
     all_results = []
 
     for qid in query_ids:
-        has_generated = (generated_queries_dir / f"{qid}.sql").exists()
-        has_answer = (generated_answers_dir / f"{qid}.csv").exists()
-
-        is_error = False
-        if has_answer:
-            first_line = (generated_answers_dir / f"{qid}.csv").read_text().split("\n", 1)[0]
-            is_error = first_line.strip() == "ERROR"
-
-        status = "error" if is_error else ("executed" if has_answer else "not generated")
-
-        if is_error:
-            errors += 1
-        elif has_answer:
-            executed += 1
-
         sim_result = evaluate_query(
             query_id=int(qid),
             gt_csv=reference_answers_dir / f"{qid}.csv",
@@ -249,11 +232,10 @@ def _generate_single_reports(
         llm_sql_path = generated_queries_dir / f"{qid}.sql"
         llm_sql = llm_sql_path.read_text().strip() if llm_sql_path.exists() else None
 
+        status = sim_result["status"]
         report = (
             f"# Query {qid} — Report\n\n"
-            f"- **Status:** {status}\n"
-            f"- **LLM query generated:** {'yes' if has_generated else 'no'}\n"
-            f"- **LLM answer produced:** {'yes' if has_answer and not is_error else 'no'}\n\n"
+            f"- **Status:** {status}\n\n"
             f"## Reference SQL\n\n```sql\n{ref_sql}\n```\n\n"
             f"## LLM-Generated SQL\n\n"
             + (f"```sql\n{llm_sql}\n```\n\n" if llm_sql else "*(not generated)*\n\n")
@@ -262,8 +244,10 @@ def _generate_single_reports(
         (per_query_dir / f"{qid}.md").write_text(report)
         print(f"  [{qid}] {status}")
 
-    total = len(query_ids)
-    not_generated = total - executed - errors
+    total = len(all_results)
+    executed = sum(1 for r in all_results if r["status"] == "ok")
+    errors = sum(1 for r in all_results if r["status"] == "exec_error")
+    not_generated = sum(1 for r in all_results if r["status"] == "missing")
 
     summary = (
         f"# Benchmark Summary\n\n"

@@ -104,10 +104,13 @@ def _format_per_query_multiseed(seed_results: list[dict]) -> str:
 def _format_summary_similarity(all_results: list[dict]) -> str:
     total = len(all_results)
 
-    f1_vals = [r["result_f1"] if r["result_f1"] is not None else 0.0 for r in all_results]
-    ast_vals = [r["ast_similarity"] if r["ast_similarity"] is not None else 0.0 for r in all_results]
-    avg_f1 = sum(f1_vals) / len(f1_vals) if f1_vals else 0.0
-    avg_ast = sum(ast_vals) / len(ast_vals) if ast_vals else 0.0
+    ok_results = [r for r in all_results if r["status"] == "ok"]
+    failed_results = [r for r in all_results if r["status"] != "ok"]
+
+    f1_vals = [r["result_f1"] for r in ok_results if r["result_f1"] is not None]
+    ast_vals = [r["ast_similarity"] for r in all_results if r["ast_similarity"] is not None]
+    avg_f1 = sum(f1_vals) / len(f1_vals) if f1_vals else None
+    avg_ast = sum(ast_vals) / len(ast_vals) if ast_vals else None
 
     error_results = [r for r in all_results if r.get("error_category")]
     error_counts = {}
@@ -115,16 +118,21 @@ def _format_summary_similarity(all_results: list[dict]) -> str:
         cat = r["error_category"]
         error_counts[cat] = error_counts.get(cat, 0) + 1
 
-    lines = [
-        "## Similarity Metrics\n",
-        f"- **Average Result F1:** {avg_f1:.4f}",
-        f"- **Average AST Similarity:** {avg_ast:.4f}",
-    ]
+    lines = ["## Similarity Metrics\n"]
 
-    if error_counts:
-        lines.append(f"- **Execution errors:** {len(error_results)}")
-        for cat, count in sorted(error_counts.items()):
-            lines.append(f"  - {cat}: {count}")
+    if avg_f1 is not None:
+        lines.append(f"- **Average Result F1:** {avg_f1:.4f} (over {len(ok_results)} executed queries)")
+    if avg_ast is not None:
+        lines.append(f"- **Average AST Similarity:** {avg_ast:.4f} (over {len(ast_vals)} queries)")
+
+    if failed_results:
+        lines.append(f"- **Failed queries:** {len(failed_results)} / {total}")
+        if error_counts:
+            for cat, count in sorted(error_counts.items()):
+                lines.append(f"  - {cat}: {count}")
+        missing = sum(1 for r in failed_results if r["status"] == "missing")
+        if missing:
+            lines.append(f"  - not generated: {missing}")
 
     lines += [
         "",

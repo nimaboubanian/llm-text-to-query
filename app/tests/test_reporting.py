@@ -51,6 +51,22 @@ def test_summary_computes_averages():
     output = _format_summary_similarity(results)
     assert "0.7500" in output  # avg F1 = (1.0 + 0.5) / 2
     assert "0.7000" in output  # avg AST = (0.8 + 0.6) / 2
+    assert "2 executed" in output
+
+
+def test_summary_separates_failed_from_executed():
+    results = [
+        {"query_id": 1, "status": "ok", "result_f1": 0.8, "ast_similarity": 0.7, "result_precision": 0.8, "result_recall": 0.8, "error_category": None},
+        {"query_id": 2, "status": "exec_error", "result_f1": 0.0, "ast_similarity": 0.2, "result_precision": 0.0, "result_recall": 0.0, "error_category": "SchemaMismatch"},
+        {"query_id": 3, "status": "missing", "result_f1": None, "ast_similarity": None, "result_precision": None, "result_recall": None, "error_category": None},
+    ]
+    output = _format_summary_similarity(results)
+    # avg F1 only over the one ok query
+    assert "0.8000" in output
+    assert "1 executed" in output
+    assert "2 / 3" in output   # failed count
+    assert "SchemaMismatch" in output
+    assert "not generated: 1" in output
 
 
 def test_compute_stats_basic():

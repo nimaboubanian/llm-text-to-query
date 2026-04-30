@@ -177,7 +177,7 @@ def _clean_sql_response(response: str) -> str | None:
     if match:
         return match.group(1).strip()
 
-    match = re.search(r"(SELECT|INSERT|UPDATE|DELETE|WITH)\s+.*?;", response, re.DOTALL | re.IGNORECASE)
+    match = re.search(r"(SELECT|WITH)\s+.*?;", response, re.DOTALL | re.IGNORECASE)
     if match:
         return match.group(0).strip()
 

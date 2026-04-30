@@ -65,10 +65,10 @@ def test_classify_defaults_to_sql_on_garbage(mock_chat):
 
 
 @patch("text2query.cli.frontdesk.chat_with_model")
-def test_classify_defaults_to_sql_on_failure(mock_chat):
+def test_classify_defaults_to_conversation_on_failure(mock_chat):
     mock_chat.return_value = None
     intent, _ = classify_intent("anything", "testdb", TABLES, "qwen2.5:3b")
-    assert intent == "sql"
+    assert intent == "conversation"
 
 
 # ── Result summarization ─────────────────────────────────────────────

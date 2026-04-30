@@ -53,3 +53,15 @@ def test_build_prompt_fills_placeholders():
     # should not contain raw placeholders
     assert "{schema}" not in result
     assert "{query}" not in result
+
+
+def test_rejects_bare_insert():
+    assert _clean_sql_response("INSERT INTO users VALUES (1, 'alice');") is None
+
+
+def test_rejects_bare_update():
+    assert _clean_sql_response("UPDATE users SET name = 'bob' WHERE id = 1;") is None
+
+
+def test_rejects_bare_delete():
+    assert _clean_sql_response("DELETE FROM users WHERE id = 1;") is None

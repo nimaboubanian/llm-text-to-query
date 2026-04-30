@@ -69,7 +69,7 @@ def classify_intent(
 
     raw = chat_with_model(messages, model, FRONTDESK_TEMPERATURE)
     if not raw:
-        return ("sql", None)  # safe fallback
+        return ("conversation", None)  # safe fallback: don't execute SQL on LLM failure
 
     lines = raw.strip().split("\n", 1)
     label = lines[0].strip().upper()

@@ -20,7 +20,7 @@ def evaluate_query(
     gt_sql_text = gt_sql.read_text() if gt_sql.exists() else ""
     llm_sql_text = llm_sql.read_text() if llm_sql.exists() else ""
 
-    status, exact_match, precision, recall, f1, error_detail = _result_set_comparison(
+    status, precision, recall, f1, error_detail = _result_set_comparison(
         gt_csv, llm_csv, ref_sql=gt_sql_text,
     )
 
@@ -29,46 +29,20 @@ def evaluate_query(
         error_category = _classify_error(llm_sql_text, error_detail)
 
     ast_sim = _ast_similarity(gt_sql_text, llm_sql_text)
-    composite = _composite_score(
-        result_f1=f1,
-        ast_sim=ast_sim if ast_sim is not None else 0.0,
-    )
 
     return {
         "query_id": query_id,
         "status": status,
-        "exact_match": exact_match,
         "result_precision": _round(precision),
         "result_recall": _round(recall),
         "result_f1": _round(f1),
         "ast_similarity": _round(ast_sim),
         "error_category": error_category,
-        "composite_score": _round(composite),
     }
 
 
 def _round(value: float | None) -> float | None:
     return round(value, 4) if value is not None else None
-
-
-_DEFAULT_WEIGHTS = {"f1": 0.60, "ast": 0.40}
-
-
-def _composite_score(
-    result_f1: float | None,
-    ast_sim: float,
-    weights: dict | None = None,
-) -> float:
-    w = weights or _DEFAULT_WEIGHTS
-    components = {"ast": ast_sim}
-    w_total = w["ast"]
-
-    if result_f1 is not None:
-        components["f1"] = result_f1
-        w_total += w["f1"]
-
-    return sum(w[k] * v for k, v in components.items()) / w_total if w_total > 0 else 0.0
-
 
 
 
@@ -146,24 +120,24 @@ def _has_top_level_order_limit(sql: str) -> bool:
 
 def _result_set_comparison(
     gt_csv: Path, llm_csv: Path, ref_sql: str = "", float_epsilon: float = 1e-4,
-) -> tuple[str, bool | None, float | None, float | None, float | None, str | None]:
+) -> tuple[str, float | None, float | None, float | None, str | None]:
     if not llm_csv.exists():
-        return "missing", None, None, None, None, None
+        return "missing", None, None, None, None
 
     content = llm_csv.read_text()
     first_line = content.split("\n", 1)[0].strip()
     if first_line == "ERROR":
         error_detail = content.split("\n", 1)[1].strip() if "\n" in content else ""
-        return "exec_error", False, 0.0, 0.0, 0.0, error_detail
+        return "exec_error", 0.0, 0.0, 0.0, error_detail
 
     gt_df = pd.read_csv(gt_csv)
     llm_df = pd.read_csv(llm_csv)
 
     if len(gt_df) == 0 and len(llm_df) == 0:
-        return "ok", True, 1.0, 1.0, 1.0, None
+        return "ok", 1.0, 1.0, 1.0, None
 
     if len(gt_df.columns) != len(llm_df.columns):
-        return "ok", False, 0.0, 0.0, 0.0, None
+        return "ok", 0.0, 0.0, 0.0, None
 
     llm_df = _align_columns(gt_df, llm_df)
 
@@ -179,13 +153,11 @@ def _result_set_comparison(
             tuple(gt_df.iloc[i]) == tuple(llm_df.iloc[i])
             for i in range(min_len)
         )
-        exact_match = len(gt_df) == len(llm_df) and matches == len(gt_df)
         precision = matches / len(llm_df) if len(llm_df) > 0 else 0.0
         recall = matches / len(gt_df) if len(gt_df) > 0 else 0.0
     else:
         gt_rows = Counter(tuple(row) for row in gt_df.itertuples(index=False, name=None))
         llm_rows = Counter(tuple(row) for row in llm_df.itertuples(index=False, name=None))
-        exact_match = gt_rows == llm_rows
         matched = sum((gt_rows & llm_rows).values())
         total_llm = sum(llm_rows.values())
         total_gt = sum(gt_rows.values())
@@ -193,7 +165,7 @@ def _result_set_comparison(
         recall = matched / total_gt if total_gt > 0 else 0.0
 
     f1 = (2 * precision * recall / (precision + recall)) if (precision + recall) > 0 else 0.0
-    return "ok", exact_match, precision, recall, f1, None
+    return "ok", precision, recall, f1, None
 
 
 def _ast_similarity(gt_sql: str, llm_sql: str) -> float | None:

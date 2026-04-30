@@ -47,9 +47,7 @@ def _format_per_query_similarity(result: dict) -> str:
         f"| Result F1 | {_v(result['result_f1'])} |",
         f"| Precision | {_v(result['result_precision'])} |",
         f"| Recall | {_v(result['result_recall'])} |",
-        f"| Exact Match | {_v(result['exact_match'])} |",
         f"| AST Similarity | {_v(result['ast_similarity'])} |",
-        f"| Composite Score | {_v(result.get('composite_score'))} |",
     ]
 
     if result.get("error_category"):
@@ -62,24 +60,23 @@ def _format_per_query_multiseed(seed_results: list[dict]) -> str:
     """Format per-query report for multi-seed runs showing all seeds + aggregated stats."""
     lines = [
         "## Per-Seed Results\n",
-        "| Seed | Status | Result F1 | AST Sim | Composite |",
-        "|---|---|---|---|---|",
+        "| Seed | Status | Result F1 | AST Sim |",
+        "|---|---|---|---|",
     ]
 
     for r in seed_results:
         lines.append(
             f"| {r['seed']} | {r['status']} | {_v(r['result_f1'])} "
-            f"| {_v(r['ast_similarity'])} | {_v(r.get('composite_score'))} |"
+            f"| {_v(r['ast_similarity'])} |"
         )
 
     lines.append("")
     lines.append("## Aggregated Statistics\n")
 
-    metrics = ["result_f1", "ast_similarity", "composite_score"]
+    metrics = ["result_f1", "ast_similarity"]
     metric_labels = {
         "result_f1": "Result F1",
         "ast_similarity": "AST Similarity",
-        "composite_score": "Composite Score",
     }
 
     lines.append("| Metric | Mean | Std | 95% CI |")
@@ -99,7 +96,6 @@ def _format_per_query_multiseed(seed_results: list[dict]) -> str:
 
 
 def _format_summary_similarity(all_results: list[dict]) -> str:
-    exact_count = sum(1 for r in all_results if r.get("exact_match") is True)
     total = len(all_results)
 
     f1_vals = [r["result_f1"] if r["result_f1"] is not None else 0.0 for r in all_results]
@@ -115,14 +111,9 @@ def _format_summary_similarity(all_results: list[dict]) -> str:
 
     lines = [
         "## Similarity Metrics\n",
-        f"- **Exact matches:** {exact_count} / {total}",
         f"- **Average Result F1:** {avg_f1:.4f}",
         f"- **Average AST Similarity:** {avg_ast:.4f}",
     ]
-
-    comp_vals = [r["composite_score"] if r.get("composite_score") is not None else 0.0 for r in all_results]
-    avg_comp = sum(comp_vals) / len(comp_vals) if comp_vals else 0.0
-    lines.append(f"- **Average Composite Score:** {avg_comp:.4f}")
 
     if error_counts:
         lines.append(f"- **Execution errors:** {len(error_results)}")
@@ -131,15 +122,15 @@ def _format_summary_similarity(all_results: list[dict]) -> str:
 
     lines += [
         "",
-        "| Query | Status | Result F1 | AST Sim | Composite |",
-        "|---|---|---|---|---|",
+        "| Query | Status | Result F1 | AST Sim |",
+        "|---|---|---|---|",
     ]
 
     for r in all_results:
         qid = f"{r['query_id']:02d}"
         lines.append(
             f"| {qid} | {r['status']} | {_v(r['result_f1'])} "
-            f"| {_v(r['ast_similarity'])} | {_v(r.get('composite_score'))} |"
+            f"| {_v(r['ast_similarity'])} |"
         )
 
     return "\n".join(lines) + "\n"
@@ -152,11 +143,9 @@ def _format_summary_multiseed(aggregated: list[dict], num_seeds: int) -> str:
     # Global aggregates across all queries
     f1_means = [q["result_f1"]["mean"] if q["result_f1"]["mean"] is not None else 0.0 for q in aggregated]
     ast_means = [q["ast_similarity"]["mean"] if q["ast_similarity"]["mean"] is not None else 0.0 for q in aggregated]
-    comp_means = [q["composite_score"]["mean"] if q["composite_score"]["mean"] is not None else 0.0 for q in aggregated]
 
     global_f1 = _compute_stats(f1_means)
     global_ast = _compute_stats(ast_means)
-    global_comp = _compute_stats(comp_means)
 
     lines = [
         f"## Similarity Metrics ({num_seeds} seeds)\n",
@@ -167,27 +156,23 @@ def _format_summary_multiseed(aggregated: list[dict], num_seeds: int) -> str:
         lines.append(f"- **Average Result F1:** {global_f1['mean']:.4f} ± {global_f1['std']:.4f}")
     if global_ast["mean"] is not None:
         lines.append(f"- **Average AST Similarity:** {global_ast['mean']:.4f} ± {global_ast['std']:.4f}")
-    if global_comp["mean"] is not None:
-        lines.append(f"- **Average Composite Score:** {global_comp['mean']:.4f} ± {global_comp['std']:.4f}")
 
     lines += [
         "",
-        "| Query | F1 (mean±std) | AST (mean±std) | Composite (mean±std) | F1 95% CI |",
-        "|---|---|---|---|---|",
+        "| Query | F1 (mean±std) | AST (mean±std) | F1 95% CI |",
+        "|---|---|---|---|",
     ]
 
     for q in aggregated:
         qid = f"{q['query_id']:02d}"
         f1 = q["result_f1"]
         ast = q["ast_similarity"]
-        comp = q["composite_score"]
 
         f1_str = f"{f1['mean']:.4f} ± {f1['std']:.4f}" if f1["mean"] is not None else "—"
         ast_str = f"{ast['mean']:.4f} ± {ast['std']:.4f}" if ast["mean"] is not None else "—"
-        comp_str = f"{comp['mean']:.4f} ± {comp['std']:.4f}" if comp["mean"] is not None else "—"
         ci_str = f"[{f1['ci_lower']:.4f}, {f1['ci_upper']:.4f}]" if f1["mean"] is not None else "—"
 
-        lines.append(f"| {qid} | {f1_str} | {ast_str} | {comp_str} | {ci_str} |")
+        lines.append(f"| {qid} | {f1_str} | {ast_str} | {ci_str} |")
 
     return "\n".join(lines) + "\n"
 
@@ -306,7 +291,7 @@ def _generate_multiseed_reports(
     aggregated = []
     metrics_to_aggregate = [
         "result_f1", "result_precision", "result_recall",
-        "ast_similarity", "composite_score",
+        "ast_similarity",
     ]
 
     for qid in query_ids:
@@ -380,7 +365,7 @@ def generate_cross_model_report(
     model_aggregated = {}
 
     metrics_to_aggregate = [
-        "result_f1", "ast_similarity", "composite_score",
+        "result_f1", "ast_similarity",
     ]
 
     for model in models:
@@ -419,8 +404,6 @@ def generate_cross_model_report(
                     "result_precision": sim.get("result_precision", ""),
                     "result_recall": sim.get("result_recall", ""),
                     "ast_similarity": sim.get("ast_similarity", ""),
-                    "composite_score": sim.get("composite_score", ""),
-                    "exact_match": sim.get("exact_match", ""),
                     "error_category": sim.get("error_category", ""),
                 })
 
@@ -436,8 +419,7 @@ def generate_cross_model_report(
     fieldnames = [
         "model", "query_id", "seed", "status",
         "result_f1", "result_precision", "result_recall",
-        "ast_similarity", "composite_score",
-        "exact_match", "error_category",
+        "ast_similarity", "error_category",
     ]
     with open(csv_path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
@@ -451,8 +433,8 @@ def generate_cross_model_report(
     lines = [
         f"# Cross-Model Comparison ({len(models)} models, {num_seeds} seed{'s' if num_seeds > 1 else ''})\n",
         "## Model Summary\n",
-        "| Model | Avg F1 | Avg AST Sim | Avg Composite |",
-        "|---|---|---|---|",
+        "| Model | Avg F1 | Avg AST Sim |",
+        "|---|---|---|",
     ]
 
     def _stat_str(s):
@@ -469,14 +451,9 @@ def generate_cross_model_report(
             model_aggregated[model][qid]["ast_similarity"]["mean"] if model_aggregated[model][qid]["ast_similarity"]["mean"] is not None else 0.0
             for qid in query_ids
         ]
-        comp_means = [
-            model_aggregated[model][qid]["composite_score"]["mean"] if model_aggregated[model][qid]["composite_score"]["mean"] is not None else 0.0
-            for qid in query_ids
-        ]
         lines.append(
             f"| {model} | {_stat_str(_compute_stats(f1_means))} "
-            f"| {_stat_str(_compute_stats(ast_means))} "
-            f"| {_stat_str(_compute_stats(comp_means))} |"
+            f"| {_stat_str(_compute_stats(ast_means))} |"
         )
 
     # Per-query comparison table (F1)

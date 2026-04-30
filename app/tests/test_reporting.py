@@ -21,25 +21,22 @@ def test_v_formats_none():
 def test_per_query_has_all_metrics():
     result = {
         "result_f1": 0.85, "result_precision": 0.9,
-        "result_recall": 0.8, "exact_match": False,
-        "ast_similarity": 0.72,
+        "result_recall": 0.8, "ast_similarity": 0.72,
     }
     output = _format_per_query_similarity(result)
     assert "Result F1" in output
     assert "Precision" in output
     assert "Recall" in output
-    assert "Exact Match" in output
     assert "AST Similarity" in output
     assert "0.8500" in output
 
 
 def test_summary_computes_averages():
     results = [
-        {"query_id": 1, "status": "ok", "exact_match": True, "result_f1": 1.0, "ast_similarity": 0.8, "result_precision": 1.0, "result_recall": 1.0},
-        {"query_id": 2, "status": "ok", "exact_match": False, "result_f1": 0.5, "ast_similarity": 0.6, "result_precision": 0.5, "result_recall": 0.5},
+        {"query_id": 1, "status": "ok", "result_f1": 1.0, "ast_similarity": 0.8, "result_precision": 1.0, "result_recall": 1.0},
+        {"query_id": 2, "status": "ok", "result_f1": 0.5, "ast_similarity": 0.6, "result_precision": 0.5, "result_recall": 0.5},
     ]
     output = _format_summary_similarity(results)
-    assert "1 / 2" in output
     assert "0.7500" in output  # avg F1 = (1.0 + 0.5) / 2
     assert "0.7000" in output  # avg AST = (0.8 + 0.6) / 2
 

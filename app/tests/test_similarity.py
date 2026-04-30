@@ -2,7 +2,7 @@ import pytest
 from pathlib import Path
 
 from text2query.benchmark.similarity import (
-    _ast_similarity, _classify_error, _composite_score,
+    _ast_similarity, _classify_error,
     _round, _result_set_comparison,
 )
 
@@ -83,20 +83,6 @@ class TestClassifyError:
         assert _classify_error(sql, "something completely unexpected") == "Unknown"
 
 
-class TestCompositeScore:
-    def test_all_components(self):
-        score = _composite_score(result_f1=1.0, ast_sim=1.0)
-        assert score == pytest.approx(1.0)
-
-    def test_missing_f1_renormalizes(self):
-        score = _composite_score(result_f1=None, ast_sim=1.0)
-        assert score == pytest.approx(1.0)
-
-    def test_all_zero(self):
-        score = _composite_score(result_f1=0.0, ast_sim=0.0)
-        assert score == 0.0
-
-
 
 class TestResultSetComparison:
     def test_exact_match(self, tmp_path):
@@ -106,9 +92,8 @@ class TestResultSetComparison:
         gt.write_text(csv_content)
         llm.write_text(csv_content)
 
-        status, exact, prec, rec, f1, err = _result_set_comparison(gt, llm)
+        status, prec, rec, f1, err = _result_set_comparison(gt, llm)
         assert status == "ok"
-        assert exact is True
         assert f1 == 1.0
 
     def test_partial_overlap(self, tmp_path):
@@ -117,9 +102,8 @@ class TestResultSetComparison:
         gt.write_text("id\n1\n2\n3\n")
         llm.write_text("id\n2\n3\n4\n")
 
-        status, exact, prec, rec, f1, err = _result_set_comparison(gt, llm)
+        status, prec, rec, f1, err = _result_set_comparison(gt, llm)
         assert status == "ok"
-        assert exact is False
         assert prec == pytest.approx(2 / 3, abs=0.01)
         assert rec == pytest.approx(2 / 3, abs=0.01)
 
@@ -128,9 +112,9 @@ class TestResultSetComparison:
         gt.write_text("id\n1\n")
         missing = tmp_path / "nope.csv"
 
-        status, exact, prec, rec, f1, err = _result_set_comparison(gt, missing)
+        status, prec, rec, f1, err = _result_set_comparison(gt, missing)
         assert status == "missing"
-        assert exact is None
+        assert prec is None
 
     def test_error_csv(self, tmp_path):
         gt = tmp_path / "gt.csv"
@@ -138,7 +122,7 @@ class TestResultSetComparison:
         gt.write_text("id\n1\n")
         llm.write_text("ERROR\nsome failure\n")
 
-        status, exact, prec, rec, f1, err = _result_set_comparison(gt, llm)
+        status, prec, rec, f1, err = _result_set_comparison(gt, llm)
         assert status == "exec_error"
         assert f1 == 0.0
         assert err == "some failure"
@@ -149,9 +133,8 @@ class TestResultSetComparison:
         gt.write_text("a,b\n1,2\n")
         llm.write_text("x\n1\n")
 
-        status, exact, prec, rec, f1, err = _result_set_comparison(gt, llm)
+        status, prec, rec, f1, err = _result_set_comparison(gt, llm)
         assert status == "ok"
-        assert exact is False
         assert f1 == 0.0
 
     def test_both_empty_result_sets(self, tmp_path):
@@ -160,9 +143,8 @@ class TestResultSetComparison:
         gt.write_text("id,name\n")
         llm.write_text("id,name\n")
 
-        status, exact, prec, rec, f1, err = _result_set_comparison(gt, llm)
+        status, prec, rec, f1, err = _result_set_comparison(gt, llm)
         assert status == "ok"
-        assert exact is True
         assert f1 == 1.0
 
     def test_ordered_comparison_correct_order(self, tmp_path):
@@ -171,7 +153,7 @@ class TestResultSetComparison:
         gt.write_text("id\n1\n2\n3\n")
         llm.write_text("id\n1\n2\n3\n")
 
-        status, exact, prec, rec, f1, err = _result_set_comparison(
+        status, prec, rec, f1, err = _result_set_comparison(
             gt, llm, ref_sql="SELECT id FROM t ORDER BY id LIMIT 3",
         )
         assert status == "ok"
@@ -183,7 +165,7 @@ class TestResultSetComparison:
         gt.write_text("id\n1\n2\n3\n")
         llm.write_text("id\n3\n2\n1\n")
 
-        status, exact, prec, rec, f1, err = _result_set_comparison(
+        status, prec, rec, f1, err = _result_set_comparison(
             gt, llm, ref_sql="SELECT id FROM t ORDER BY id LIMIT 3",
         )
         assert status == "ok"
@@ -195,7 +177,7 @@ class TestResultSetComparison:
         gt.write_text("a,b\n1,x\n2,y\n")
         llm.write_text("b,a\nx,1\ny,2\n")
 
-        status, exact, prec, rec, f1, err = _result_set_comparison(gt, llm)
+        status, prec, rec, f1, err = _result_set_comparison(gt, llm)
         assert status == "ok"
         assert f1 == 1.0
 
@@ -206,8 +188,8 @@ class TestResultSetComparison:
         llm.write_text("val\n1.1256\n")
 
         # Default epsilon 1e-4 (4 decimal places): 1.1234 != 1.1256
-        status1, _, _, _, f1_strict, _ = _result_set_comparison(gt, llm)
+        status1, _, _, f1_strict, _ = _result_set_comparison(gt, llm)
         # Loose epsilon 1e-1 (1 decimal place): both round to 1.1
-        status2, _, _, _, f1_loose, _ = _result_set_comparison(gt, llm, float_epsilon=1e-1)
+        status2, _, _, f1_loose, _ = _result_set_comparison(gt, llm, float_epsilon=1e-1)
         assert f1_strict == 0.0
         assert f1_loose == 1.0

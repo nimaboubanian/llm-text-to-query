@@ -72,8 +72,12 @@ def _format_per_query_multiseed(seed_results: list[dict]) -> str:
             f"| {_v(r['ast_similarity'])} |"
         )
 
+    ok_count = sum(1 for r in seed_results if r["status"] == "ok")
+    n = len(seed_results)
+
     lines.append("")
     lines.append("## Aggregated Statistics\n")
+    lines.append(f"*Seeds executed successfully: {ok_count} / {n}*\n")
 
     metrics = ["result_f1", "ast_similarity"]
     metric_labels = {

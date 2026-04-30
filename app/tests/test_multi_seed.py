@@ -129,8 +129,8 @@ def test_format_summary_multiseed():
 def test_format_per_query_multiseed():
     """Per-query multi-seed format should show all seed results."""
     seed_results = [
-        {"seed": 1, "status": "ok", "result_f1": 0.85, "ast_similarity": 0.75, "composite_score": 0.72},
-        {"seed": 2, "status": "ok", "result_f1": 0.72, "ast_similarity": 0.80, "composite_score": 0.65},
+        {"seed": 1, "status": "ok", "result_f1": 0.85, "ast_similarity": 0.75},
+        {"seed": 2, "status": "ok", "result_f1": 0.72, "ast_similarity": 0.80},
     ]
 
     output = _format_per_query_multiseed(seed_results)
@@ -140,6 +140,20 @@ def test_format_per_query_multiseed():
     assert "Mean" in output
     assert "0.8500" in output  # seed 1 f1
     assert "0.7200" in output  # seed 2 f1
+    assert "2 / 2" in output   # seeds executed
+
+
+def test_format_per_query_multiseed_partial_failure():
+    """Seeds executed count should reflect actual ok seeds."""
+    seed_results = [
+        {"seed": 1, "status": "ok", "result_f1": 0.80, "ast_similarity": 0.70},
+        {"seed": 2, "status": "exec_error", "result_f1": 0.0, "ast_similarity": 0.30},
+        {"seed": 3, "status": "missing", "result_f1": None, "ast_similarity": None},
+    ]
+
+    output = _format_per_query_multiseed(seed_results)
+
+    assert "1 / 3" in output
 
 
 def test_archive_with_seed_subdirs(tmp_path):

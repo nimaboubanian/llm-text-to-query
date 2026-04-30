@@ -25,8 +25,11 @@ def evaluate_query(
     )
 
     error_category = None
+    error_detail_text = None
     if status == "exec_error" and error_detail:
         error_category = _classify_error(llm_sql_text, error_detail)
+        if error_category == "Unknown":
+            error_detail_text = error_detail
 
     ast_sim = _ast_similarity(gt_sql_text, llm_sql_text)
 
@@ -38,6 +41,7 @@ def evaluate_query(
         "result_f1": _round(f1),
         "ast_similarity": _round(ast_sim),
         "error_category": error_category,
+        "error_detail": error_detail_text,
     }
 
 
@@ -57,17 +61,23 @@ def _classify_error(sql: str, error_text: str) -> str:
     except Exception:
         pass
 
+    # sqlglot is more lenient than PostgreSQL; check the actual error text too
+    if any(re.search(p, error_lower) for p in (
+        r"syntax error at or near",
+        r"unterminated quoted string",
+        r"unexpected end of input",
+    )):
+        return "SyntaxError"
+
     schema_patterns = [
         r"relation .+ does not exist",
         r"column .+ does not exist",
-        r"table .+ doesn't exist",
-        r"undefined table",
-        r"unknown column",
+        r"function .+ does not exist",
     ]
     if any(re.search(p, error_lower) for p in schema_patterns):
         return "SchemaMismatch"
 
-    if any(kw in error_lower for kw in ("timeout", "cancelled", "statement_timeout")):
+    if any(kw in error_lower for kw in ("timeout", "statement_timeout", "canceling")):
         return "Timeout"
 
     runtime_patterns = [
@@ -76,6 +86,7 @@ def _classify_error(sql: str, error_text: str) -> str:
         r"cannot be cast",
         r"ambiguous column",
         r"operator does not exist",
+        r"more than one row returned by a subquery",
     ]
     if any(re.search(p, error_lower) for p in runtime_patterns):
         return "RuntimeError"

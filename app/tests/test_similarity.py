@@ -70,6 +70,10 @@ class TestClassifyError:
         sql = "SELECT bad_col FROM users"
         assert _classify_error(sql, 'column "bad_col" does not exist') == "SchemaMismatch"
 
+    def test_function_not_exist(self):
+        sql = "SELECT datediff(o.orderdate, CURRENT_DATE) FROM orders o"
+        assert _classify_error(sql, 'function datediff(date, date) does not exist') == "SchemaMismatch"
+
     def test_timeout(self):
         sql = "SELECT * FROM big_table"
         assert _classify_error(sql, "canceling statement due to statement_timeout") == "Timeout"
@@ -77,6 +81,15 @@ class TestClassifyError:
     def test_runtime_error(self):
         sql = "SELECT 1/0 FROM t"
         assert _classify_error(sql, "division by zero") == "RuntimeError"
+
+    def test_subquery_cardinality(self):
+        sql = "SELECT * FROM t WHERE id = (SELECT id FROM t)"
+        assert _classify_error(sql, "more than one row returned by a subquery used as an expression") == "RuntimeError"
+
+    def test_postgres_syntax_error_text(self):
+        # sqlglot may accept this, but PostgreSQL rejects it
+        sql = "SELECT FROM orders"
+        assert _classify_error(sql, 'syntax error at or near "FROM"') == "SyntaxError"
 
     def test_unknown_error(self):
         sql = "SELECT * FROM t"

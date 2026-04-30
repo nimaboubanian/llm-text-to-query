@@ -52,6 +52,8 @@ def _format_per_query_similarity(result: dict) -> str:
 
     if result.get("error_category"):
         lines.append(f"| Error Category | {result['error_category']} |")
+    if result.get("error_detail"):
+        lines.append(f"| Error Detail | `{result['error_detail']}` |")
 
     return "\n".join(lines) + "\n"
 

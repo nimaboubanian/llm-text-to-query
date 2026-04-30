@@ -31,6 +31,18 @@ def test_per_query_has_all_metrics():
     assert "0.8500" in output
 
 
+def test_unknown_error_detail_shown_in_report():
+    result = {
+        "result_f1": None, "result_precision": None,
+        "result_recall": None, "ast_similarity": None,
+        "error_category": "Unknown",
+        "error_detail": "could not determine data type of parameter $1",
+    }
+    output = _format_per_query_similarity(result)
+    assert "Unknown" in output
+    assert "could not determine data type" in output
+
+
 def test_summary_computes_averages():
     results = [
         {"query_id": 1, "status": "ok", "result_f1": 1.0, "ast_similarity": 0.8, "result_precision": 1.0, "result_recall": 1.0},

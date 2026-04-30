@@ -7,7 +7,7 @@ from pathlib import Path
 import pandas as pd
 import sqlglot
 from nltk.translate.bleu_score import SmoothingFunction, sentence_bleu
-from sqlglot import exp, optimizer
+from sqlglot import exp
 from sqlglot.diff import Keep, diff
 
 
@@ -264,52 +264,10 @@ def _result_set_comparison(
     return "ok", exact_match, precision, recall, f1, None
 
 
-def _normalize_sql(sql: str) -> str:
-    try:
-        tree = sqlglot.parse_one(sql, dialect="postgres")
-    except Exception:
-        return sql
-
-    try:
-        tree = optimizer.normalize(tree)
-    except Exception:
-        pass
-
-    try:
-        tree = optimizer.qualify_tables.qualify_tables(tree)
-        tree = optimizer.qualify_columns.qualify_columns(tree)
-    except Exception:
-        pass
-
-    try:
-        for node in tree.find_all((exp.And, exp.Or)):
-            children = list(node.flatten())
-            children_sorted = sorted(children, key=lambda x: x.sql())
-            rebuilt = children_sorted[0]
-            for child in children_sorted[1:]:
-                rebuilt = type(node)(this=rebuilt, expression=child)
-            node.replace(rebuilt)
-    except Exception:
-        pass
-
-    try:
-        tree = optimizer.merge_subqueries.merge_subqueries(tree)
-    except Exception:
-        pass
-
-    try:
-        return tree.sql(dialect="postgres")
-    except Exception:
-        return sql
-
-
 def _ast_similarity(gt_sql: str, llm_sql: str) -> float | None:
     try:
-        gt_normalized = _normalize_sql(gt_sql)
-        llm_normalized = _normalize_sql(llm_sql)
-
-        gt_tree = sqlglot.parse(gt_normalized, dialect="postgres")[0]
-        llm_tree = sqlglot.parse(llm_normalized, dialect="postgres")[0]
+        gt_tree = sqlglot.parse(gt_sql, dialect="postgres")[0]
+        llm_tree = sqlglot.parse(llm_sql, dialect="postgres")[0]
         if gt_tree is None or llm_tree is None:
             return None
     except Exception:

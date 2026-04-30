@@ -129,10 +129,8 @@ def test_format_summary_multiseed():
 def test_format_per_query_multiseed():
     """Per-query multi-seed format should show all seed results."""
     seed_results = [
-        {"seed": 1, "status": "ok", "result_f1": 0.85, "ast_similarity": 0.75,
-         "bleu": 0.6, "token_jaccard": 0.7, "composite_score": 0.72},
-        {"seed": 2, "status": "ok", "result_f1": 0.72, "ast_similarity": 0.80,
-         "bleu": 0.55, "token_jaccard": 0.68, "composite_score": 0.65},
+        {"seed": 1, "status": "ok", "result_f1": 0.85, "ast_similarity": 0.75, "composite_score": 0.72},
+        {"seed": 2, "status": "ok", "result_f1": 0.72, "ast_similarity": 0.80, "composite_score": 0.65},
     ]
 
     output = _format_per_query_multiseed(seed_results)

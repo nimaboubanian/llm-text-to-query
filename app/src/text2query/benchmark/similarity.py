@@ -6,7 +6,6 @@ from pathlib import Path
 
 import pandas as pd
 import sqlglot
-from nltk.translate.bleu_score import SmoothingFunction, sentence_bleu
 from sqlglot import exp
 from sqlglot.diff import Keep, diff
 
@@ -31,13 +30,9 @@ def evaluate_query(
 
     ast_sim = _ast_similarity(gt_sql_text, llm_sql_text)
     clause_scores = _clause_level_scores(gt_sql_text, llm_sql_text)
-    bleu = _sql_bleu(gt_sql_text, llm_sql_text)
-    jaccard = _token_jaccard(gt_sql_text, llm_sql_text)
-
     composite = _composite_score(
         result_f1=f1,
         ast_sim=ast_sim if ast_sim is not None else 0.0,
-        bleu=bleu,
     )
 
     return {
@@ -51,8 +46,6 @@ def evaluate_query(
         "error_category": error_category,
         "composite_score": _round(composite),
         "clause_scores": clause_scores,
-        "bleu": _round(bleu),
-        "token_jaccard": _round(jaccard),
     }
 
 
@@ -60,18 +53,17 @@ def _round(value: float | None) -> float | None:
     return round(value, 4) if value is not None else None
 
 
-_DEFAULT_WEIGHTS = {"f1": 0.50, "ast": 0.30, "bleu": 0.20}
+_DEFAULT_WEIGHTS = {"f1": 0.60, "ast": 0.40}
 
 
 def _composite_score(
     result_f1: float | None,
     ast_sim: float,
-    bleu: float = 0.0,
     weights: dict | None = None,
 ) -> float:
     w = weights or _DEFAULT_WEIGHTS
-    components = {"ast": ast_sim, "bleu": bleu}
-    w_total = w["ast"] + w["bleu"]
+    components = {"ast": ast_sim}
+    w_total = w["ast"]
 
     if result_f1 is not None:
         components["f1"] = result_f1
@@ -116,29 +108,6 @@ def _clause_level_scores(ref_sql: str, gen_sql: str) -> dict | None:
             scores[clause] = 1.0 if r == g else 0.0
     return scores
 
-
-def _sql_tokenize(sql: str) -> list[str]:
-    try:
-        return [t.text.upper() for t in sqlglot.tokenize(sql, dialect="postgres") if t.text.strip()]
-    except Exception:
-        return sql.upper().split()
-
-
-def _sql_bleu(ref_sql: str, gen_sql: str) -> float:
-    ref_tokens = _sql_tokenize(ref_sql)
-    gen_tokens = _sql_tokenize(gen_sql)
-    if not ref_tokens or not gen_tokens:
-        return 0.0
-    return sentence_bleu([ref_tokens], gen_tokens, smoothing_function=SmoothingFunction().method1)
-
-
-def _token_jaccard(ref_sql: str, gen_sql: str) -> float:
-    ref_set = {t for t in _sql_tokenize(ref_sql) if t not in ("(", ")", ",", ";")}
-    gen_set = {t for t in _sql_tokenize(gen_sql) if t not in ("(", ")", ",", ";")}
-    if not ref_set and not gen_set:
-        return 1.0
-    union = ref_set | gen_set
-    return len(ref_set & gen_set) / len(union) if union else 0.0
 
 
 def _classify_error(sql: str, error_text: str) -> str:

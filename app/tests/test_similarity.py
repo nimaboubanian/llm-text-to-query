@@ -3,7 +3,7 @@ from pathlib import Path
 
 from text2query.benchmark.similarity import (
     _ast_similarity, _classify_error, _clause_level_scores, _composite_score,
-    _round, _result_set_comparison, _sql_bleu, _token_jaccard,
+    _round, _result_set_comparison,
 )
 
 
@@ -60,24 +60,6 @@ def test_round_preserves_short():
     assert _round(0.5) == 0.5
 
 
-class TestBleuAndJaccard:
-    def test_bleu_identical(self):
-        sql = "SELECT id, name FROM users WHERE active = true"
-        score = _sql_bleu(sql, sql)
-        assert score > 0.9
-
-    def test_bleu_different(self):
-        score = _sql_bleu("SELECT id FROM users", "DELETE FROM orders WHERE x = 1")
-        assert score < 0.3
-
-    def test_jaccard_identical(self):
-        sql = "SELECT id FROM users"
-        assert _token_jaccard(sql, sql) == 1.0
-
-    def test_jaccard_disjoint(self):
-        score = _token_jaccard("SELECT a FROM x", "INSERT INTO y VALUES 1")
-        assert score < 0.2
-
 
 class TestClassifyError:
     def test_schema_mismatch(self):
@@ -103,11 +85,11 @@ class TestClassifyError:
 
 class TestCompositeScore:
     def test_all_components(self):
-        score = _composite_score(result_f1=1.0, ast_sim=1.0, bleu=1.0)
+        score = _composite_score(result_f1=1.0, ast_sim=1.0)
         assert score == pytest.approx(1.0)
 
     def test_missing_f1_renormalizes(self):
-        score = _composite_score(result_f1=None, ast_sim=1.0, bleu=1.0)
+        score = _composite_score(result_f1=None, ast_sim=1.0)
         assert score == pytest.approx(1.0)
 
     def test_all_zero(self):

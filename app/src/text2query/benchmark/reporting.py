@@ -50,8 +50,6 @@ def _format_per_query_similarity(result: dict) -> str:
         f"| Exact Match | {_v(result['exact_match'])} |",
         f"| AST Similarity | {_v(result['ast_similarity'])} |",
         f"| Composite Score | {_v(result.get('composite_score'))} |",
-        f"| BLEU | {_v(result.get('bleu'))} |",
-        f"| Token Jaccard | {_v(result.get('token_jaccard'))} |",
     ]
 
     if result.get("error_category"):
@@ -73,26 +71,23 @@ def _format_per_query_multiseed(seed_results: list[dict]) -> str:
     """Format per-query report for multi-seed runs showing all seeds + aggregated stats."""
     lines = [
         "## Per-Seed Results\n",
-        "| Seed | Status | Result F1 | AST Sim | BLEU | Jaccard | Composite |",
-        "|---|---|---|---|---|---|---|",
+        "| Seed | Status | Result F1 | AST Sim | Composite |",
+        "|---|---|---|---|---|",
     ]
 
     for r in seed_results:
         lines.append(
             f"| {r['seed']} | {r['status']} | {_v(r['result_f1'])} "
-            f"| {_v(r['ast_similarity'])} | {_v(r.get('bleu'))} "
-            f"| {_v(r.get('token_jaccard'))} | {_v(r.get('composite_score'))} |"
+            f"| {_v(r['ast_similarity'])} | {_v(r.get('composite_score'))} |"
         )
 
     lines.append("")
     lines.append("## Aggregated Statistics\n")
 
-    metrics = ["result_f1", "ast_similarity", "bleu", "token_jaccard", "composite_score"]
+    metrics = ["result_f1", "ast_similarity", "composite_score"]
     metric_labels = {
         "result_f1": "Result F1",
         "ast_similarity": "AST Similarity",
-        "bleu": "BLEU",
-        "token_jaccard": "Token Jaccard",
         "composite_score": "Composite Score",
     }
 
@@ -145,16 +140,15 @@ def _format_summary_similarity(all_results: list[dict]) -> str:
 
     lines += [
         "",
-        "| Query | Status | Result F1 | AST Sim | BLEU | Jaccard | Composite |",
-        "|---|---|---|---|---|---|---|",
+        "| Query | Status | Result F1 | AST Sim | Composite |",
+        "|---|---|---|---|---|",
     ]
 
     for r in all_results:
         qid = f"{r['query_id']:02d}"
         lines.append(
             f"| {qid} | {r['status']} | {_v(r['result_f1'])} "
-            f"| {_v(r['ast_similarity'])} | {_v(r.get('bleu'))} "
-            f"| {_v(r.get('token_jaccard'))} | {_v(r.get('composite_score'))} |"
+            f"| {_v(r['ast_similarity'])} | {_v(r.get('composite_score'))} |"
         )
 
     return "\n".join(lines) + "\n"
@@ -321,7 +315,7 @@ def _generate_multiseed_reports(
     aggregated = []
     metrics_to_aggregate = [
         "result_f1", "result_precision", "result_recall",
-        "ast_similarity", "composite_score", "bleu", "token_jaccard",
+        "ast_similarity", "composite_score",
     ]
 
     for qid in query_ids:
@@ -395,7 +389,7 @@ def generate_cross_model_report(
     model_aggregated = {}
 
     metrics_to_aggregate = [
-        "result_f1", "ast_similarity", "composite_score", "bleu", "token_jaccard",
+        "result_f1", "ast_similarity", "composite_score",
     ]
 
     for model in models:
@@ -434,8 +428,6 @@ def generate_cross_model_report(
                     "result_precision": sim.get("result_precision", ""),
                     "result_recall": sim.get("result_recall", ""),
                     "ast_similarity": sim.get("ast_similarity", ""),
-                    "bleu": sim.get("bleu", ""),
-                    "token_jaccard": sim.get("token_jaccard", ""),
                     "composite_score": sim.get("composite_score", ""),
                     "exact_match": sim.get("exact_match", ""),
                     "error_category": sim.get("error_category", ""),
@@ -453,7 +445,7 @@ def generate_cross_model_report(
     fieldnames = [
         "model", "query_id", "seed", "status",
         "result_f1", "result_precision", "result_recall",
-        "ast_similarity", "bleu", "token_jaccard", "composite_score",
+        "ast_similarity", "composite_score",
         "exact_match", "error_category",
     ]
     with open(csv_path, "w", newline="") as f:

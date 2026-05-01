@@ -4,8 +4,8 @@
 x-config: &config
   DEFAULT_MODEL: "qwen2.5-coder:7b"
   FRONTDESK_MODEL: "llama3.2:3b"
-  BENCHMARK_MODELS: "qwen2.5:3b,llama3.2:3b"
-  BENCHMARK_NUM_SEEDS: "3"
+  BENCHMARK_MODELS: "qwen2.5-coder:7b"
+  BENCHMARK_NUM_SEEDS: "1"
   BENCHMARK_QUERY_IDS: "1"
 
 # Default database for Interactive mode.

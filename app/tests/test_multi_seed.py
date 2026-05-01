@@ -124,7 +124,6 @@ def test_format_summary_multiseed():
 
     output = _format_summary_multiseed(aggregated, num_seeds=3)
 
-    assert "3 seeds" in output
     assert "±" in output
     assert "01" in output
     assert "02" in output

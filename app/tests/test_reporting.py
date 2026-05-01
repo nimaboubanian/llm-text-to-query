@@ -30,26 +30,18 @@ def test_unknown_error_detail_shown_in_report():
     assert "could not determine data type" in output
 
 
-def test_summary_counts():
+def test_summary_per_query_table():
     results = [
         {"query_id": 1, "status": "ok", "result_f1": 1.0, "ast_similarity": 0.8, "result_precision": 1.0, "result_recall": 1.0},
-        {"query_id": 2, "status": "ok", "result_f1": 0.5, "ast_similarity": 0.6, "result_precision": 0.5, "result_recall": 0.5},
+        {"query_id": 2, "status": "exec_error", "result_f1": 0.0, "ast_similarity": 0.2, "result_precision": 0.0, "result_recall": 0.0},
+        {"query_id": 3, "status": "missing", "result_f1": None, "ast_similarity": None, "result_precision": None, "result_recall": None},
     ]
     output = _format_summary_similarity(results)
-    assert "2 executed" in output
-    assert "1 / 2" in output   # one exact match (F1 = 1.0)
-
-
-def test_summary_separates_failed_from_executed():
-    results = [
-        {"query_id": 1, "status": "ok", "result_f1": 0.8, "ast_similarity": 0.7, "result_precision": 0.8, "result_recall": 0.8, "error_category": None},
-        {"query_id": 2, "status": "exec_error", "result_f1": 0.0, "ast_similarity": 0.2, "result_precision": 0.0, "result_recall": 0.0, "error_category": "SchemaMismatch"},
-        {"query_id": 3, "status": "missing", "result_f1": None, "ast_similarity": None, "result_precision": None, "result_recall": None, "error_category": None},
-    ]
-    output = _format_summary_similarity(results)
-    assert "1 executed" in output
-    assert "SchemaMismatch" in output
-    assert "Not generated" in output
+    assert "01" in output
+    assert "ok" in output
+    assert "exec_error" in output
+    assert "missing" in output
+    assert "1.0000" in output
 
 
 def test_compute_stats_basic():

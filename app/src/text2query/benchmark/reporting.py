@@ -102,69 +102,22 @@ def _format_per_query_multiseed(seed_results: list[dict]) -> str:
 
 
 def _format_summary_similarity(all_results: list[dict]) -> str:
-    total = len(all_results)
-
-    ok_results = [r for r in all_results if r["status"] == "ok"]
-    failed_results = [r for r in all_results if r["status"] != "ok"]
-
-    f1_vals = [r["result_f1"] if r["result_f1"] is not None else 0.0 for r in all_results]
-    exact_matches = sum(1 for v in f1_vals if v == 1.0)
-
-    error_results = [r for r in all_results if r.get("error_category")]
-    error_counts = {}
-    for r in error_results:
-        cat = r["error_category"]
-        error_counts[cat] = error_counts.get(cat, 0) + 1
-
-    lines = ["## Similarity Metrics\n"]
-
-    lines.append(f"- **Queries:** {len(ok_results)} executed, {total - len(ok_results)} failed / {total} total")
-    lines.append(f"- **Exact matches (F1 = 1.0):** {exact_matches} / {total}")
-
-    if failed_results:
-        exec_errors = [r for r in failed_results if r["status"] == "exec_error"]
-        if exec_errors:
-            lines.append(f"- **Execution errors:** {len(exec_errors)}")
-            if error_counts:
-                for cat, count in sorted(error_counts.items()):
-                    lines.append(f"  - {cat}: {count}")
-        missing = sum(1 for r in failed_results if r["status"] == "missing")
-        if missing:
-            lines.append(f"- **Not generated:** {missing}")
-
-    lines += [
-        "",
+    lines = [
         "| Query | Status | Result F1 | AST Sim |",
         "|---|---|---|---|",
     ]
-
     for r in all_results:
         qid = f"{r['query_id']:02d}"
         lines.append(
             f"| {qid} | {r['status']} | {_v(r['result_f1'])} "
             f"| {_v(r['ast_similarity'])} |"
         )
-
     return "\n".join(lines) + "\n"
 
 
 def _format_summary_multiseed(aggregated: list[dict], num_seeds: int) -> str:
-    """Format summary report for multi-seed runs with mean±std columns."""
-    total = len(aggregated)
-
-    exact_matches = sum(
-        1 for q in aggregated
-        if q["result_f1"]["mean"] is not None and q["result_f1"]["mean"] == 1.0
-    )
-
+    """Format per-query table for multi-seed runs with mean±std columns."""
     lines = [
-        f"## Similarity Metrics ({num_seeds} seeds)\n",
-        f"- **Queries evaluated:** {total}",
-        f"- **Exact matches (F1 = 1.0 mean):** {exact_matches} / {total}",
-    ]
-
-    lines += [
-        "",
         "| Query | Seeds ok | F1 (mean±std) | AST (mean±std) | F1 95% CI |",
         "|---|---|---|---|---|",
     ]
@@ -217,7 +170,7 @@ def _generate_single_reports(
     model: str | None = None,
     selected_ids: list[str] | None = None,
 ) -> tuple[Path, list[dict]]:
-    """Original single-seed report generation (backward compatible)."""
+    """Single-seed report generation."""
     per_query_dir = report_dir / "per_query"
     per_query_dir.mkdir(parents=True, exist_ok=True)
 
@@ -260,6 +213,7 @@ def _generate_single_reports(
     executed = sum(1 for r in all_results if r["status"] == "ok")
     errors = sum(1 for r in all_results if r["status"] == "exec_error")
     not_generated = sum(1 for r in all_results if r["status"] == "missing")
+    exact_matches = sum(1 for r in all_results if r.get("result_f1") == 1.0)
 
     model_line = f"| Model | {model} |\n" if model else ""
     summary = (
@@ -270,6 +224,7 @@ def _generate_single_reports(
         f"| Benchmark | TPC-H |\n"
         f"| Total queries | {total} |\n"
         f"| Executed successfully | {executed} |\n"
+        f"| Exact matches (F1 = 1.0) | {exact_matches} |\n"
         f"| Execution errors | {errors} |\n"
         f"| Not generated | {not_generated} |\n\n"
         + _format_summary_similarity(all_results)
@@ -354,6 +309,10 @@ def _generate_multiseed_reports(
         print(f"  [{qid}] evaluated across {len(seeds)} seeds")
 
     total = len(query_ids)
+    exact_matches = sum(
+        1 for q in aggregated
+        if q["result_f1"]["mean"] is not None and q["result_f1"]["mean"] == 1.0
+    )
 
     model_line = f"| Model | {model} |\n" if model else ""
     summary = (
@@ -364,7 +323,8 @@ def _generate_multiseed_reports(
         f"| Benchmark | TPC-H |\n"
         f"| Total queries | {total} |\n"
         f"| Seeds per query | {len(seeds)} |\n"
-        f"| Total evaluations | {total * len(seeds)} |\n\n"
+        f"| Total evaluations | {total * len(seeds)} |\n"
+        f"| Exact matches (F1 = 1.0 mean) | {exact_matches} |\n\n"
         + _format_summary_multiseed(aggregated, len(seeds))
     )
     (report_dir / "summary.md").write_text(summary)
@@ -476,11 +436,6 @@ def generate_cross_model_report(
 
     # Write comparison.md
     num_seeds = len(seeds) if seeds else 1
-
-    def _stat_str(s):
-        if s["mean"] is None:
-            return "—"
-        return f"{s['mean']:.4f} ± {s['std']:.4f}" if num_seeds > 1 else f"{s['mean']:.4f}"
 
     lines = [
         f"# Cross-Model Comparison ({len(models)} models, {num_seeds} seed{'s' if num_seeds > 1 else ''})\n",

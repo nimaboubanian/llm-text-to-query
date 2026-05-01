@@ -192,6 +192,51 @@ def test_archive_with_seed_subdirs(tmp_path):
     assert not answers.exists()
 
 
+def test_raw_file_written_on_api_error(tmp_path):
+    """When Ollama returns an error chunk, a .raw file with ERROR: prefix is written."""
+    questions_dir = tmp_path / "questions"
+    output_dir = tmp_path / "output"
+    questions_dir.mkdir()
+    _make_question_file(questions_dir, "01", "What are the totals?")
+
+    def mock_streaming(*args, **kwargs):
+        yield {"type": "error", "message": "Model 'bad-model' not found."}
+
+    with patch("text2query.benchmark.runner.get_sql_from_llm_streaming", side_effect=mock_streaming), \
+         patch("text2query.benchmark.runner.create_engine_for_database"), \
+         patch("text2query.benchmark.runner.get_database_schema_string", return_value="schema"):
+        run_llm_generation(questions_dir, output_dir, "db://url", "bad-model", seeds=None)
+
+    assert not (output_dir / "01.sql").exists()
+    raw = output_dir / "01.raw"
+    assert raw.exists()
+    assert raw.read_text().startswith("ERROR:")
+    assert "not found" in raw.read_text()
+
+
+def test_raw_file_written_on_extraction_failure(tmp_path):
+    """When model responds but no SQL can be extracted, .raw contains the raw output."""
+    questions_dir = tmp_path / "questions"
+    output_dir = tmp_path / "output"
+    questions_dir.mkdir()
+    _make_question_file(questions_dir, "01", "What are the totals?")
+
+    raw_model_output = "I'm sorry, I cannot generate SQL for this question."
+
+    def mock_streaming(*args, **kwargs):
+        yield {"type": "done", "sql": None, "full_response": raw_model_output}
+
+    with patch("text2query.benchmark.runner.get_sql_from_llm_streaming", side_effect=mock_streaming), \
+         patch("text2query.benchmark.runner.create_engine_for_database"), \
+         patch("text2query.benchmark.runner.get_database_schema_string", return_value="schema"):
+        run_llm_generation(questions_dir, output_dir, "db://url", "test-model", seeds=None)
+
+    assert not (output_dir / "01.sql").exists()
+    raw = output_dir / "01.raw"
+    assert raw.exists()
+    assert raw.read_text() == raw_model_output
+
+
 def test_query_id_filter_llm_generation(tmp_path):
     """query_ids filter should skip questions not in the selected set."""
     questions_dir = tmp_path / "questions"

@@ -59,7 +59,7 @@ def validate_directories(
     print(f"  ✓ Queries: {queries_dir}")
 
 
-def check_database_readiness(db_url: str, **_) -> bool:
+def check_database_readiness(db_url: str) -> bool:
     print("  Checking database readiness...")
     ready = check_database_ready(db_url)
     if ready:

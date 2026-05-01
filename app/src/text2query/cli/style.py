@@ -84,13 +84,6 @@ def _cols():
         return 80
 
 
-def _rows():
-    try:
-        return os.get_terminal_size().lines
-    except OSError:
-        return 24
-
-
 def rule(width=30):
     return f"  {FG_MUTED}{'─' * width}{RESET}"
 

@@ -138,11 +138,7 @@ def main():
         print()
 
         print("Check Database Readiness")
-        is_ready = check_database_readiness(
-            db_url=DATABASE_URL,
-            schema_file=schema_file,
-            scale_factor=BENCHMARK_SCALE_FACTOR
-        )
+        is_ready = check_database_readiness(db_url=DATABASE_URL)
         print()
 
         if not is_ready:

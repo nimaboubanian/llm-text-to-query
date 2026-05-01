@@ -220,18 +220,26 @@ def main():
         print("  Benchmark Complete")
         print("=" * 60)
         print()
+
+        total_questions = len(list(questions_dir.glob("*.md")))
+        total_gt = len(list(queries_dir.glob("*.sql")))
+
         print("Summary:")
-        print(f"  - Questions:       {len(list(questions_dir.glob('*.md')))} files")
-        print(f"  - Ground truth:    {len(list(queries_dir.glob('*.sql')))} queries")
-        print(f"  - Reference ans:   {len(list(answers_dir.glob('*.csv')))} files")
-        print(f"  - Session:         {session_dir}")
-        if multi_model:
-            print(f"  - Models:          {', '.join(models)}")
+        if query_ids is not None:
+            print(f"  - Queries benchmarked: {len(query_ids)} / {total_questions} ({', '.join(query_ids)})")
         else:
-            print(f"  - Model:           {models[0]}")
+            print(f"  - Queries benchmarked: {total_questions} / {total_questions} (all)")
+        print(f"  - Ground truth:        {total_gt} queries available")
+        if multi_model:
+            print(f"  - Models:              {', '.join(models)}")
+        else:
+            print(f"  - Model:               {models[0]}")
         if seeds:
-            print(f"  - Seeds:           {BENCHMARK_NUM_SEEDS} ({seeds})")
-        print(f"  - Database:        {DATABASE_URL}")
+            print(f"  - Seeds per query:     {BENCHMARK_NUM_SEEDS}")
+            total_evals = len(query_ids) * BENCHMARK_NUM_SEEDS if query_ids else total_questions * BENCHMARK_NUM_SEEDS
+            print(f"  - Total evaluations:   {total_evals} ({len(query_ids) if query_ids else total_questions} queries × {BENCHMARK_NUM_SEEDS} seeds × {len(models)} model{'s' if len(models) > 1 else ''})")
+        print(f"  - Session:             {session_dir}")
+        print(f"  - Database:            {DATABASE_URL}")
         print()
 
         return 0

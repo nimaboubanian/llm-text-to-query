@@ -80,11 +80,13 @@ def _run_single_generation(
         print(f"  [{i}/{len(to_process)}] Q{query_id}...", end="", flush=True)
 
         generated_sql = None
+        raw_response = None
         error = None
 
         for chunk in get_sql_from_llm_streaming(question, schema, model, seed=seed):
             if chunk["type"] == "done":
                 generated_sql = chunk.get("sql")
+                raw_response = chunk.get("full_response")
                 break
             elif chunk["type"] == "error":
                 error = chunk.get("message")
@@ -96,8 +98,13 @@ def _run_single_generation(
             print(" ✓")
             results.append({"query_id": query_id, "status": "success"})
         else:
+            raw_file = output_dir / f"{query_id}.raw"
+            if error:
+                raw_file.write_text(f"ERROR: {error}\n")
+            elif raw_response:
+                raw_file.write_text(raw_response)
             print(" ✗")
-            results.append({"query_id": query_id, "status": "error", "error": error or "No SQL generated"})
+            results.append({"query_id": query_id, "status": "error", "error": error or "No SQL extracted"})
 
     success = sum(1 for r in results if r["status"] == "success")
     errors = sum(1 for r in results if r["status"] == "error")

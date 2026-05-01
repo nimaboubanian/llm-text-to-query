@@ -1,6 +1,5 @@
 .*/
 *.egg-info
-.codex
 __pycache__/
 app/.pytest_cache/
 app/.venv/
@@ -11,4 +10,3 @@ benchmark/answers/*
 benchmark/queries/*
 benchmark/reports/*
 benchmark/results/*
-

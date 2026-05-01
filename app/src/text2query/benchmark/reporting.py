@@ -192,7 +192,20 @@ def _generate_single_reports(
 
         ref_sql = (reference_queries_dir / f"{qid}.sql").read_text().strip()
         llm_sql_path = generated_queries_dir / f"{qid}.sql"
+        raw_path = generated_queries_dir / f"{qid}.raw"
         llm_sql = llm_sql_path.read_text().strip() if llm_sql_path.exists() else None
+
+        if llm_sql:
+            llm_section = f"```sql\n{llm_sql}\n```\n\n"
+        elif raw_path.exists():
+            raw_content = raw_path.read_text().strip()
+            if raw_content.startswith("ERROR:"):
+                llm_section = f"*(generation failed — {raw_content})*\n\n"
+            else:
+                snippet = raw_content[:800] + ("\n\n*[truncated]*" if len(raw_content) > 800 else "")
+                llm_section = f"*(SQL extraction failed — model output:)*\n\n```\n{snippet}\n```\n\n"
+        else:
+            llm_section = "*(not generated)*\n\n"
 
         status = sim_result["status"]
         meta = f"- **Model:** {model}\n" if model else ""
@@ -203,7 +216,7 @@ def _generate_single_reports(
             f"- **Status:** {status}\n\n"
             f"## Reference SQL\n\n```sql\n{ref_sql}\n```\n\n"
             f"## LLM-Generated SQL\n\n"
-            + (f"```sql\n{llm_sql}\n```\n\n" if llm_sql else "*(not generated)*\n\n")
+            + llm_section
             + _format_per_query_similarity(sim_result)
         )
         (per_query_dir / f"{qid}.md").write_text(report)
@@ -291,8 +304,16 @@ def _generate_multiseed_reports(
         seed_sql_sections = "\n## LLM-Generated SQL by Seed\n\n"
         for seed in seeds:
             seed_sql_path = generated_queries_dir / f"seed_{seed}" / f"{qid}.sql"
+            seed_raw_path = generated_queries_dir / f"seed_{seed}" / f"{qid}.raw"
             if seed_sql_path.exists():
                 seed_sql_sections += f"### Seed {seed}\n\n```sql\n{seed_sql_path.read_text().strip()}\n```\n\n"
+            elif seed_raw_path.exists():
+                raw_content = seed_raw_path.read_text().strip()
+                if raw_content.startswith("ERROR:"):
+                    seed_sql_sections += f"### Seed {seed}\n\n*(generation failed — {raw_content})*\n\n"
+                else:
+                    snippet = raw_content[:800] + ("\n\n*[truncated]*" if len(raw_content) > 800 else "")
+                    seed_sql_sections += f"### Seed {seed}\n\n*(SQL extraction failed — model output:)*\n\n```\n{snippet}\n```\n\n"
             else:
                 seed_sql_sections += f"### Seed {seed}\n\n*(not generated)*\n\n"
 
@@ -543,7 +564,7 @@ def _move_contents(src_dir: Path, dst_dir: Path, label: str) -> None:
         print(f"  Moved {len(subdirs)} dirs of {label} -> {dst_dir}")
 
     # Move flat files (single-seed, single-model / backward compat)
-    files = list(src_dir.glob("*.sql")) + list(src_dir.glob("*.csv"))
+    files = list(src_dir.glob("*.sql")) + list(src_dir.glob("*.csv")) + list(src_dir.glob("*.raw"))
     for f in files:
         shutil.move(str(f), str(dst_dir / f.name))
     if files:

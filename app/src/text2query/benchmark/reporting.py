@@ -489,7 +489,7 @@ def generate_cross_model_report(
     # Per-query comparison table (F1)
     lines += [
         "",
-        "## Per-Query F1 Comparison\n",
+        "## F1\n",
     ]
     header = "| Query | " + " | ".join(m for m in models) + " |"
     sep = "|---|" + "|".join("---" for _ in models) + "|"
@@ -513,7 +513,7 @@ def generate_cross_model_report(
     # Per-query comparison table (AST Similarity)
     lines += [
         "",
-        "## Per-Query AST Similarity Comparison\n",
+        "## AST Similarity\n",
     ]
     lines += [header, sep]
 

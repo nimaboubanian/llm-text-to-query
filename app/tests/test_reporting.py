@@ -30,30 +30,26 @@ def test_unknown_error_detail_shown_in_report():
     assert "could not determine data type" in output
 
 
-def test_summary_computes_averages():
+def test_summary_counts():
     results = [
         {"query_id": 1, "status": "ok", "result_f1": 1.0, "ast_similarity": 0.8, "result_precision": 1.0, "result_recall": 1.0},
         {"query_id": 2, "status": "ok", "result_f1": 0.5, "ast_similarity": 0.6, "result_precision": 0.5, "result_recall": 0.5},
     ]
     output = _format_summary_similarity(results)
-    assert "0.7500" in output  # avg F1 = (1.0 + 0.5) / 2
-    assert "0.7000" in output  # avg AST = (0.8 + 0.6) / 2
     assert "2 executed" in output
+    assert "1 / 2" in output   # one exact match (F1 = 1.0)
 
 
-def test_summary_includes_failures_in_average():
+def test_summary_separates_failed_from_executed():
     results = [
         {"query_id": 1, "status": "ok", "result_f1": 0.8, "ast_similarity": 0.7, "result_precision": 0.8, "result_recall": 0.8, "error_category": None},
         {"query_id": 2, "status": "exec_error", "result_f1": 0.0, "ast_similarity": 0.2, "result_precision": 0.0, "result_recall": 0.0, "error_category": "SchemaMismatch"},
         {"query_id": 3, "status": "missing", "result_f1": None, "ast_similarity": None, "result_precision": None, "result_recall": None, "error_category": None},
     ]
     output = _format_summary_similarity(results)
-    # avg F1 over ALL queries: (0.8 + 0.0 + 0.0) / 3 = 0.2667
-    assert "0.2667" in output
-    assert "3 queries" in output  # total queries in label
-    assert "1 executed" in output  # executed count
+    assert "1 executed" in output
     assert "SchemaMismatch" in output
-    assert "not generated: 1" in output
+    assert "Not generated" in output
 
 
 def test_compute_stats_basic():

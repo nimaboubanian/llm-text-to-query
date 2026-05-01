@@ -107,12 +107,7 @@ def _format_summary_similarity(all_results: list[dict]) -> str:
     ok_results = [r for r in all_results if r["status"] == "ok"]
     failed_results = [r for r in all_results if r["status"] != "ok"]
 
-    # Failure-adjusted: treat missing/failed queries as F1=0
     f1_vals = [r["result_f1"] if r["result_f1"] is not None else 0.0 for r in all_results]
-    ast_vals = [r["ast_similarity"] for r in all_results if r["ast_similarity"] is not None]
-    avg_f1 = sum(f1_vals) / len(f1_vals) if f1_vals else None
-    avg_ast = sum(ast_vals) / len(ast_vals) if ast_vals else None
-
     exact_matches = sum(1 for v in f1_vals if v == 1.0)
 
     error_results = [r for r in all_results if r.get("error_category")]
@@ -123,20 +118,19 @@ def _format_summary_similarity(all_results: list[dict]) -> str:
 
     lines = ["## Similarity Metrics\n"]
 
-    if avg_f1 is not None:
-        lines.append(f"- **Average Result F1:** {avg_f1:.4f} (over {total} queries, {len(ok_results)} executed)")
-    lines.append(f"- **Exact matches:** {exact_matches} / {total}")
-    if avg_ast is not None:
-        lines.append(f"- **Average AST Similarity:** {avg_ast:.4f} (over {len(ast_vals)} queries)")
+    lines.append(f"- **Queries:** {len(ok_results)} executed, {total - len(ok_results)} failed / {total} total")
+    lines.append(f"- **Exact matches (F1 = 1.0):** {exact_matches} / {total}")
 
     if failed_results:
-        lines.append(f"- **Execution errors:** {len([r for r in failed_results if r['status'] == 'exec_error'])}")
-        if error_counts:
-            for cat, count in sorted(error_counts.items()):
-                lines.append(f"  - {cat}: {count}")
+        exec_errors = [r for r in failed_results if r["status"] == "exec_error"]
+        if exec_errors:
+            lines.append(f"- **Execution errors:** {len(exec_errors)}")
+            if error_counts:
+                for cat, count in sorted(error_counts.items()):
+                    lines.append(f"  - {cat}: {count}")
         missing = sum(1 for r in failed_results if r["status"] == "missing")
         if missing:
-            lines.append(f"  - not generated: {missing}")
+            lines.append(f"- **Not generated:** {missing}")
 
     lines += [
         "",
@@ -158,22 +152,16 @@ def _format_summary_multiseed(aggregated: list[dict], num_seeds: int) -> str:
     """Format summary report for multi-seed runs with mean±std columns."""
     total = len(aggregated)
 
-    # Global aggregates across all queries
-    f1_means = [q["result_f1"]["mean"] if q["result_f1"]["mean"] is not None else 0.0 for q in aggregated]
-    ast_means = [q["ast_similarity"]["mean"] if q["ast_similarity"]["mean"] is not None else 0.0 for q in aggregated]
-
-    global_f1 = _compute_stats(f1_means)
-    global_ast = _compute_stats(ast_means)
+    exact_matches = sum(
+        1 for q in aggregated
+        if q["result_f1"]["mean"] is not None and q["result_f1"]["mean"] == 1.0
+    )
 
     lines = [
         f"## Similarity Metrics ({num_seeds} seeds)\n",
         f"- **Queries evaluated:** {total}",
+        f"- **Exact matches (F1 = 1.0 mean):** {exact_matches} / {total}",
     ]
-
-    if global_f1["mean"] is not None:
-        lines.append(f"- **Average Result F1:** {global_f1['mean']:.4f} ± {global_f1['std']:.4f}")
-    if global_ast["mean"] is not None:
-        lines.append(f"- **Average AST Similarity:** {global_ast['mean']:.4f} ± {global_ast['std']:.4f}")
 
     lines += [
         "",
@@ -489,31 +477,14 @@ def generate_cross_model_report(
     # Write comparison.md
     num_seeds = len(seeds) if seeds else 1
 
-    lines = [
-        f"# Cross-Model Comparison ({len(models)} models, {num_seeds} seed{'s' if num_seeds > 1 else ''})\n",
-        "## Model Summary\n",
-        "| Model | Avg F1 | Avg AST Sim |",
-        "|---|---|---|",
-    ]
-
     def _stat_str(s):
         if s["mean"] is None:
             return "—"
         return f"{s['mean']:.4f} ± {s['std']:.4f}" if num_seeds > 1 else f"{s['mean']:.4f}"
 
-    for model in models:
-        f1_means = [
-            model_aggregated[model][qid]["result_f1"]["mean"] if model_aggregated[model][qid]["result_f1"]["mean"] is not None else 0.0
-            for qid in query_ids
-        ]
-        ast_means = [
-            model_aggregated[model][qid]["ast_similarity"]["mean"] if model_aggregated[model][qid]["ast_similarity"]["mean"] is not None else 0.0
-            for qid in query_ids
-        ]
-        lines.append(
-            f"| {model} | {_stat_str(_compute_stats(f1_means))} "
-            f"| {_stat_str(_compute_stats(ast_means))} |"
-        )
+    lines = [
+        f"# Cross-Model Comparison ({len(models)} models, {num_seeds} seed{'s' if num_seeds > 1 else ''})\n",
+    ]
 
     # Per-query comparison table (F1)
     lines += [
@@ -551,8 +522,9 @@ def generate_cross_model_report(
         for model in models:
             agg = model_aggregated[model][qid]
             ast = agg["ast_similarity"]
+            status = agg.get("status_summary", "")
             if ast["mean"] is None:
-                row += "| — "
+                row += f"| {status} "
             elif num_seeds > 1:
                 row += f"| {ast['mean']:.4f} ± {ast['std']:.4f} "
             else:

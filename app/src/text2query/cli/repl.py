@@ -180,7 +180,7 @@ def main():
         "",
         f"  {FG_MUTED}Model{RESET}   {FG_CYAN}{current_model}{RESET}",
         assist_line,
-        f"  {FG_MUTED}DB{RESET}      {FG_TEXT}{db_name}{RESET}  {FG_MUTED}·  {len(tables)} tables ({', '.join(tables)}){RESET}",
+        f"  {FG_MUTED}DB{RESET}      {FG_TEXT}{db_name}{RESET}",
         "",
         f"  {FG_MUTED}/help · /schema · /model <name> · /sql · /exit{RESET}",
         "",

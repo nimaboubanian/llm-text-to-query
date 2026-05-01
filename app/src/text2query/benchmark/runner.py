@@ -12,6 +12,7 @@ def run_llm_generation(
     db_url: str,
     model: str,
     seeds: list[int] | None = None,
+    query_ids: list[str] | None = None,
 ) -> list[dict]:
     if seeds and len(seeds) > 1:
         all_results = []
@@ -19,7 +20,7 @@ def run_llm_generation(
             seed_dir = output_dir / f"seed_{seed}"
             print(f"\n  --- Seed {seed} ---")
             results = _run_single_generation(
-                questions_dir, seed_dir, db_url, model, seed=seed,
+                questions_dir, seed_dir, db_url, model, seed=seed, query_ids=query_ids,
             )
             all_results.extend(
                 {**r, "seed": seed} for r in results
@@ -28,7 +29,7 @@ def run_llm_generation(
     else:
         seed = seeds[0] if seeds else None
         return _run_single_generation(
-            questions_dir, output_dir, db_url, model, seed=seed,
+            questions_dir, output_dir, db_url, model, seed=seed, query_ids=query_ids,
         )
 
 
@@ -38,8 +39,11 @@ def _run_single_generation(
     db_url: str,
     model: str,
     seed: int | None = None,
+    query_ids: list[str] | None = None,
 ) -> list[dict]:
     question_files = sorted(questions_dir.glob("*.md"))
+    if query_ids is not None:
+        question_files = [q for q in question_files if q.stem in query_ids]
     total = len(question_files)
 
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -111,6 +115,7 @@ def execute_generated_queries(
     answers_dir: Path,
     db_url: str,
     seeds: list[int] | None = None,
+    query_ids: list[str] | None = None,
 ) -> list[dict]:
     if seeds and len(seeds) > 1:
         all_results = []
@@ -118,21 +123,24 @@ def execute_generated_queries(
             seed_queries = queries_dir / f"seed_{seed}"
             seed_answers = answers_dir / f"seed_{seed}"
             print(f"\n  --- Seed {seed} ---")
-            results = _execute_single(seed_queries, seed_answers, db_url)
+            results = _execute_single(seed_queries, seed_answers, db_url, query_ids=query_ids)
             all_results.extend(
                 {**r, "seed": seed} for r in results
             )
         return all_results
     else:
-        return _execute_single(queries_dir, answers_dir, db_url)
+        return _execute_single(queries_dir, answers_dir, db_url, query_ids=query_ids)
 
 
 def _execute_single(
     queries_dir: Path,
     answers_dir: Path,
     db_url: str,
+    query_ids: list[str] | None = None,
 ) -> list[dict]:
     query_files = sorted(queries_dir.glob("*.sql"))
+    if query_ids is not None:
+        query_files = [q for q in query_files if q.stem in query_ids]
     total = len(query_files)
 
     answers_dir.mkdir(parents=True, exist_ok=True)

@@ -21,10 +21,11 @@ All user-configurable settings are at the top of `compose.yml` in the `x-config`
 
 ```yaml
 x-config: &config
-  DEFAULT_MODEL:       "qwen2.5-coder:7b"     # SQL generation model
-  FRONTDESK_MODEL:     "qwen2.5:3b"           # Intent routing model
-  BENCHMARK_MODELS:    "llama3.2:3b,qwen2.5-coder:7b"
-  BENCHMARK_NUM_SEEDS: "1" # Number of repetitation for more reliable results
+  DEFAULT_MODEL:        "qwen2.5-coder:7b"     # SQL generation model
+  FRONTDESK_MODEL:      "qwen2.5:3b"           # Intent routing model
+  BENCHMARK_MODELS:     "llama3.2:3b,qwen2.5-coder:7b"
+  BENCHMARK_NUM_SEEDS:  "1"   # Repetitions per query for statistical robustness
+  BENCHMARK_QUERY_IDS:  "all" # Comma-separated IDs to run, e.g. "1,3,7" â€” "all" runs everything
 ```
 
 After changing models, recreate the Ollama container to pull them:
@@ -89,9 +90,20 @@ Runs a three-phase TPC-H pipeline: **Setup** (data generation, schema loading) â
 
 Set `BENCHMARK_NUM_SEEDS` in `x-config` to run each query multiple times with different random seeds for statistical robustness (mean, std, 95% CI).
 
+### Query Selection
+
+By default all 22 TPC-H queries are benchmarked. Set `BENCHMARK_QUERY_IDS` to a comma-separated list of query numbers to run only a subset:
+
+```yaml
+BENCHMARK_QUERY_IDS: "1,3,7,22"   # run queries 01, 03, 07, 22 only
+BENCHMARK_QUERY_IDS: "all"         # run all 22 queries (default)
+```
+
+Unknown IDs are warned and skipped; if no valid IDs remain the pipeline aborts. Ground-truth answer generation always runs for all queries regardless of this setting.
+
 ### Multi-Model Mode
 
-Uncomment `BENCHMARK_MODELS` in `x-config` to compare up to 3 models side-by-side. Output includes per-model reports plus `comparison.md` and `results.csv`.
+Set `BENCHMARK_MODELS` in `x-config` to compare up to 3 models side-by-side. Output includes per-model reports plus `comparison.md` and `results.csv`.
 
 ## GPU Acceleration
 

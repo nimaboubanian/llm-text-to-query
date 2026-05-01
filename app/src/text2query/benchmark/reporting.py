@@ -204,18 +204,19 @@ def generate_reports(
     report_dir: Path,
     seeds: list[int] | None = None,
     model: str | None = None,
+    selected_ids: list[str] | None = None,
 ) -> tuple[Path, list[dict]]:
     if seeds and len(seeds) > 1:
         return _generate_multiseed_reports(
             generated_queries_dir, reference_queries_dir,
             generated_answers_dir, reference_answers_dir,
-            report_dir, seeds, model=model,
+            report_dir, seeds, model=model, selected_ids=selected_ids,
         )
     else:
         return _generate_single_reports(
             generated_queries_dir, reference_queries_dir,
             generated_answers_dir, reference_answers_dir,
-            report_dir, model=model,
+            report_dir, model=model, selected_ids=selected_ids,
         )
 
 
@@ -226,14 +227,14 @@ def _generate_single_reports(
     reference_answers_dir: Path,
     report_dir: Path,
     model: str | None = None,
-) -> Path:
+    selected_ids: list[str] | None = None,
+) -> tuple[Path, list[dict]]:
     """Original single-seed report generation (backward compatible)."""
     per_query_dir = report_dir / "per_query"
     per_query_dir.mkdir(parents=True, exist_ok=True)
 
-    query_ids = sorted(
-        f.stem for f in reference_queries_dir.glob("*.sql")
-    )
+    all_ids = sorted(f.stem for f in reference_queries_dir.glob("*.sql"))
+    query_ids = [q for q in all_ids if q in selected_ids] if selected_ids is not None else all_ids
 
     all_results = []
 
@@ -299,14 +300,14 @@ def _generate_multiseed_reports(
     report_dir: Path,
     seeds: list[int],
     model: str | None = None,
-) -> Path:
+    selected_ids: list[str] | None = None,
+) -> tuple[Path, list[dict]]:
     """Generate reports aggregating multiple seed runs with statistical analysis."""
     per_query_dir = report_dir / "per_query"
     per_query_dir.mkdir(parents=True, exist_ok=True)
 
-    query_ids = sorted(
-        f.stem for f in reference_queries_dir.glob("*.sql")
-    )
+    all_ids = sorted(f.stem for f in reference_queries_dir.glob("*.sql"))
+    query_ids = [q for q in all_ids if q in selected_ids] if selected_ids is not None else all_ids
 
     aggregated = []
     all_flat_results = []
@@ -393,9 +394,11 @@ def generate_cross_model_report(
     report_dir: Path,
     seeds: list[int] | None = None,
     precomputed: dict[str, list[dict]] | None = None,
+    selected_ids: list[str] | None = None,
 ) -> Path:
     """Generate cross-model comparison report and CSV export."""
-    query_ids = sorted(f.stem for f in reference_queries_dir.glob("*.sql"))
+    all_ids = sorted(f.stem for f in reference_queries_dir.glob("*.sql"))
+    query_ids = [q for q in all_ids if q in selected_ids] if selected_ids is not None else all_ids
     seeds_list = seeds or [None]
     multi_seed = seeds is not None and len(seeds) > 1
 

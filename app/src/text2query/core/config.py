@@ -17,4 +17,10 @@ BENCHMARK_DATA_PATH = os.getenv("BENCHMARK_DATA_PATH")
 _models_raw = os.getenv("BENCHMARK_MODELS", "")
 BENCHMARK_MODELS = [m.strip() for m in _models_raw.split(",") if m.strip()][:3]
 
+_query_ids_raw = os.getenv("BENCHMARK_QUERY_IDS", "all").strip().lower()
+BENCHMARK_QUERY_IDS: list[str] | None = (
+    None if _query_ids_raw in ("all", "")
+    else [f"{int(q.strip()):02d}" for q in _query_ids_raw.split(",") if q.strip().isdigit()]
+)
+
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://user:password@postgres:5432/testdb")

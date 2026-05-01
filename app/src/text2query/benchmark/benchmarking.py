@@ -35,6 +35,7 @@ def _run_single_model_benchmark(
     db_url: str,
     seeds: list[int] | None,
     multi_model: bool,
+    query_ids: list[str] | None = None,
 ) -> tuple[Path, list[dict]]:
     """Run the full benchmark (generate + execute + report) for one model."""
     if multi_model:
@@ -54,14 +55,14 @@ def _run_single_model_benchmark(
     run_llm_generation(
         questions_dir=questions_dir, output_dir=output_dir,
         db_url=db_url, model=model,
-        seeds=seeds,
+        seeds=seeds, query_ids=query_ids,
     )
     print()
 
     print("Execute LLM-Generated Queries")
     execute_generated_queries(
         queries_dir=output_dir, answers_dir=generated_answers_dir, db_url=db_url,
-        seeds=seeds,
+        seeds=seeds, query_ids=query_ids,
     )
     print()
 
@@ -72,6 +73,7 @@ def _run_single_model_benchmark(
         report_dir=report_dir,
         seeds=seeds,
         model=model,
+        selected_ids=query_ids,
     )
     print()
 
@@ -86,6 +88,7 @@ def main():
         BENCHMARK_DATA_PATH,
         BENCHMARK_NUM_SEEDS,
         BENCHMARK_MODELS,
+        BENCHMARK_QUERY_IDS,
     )
 
     schema_file = Path("benchmark/.tpch/schema.sql")
@@ -105,6 +108,21 @@ def main():
     try:
         # === Phase 1: Setup (shared across all models) ===
         print("\n--- Setup & Validation ---\n")
+
+        # Resolve and validate query ID filter against available queries
+        query_ids: list[str] | None = None
+        if BENCHMARK_QUERY_IDS is not None:
+            available = sorted(f.stem for f in queries_dir.glob("*.sql"))
+            valid = [q for q in BENCHMARK_QUERY_IDS if q in available]
+            skipped = [q for q in BENCHMARK_QUERY_IDS if q not in available]
+            if skipped:
+                print(f"  ⚠ Unknown query IDs (skipped): {', '.join(skipped)}")
+            if not valid:
+                print("  ✗ No valid query IDs remain after filtering — aborting")
+                sys.exit(1)
+            query_ids = valid
+            print(f"  Query filter active: {len(query_ids)} / {len(available)} queries selected ({', '.join(query_ids)})")
+            print()
 
         print("Data Generation")
         if BENCHMARK_DATA_PATH:
@@ -168,6 +186,7 @@ def main():
                 db_url=DATABASE_URL,
                 seeds=seeds,
                 multi_model=multi_model,
+                query_ids=query_ids,
             )
             precomputed[model] = results
 
@@ -183,6 +202,7 @@ def main():
                 report_dir=report_dir,
                 seeds=seeds,
                 precomputed=precomputed,
+                selected_ids=query_ids,
             )
             print()
 

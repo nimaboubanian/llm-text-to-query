@@ -6,7 +6,7 @@ from unittest.mock import patch, MagicMock
 from text2query.benchmark.runner import run_llm_generation, execute_generated_queries
 from text2query.benchmark.reporting import (
     _format_summary_multiseed, _format_per_query_multiseed, _compute_stats,
-    archive_session, model_slug, generate_cross_model_report,
+    archive_session, model_slug, generate_cross_model_report, generate_reports,
 )
 
 
@@ -191,6 +191,65 @@ def test_archive_with_seed_subdirs(tmp_path):
     assert (session_dir / "report" / "summary.md").exists()
     assert not queries.exists()
     assert not answers.exists()
+
+
+def test_query_id_filter_llm_generation(tmp_path):
+    """query_ids filter should skip questions not in the selected set."""
+    questions_dir = tmp_path / "questions"
+    output_dir = tmp_path / "output"
+    questions_dir.mkdir()
+    _make_question_file(questions_dir, "01", "Q1")
+    _make_question_file(questions_dir, "02", "Q2")
+    _make_question_file(questions_dir, "03", "Q3")
+
+    generated = []
+
+    def mock_streaming(*args, **kwargs):
+        generated.append(args[0])
+        yield {"type": "done", "sql": "SELECT 1;"}
+
+    with patch("text2query.benchmark.runner.get_sql_from_llm_streaming", side_effect=mock_streaming), \
+         patch("text2query.benchmark.runner.create_engine_for_database"), \
+         patch("text2query.benchmark.runner.get_database_schema_string", return_value="schema"):
+
+        run_llm_generation(questions_dir, output_dir, "db://url", "test-model",
+                           seeds=None, query_ids=["01", "03"])
+
+    assert (output_dir / "01.sql").exists()
+    assert not (output_dir / "02.sql").exists()
+    assert (output_dir / "03.sql").exists()
+    assert len(generated) == 2
+
+
+def test_query_id_filter_reporting(tmp_path):
+    """generate_reports should only evaluate selected query IDs."""
+    ref_queries = tmp_path / "ref_queries"
+    ref_answers = tmp_path / "ref_answers"
+    gen_queries = tmp_path / "gen_queries"
+    gen_answers = tmp_path / "gen_answers"
+    report_dir = tmp_path / "report"
+
+    for d in [ref_queries, ref_answers, gen_queries, gen_answers]:
+        d.mkdir()
+
+    for qid in ["01", "02", "03"]:
+        (ref_queries / f"{qid}.sql").write_text("SELECT 1;")
+        (ref_answers / f"{qid}.csv").write_text("col\n1\n")
+        (gen_queries / f"{qid}.sql").write_text("SELECT 1;")
+        (gen_answers / f"{qid}.csv").write_text("col\n1\n")
+
+    _, results = generate_reports(
+        generated_queries_dir=gen_queries,
+        reference_queries_dir=ref_queries,
+        generated_answers_dir=gen_answers,
+        reference_answers_dir=ref_answers,
+        report_dir=report_dir,
+        selected_ids=["01", "03"],
+    )
+
+    evaluated_ids = {r["query_id"] for r in results}
+    assert evaluated_ids == {1, 3}
+    assert not (report_dir / "per_query" / "02.md").exists()
 
 
 # --- Multi-model tests ---

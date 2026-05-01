@@ -58,7 +58,8 @@ def _run_single_generation(
         return []
 
     seed_label = f" (seed={seed})" if seed is not None else ""
-    print(f"  Generating {len(to_process)}/{total} queries{seed_label} (skipping {len(existing)} cached)...")
+    cache_label = f", {len(existing)} cached" if existing else ""
+    print(f"  Generating {len(to_process)} queries{seed_label}{cache_label}...")
 
     engine = create_engine_for_database(db_url)
     schema = get_database_schema_string(engine)
@@ -152,5 +153,6 @@ def _execute_single(
         print(f"  ✓ All {total} answer files already exist in {answers_dir}")
         return []
 
-    print(f"  Executing {len(to_process)}/{total} queries (skipping {len(existing)} cached)...")
+    cache_label = f", {len(existing)} cached" if existing else ""
+    print(f"  Executing {len(to_process)} queries{cache_label}...")
     return execute_queries_to_csv(to_process, answers_dir, db_url, write_error_csv=True)

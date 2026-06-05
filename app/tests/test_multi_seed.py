@@ -343,6 +343,58 @@ def test_cross_model_csv_export(tmp_path):
     assert rows[0]["model"] == "model_a"
     assert rows[1]["model"] == "model_b"
     assert all(r["query_id"] == "01" for r in rows)
+    # new columns present; real_sql/generated_sql populated from the SQL files
+    assert "nl_query" in rows[0]
+    assert "prompt" in rows[0]
+    assert all(r["real_sql"] == "SELECT name FROM customers;" for r in rows)
+    assert all(r["generated_sql"] == "SELECT name FROM customers;" for r in rows)
+
+
+def test_results_csv_multiseed(tmp_path):
+    """Multi-seed runs should emit one results.csv row per (query, seed)."""
+    ref_queries = tmp_path / "ref_queries"
+    ref_answers = tmp_path / "ref_answers"
+    gen_queries = tmp_path / "gen_queries"
+    gen_answers = tmp_path / "gen_answers"
+    questions = tmp_path / "questions"
+    report_dir = tmp_path / "report"
+    for d in [ref_queries, ref_answers, gen_queries, gen_answers, questions]:
+        d.mkdir()
+
+    (ref_queries / "01.sql").write_text("SELECT name FROM customers;")
+    (ref_answers / "01.csv").write_text("name\nAlice\n")
+    _make_question_file(questions, "01", "What are the customer names?")
+
+    for seed in [1, 2]:
+        sq = gen_queries / f"seed_{seed}"
+        sa = gen_answers / f"seed_{seed}"
+        sq.mkdir(parents=True)
+        sa.mkdir(parents=True)
+        (sq / "01.sql").write_text("SELECT name FROM customers;")
+        (sq / "01.prompt").write_text(f"prompt for seed {seed}")
+        (sa / "01.csv").write_text("name\nAlice\n")
+
+    generate_reports(
+        generated_queries_dir=gen_queries,
+        reference_queries_dir=ref_queries,
+        generated_answers_dir=gen_answers,
+        reference_answers_dir=ref_answers,
+        report_dir=report_dir,
+        seeds=[1, 2],
+        model="m1",
+        questions_dir=questions,
+    )
+
+    with open(report_dir / "results.csv") as f:
+        rows = list(csv.DictReader(f))
+
+    assert len(rows) == 2
+    assert {r["seed"] for r in rows} == {"1", "2"}
+    assert all(r["nl_query"] == "What are the customer names?" for r in rows)
+    assert all(r["real_sql"] == "SELECT name FROM customers;" for r in rows)
+    by_seed = {r["seed"]: r for r in rows}
+    assert by_seed["1"]["prompt"] == "prompt for seed 1"
+    assert by_seed["2"]["prompt"] == "prompt for seed 2"
 
 
 def test_cross_model_comparison_report(tmp_path):

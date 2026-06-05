@@ -1,6 +1,8 @@
+import csv
+
 from text2query.benchmark.reporting import (
     _format_per_query_similarity, _format_summary_similarity,
-    _compute_stats, archive_session,
+    _compute_stats, archive_session, generate_reports,
 )
 
 
@@ -93,6 +95,80 @@ def test_archive_moves_files(tmp_path):
     # source dirs should be cleaned up
     assert not queries.exists()
     assert not answers.exists()
+
+
+def test_results_csv_single_seed(tmp_path):
+    """Single-model single-seed runs should emit results.csv with the new columns."""
+    ref_queries = tmp_path / "ref_queries"
+    ref_answers = tmp_path / "ref_answers"
+    gen_queries = tmp_path / "gen_queries"
+    gen_answers = tmp_path / "gen_answers"
+    questions = tmp_path / "questions"
+    report_dir = tmp_path / "report"
+    for d in [ref_queries, ref_answers, gen_queries, gen_answers, questions]:
+        d.mkdir()
+
+    (ref_queries / "01.sql").write_text("SELECT name FROM customers;")
+    (ref_answers / "01.csv").write_text("name\nAlice\n")
+    (gen_queries / "01.sql").write_text("SELECT name FROM customers;")
+    (gen_queries / "01.prompt").write_text("SCHEMA: customers(name)\nQuestion: list names")
+    (gen_answers / "01.csv").write_text("name\nAlice\n")
+    (questions / "01.md").write_text('# Business Question:\n  "What are the customer names?"\n')
+
+    generate_reports(
+        generated_queries_dir=gen_queries,
+        reference_queries_dir=ref_queries,
+        generated_answers_dir=gen_answers,
+        reference_answers_dir=ref_answers,
+        report_dir=report_dir,
+        model="m1",
+        questions_dir=questions,
+    )
+
+    csv_path = report_dir / "results.csv"
+    assert csv_path.exists()
+    with open(csv_path) as f:
+        rows = list(csv.DictReader(f))
+
+    assert len(rows) == 1
+    r = rows[0]
+    assert r["seed"] == ""  # single-seed → blank
+    assert r["model"] == "m1"
+    assert r["query_id"] == "01"
+    assert r["nl_query"] == "What are the customer names?"
+    assert r["prompt"] == "SCHEMA: customers(name)\nQuestion: list names"
+    assert r["generated_sql"] == "SELECT name FROM customers;"
+    assert r["real_sql"] == "SELECT name FROM customers;"
+
+
+def test_results_csv_missing_prompt_and_questions(tmp_path):
+    """Without prompt file / questions_dir, prompt and nl_query degrade to empty."""
+    ref_queries = tmp_path / "ref_queries"
+    ref_answers = tmp_path / "ref_answers"
+    gen_queries = tmp_path / "gen_queries"
+    gen_answers = tmp_path / "gen_answers"
+    report_dir = tmp_path / "report"
+    for d in [ref_queries, ref_answers, gen_queries, gen_answers]:
+        d.mkdir()
+
+    (ref_queries / "01.sql").write_text("SELECT 1;")
+    (ref_answers / "01.csv").write_text("col\n1\n")
+    (gen_queries / "01.sql").write_text("SELECT 1;")
+    (gen_answers / "01.csv").write_text("col\n1\n")
+
+    generate_reports(
+        generated_queries_dir=gen_queries,
+        reference_queries_dir=ref_queries,
+        generated_answers_dir=gen_answers,
+        reference_answers_dir=ref_answers,
+        report_dir=report_dir,
+    )
+
+    with open(report_dir / "results.csv") as f:
+        rows = list(csv.DictReader(f))
+    assert rows[0]["prompt"] == ""
+    assert rows[0]["nl_query"] == ""
+    assert rows[0]["real_sql"] == "SELECT 1;"
 
 
 def test_archive_empty_dirs(tmp_path):

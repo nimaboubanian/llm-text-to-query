@@ -7,11 +7,38 @@ from pathlib import Path
 
 
 from text2query.benchmark.similarity import evaluate_query
+from text2query.benchmark.pipeline import read_business_question
+
+
+CSV_FIELDNAMES = [
+    "seed", "model", "query_id", "nl_query", "prompt",
+    "generated_sql", "real_sql", "status",
+    "result_precision", "result_recall", "result_f1",
+    "ast_similarity", "error_category",
+]
 
 
 def model_slug(model_name: str) -> str:
     """Convert model name to a filesystem-safe slug."""
     return model_name.replace(":", "_").replace("/", "_")
+
+
+def _write_results_csv(results: list[dict], csv_path: Path) -> None:
+    """Write enriched evaluation results to CSV with the fixed column schema."""
+    csv_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(csv_path, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=CSV_FIELDNAMES, extrasaction="ignore")
+        writer.writeheader()
+        for r in results:
+            row = {field: r.get(field, "") for field in CSV_FIELDNAMES}
+            if row["seed"] is None:
+                row["seed"] = ""
+            row["query_id"] = f"{int(r['query_id']):02d}"
+            for field in CSV_FIELDNAMES:
+                if row[field] is None:
+                    row[field] = ""
+            writer.writerow(row)
+    print(f"  CSV export -> {csv_path} ({len(results)} rows)")
 
 
 def _v(val: float | bool | None) -> str:
@@ -146,18 +173,21 @@ def generate_reports(
     seeds: list[int] | None = None,
     model: str | None = None,
     selected_ids: list[str] | None = None,
+    questions_dir: Path | None = None,
 ) -> tuple[Path, list[dict]]:
     if seeds and len(seeds) > 1:
         return _generate_multiseed_reports(
             generated_queries_dir, reference_queries_dir,
             generated_answers_dir, reference_answers_dir,
             report_dir, seeds, model=model, selected_ids=selected_ids,
+            questions_dir=questions_dir,
         )
     else:
         return _generate_single_reports(
             generated_queries_dir, reference_queries_dir,
             generated_answers_dir, reference_answers_dir,
             report_dir, model=model, selected_ids=selected_ids,
+            questions_dir=questions_dir,
         )
 
 
@@ -169,6 +199,7 @@ def _generate_single_reports(
     report_dir: Path,
     model: str | None = None,
     selected_ids: list[str] | None = None,
+    questions_dir: Path | None = None,
 ) -> tuple[Path, list[dict]]:
     """Single-seed report generation."""
     per_query_dir = report_dir / "per_query"
@@ -193,7 +224,16 @@ def _generate_single_reports(
         ref_sql = (reference_queries_dir / f"{qid}.sql").read_text().strip()
         llm_sql_path = generated_queries_dir / f"{qid}.sql"
         raw_path = generated_queries_dir / f"{qid}.raw"
+        prompt_path = generated_queries_dir / f"{qid}.prompt"
         llm_sql = llm_sql_path.read_text().strip() if llm_sql_path.exists() else None
+
+        sim_result["model"] = model
+        sim_result["nl_query"] = (
+            read_business_question(questions_dir / f"{qid}.md") if questions_dir else None
+        )
+        sim_result["prompt"] = prompt_path.read_text() if prompt_path.exists() else None
+        sim_result["generated_sql"] = llm_sql
+        sim_result["real_sql"] = ref_sql
 
         if llm_sql:
             llm_section = f"```sql\n{llm_sql}\n```\n\n"
@@ -243,6 +283,7 @@ def _generate_single_reports(
         + _format_summary_similarity(all_results)
     )
     (report_dir / "summary.md").write_text(summary)
+    _write_results_csv(all_results, report_dir / "results.csv")
 
     print(f"  Reports generated -> {report_dir}")
     return report_dir, all_results
@@ -257,6 +298,7 @@ def _generate_multiseed_reports(
     seeds: list[int],
     model: str | None = None,
     selected_ids: list[str] | None = None,
+    questions_dir: Path | None = None,
 ) -> tuple[Path, list[dict]]:
     """Generate reports aggregating multiple seed runs with statistical analysis."""
     per_query_dir = report_dir / "per_query"
@@ -274,6 +316,8 @@ def _generate_multiseed_reports(
 
     for qid in query_ids:
         seed_results = []
+        ref_sql = (reference_queries_dir / f"{qid}.sql").read_text().strip()
+        nl_query = read_business_question(questions_dir / f"{qid}.md") if questions_dir else None
 
         for seed in seeds:
             seed_queries = generated_queries_dir / f"seed_{seed}"
@@ -287,6 +331,13 @@ def _generate_multiseed_reports(
                 llm_sql=seed_queries / f"{qid}.sql",
             )
             sim_result["seed"] = seed
+            sim_result["model"] = model
+            sim_result["nl_query"] = nl_query
+            prompt_path = seed_queries / f"{qid}.prompt"
+            sim_result["prompt"] = prompt_path.read_text() if prompt_path.exists() else None
+            gen_sql_path = seed_queries / f"{qid}.sql"
+            sim_result["generated_sql"] = gen_sql_path.read_text().strip() if gen_sql_path.exists() else None
+            sim_result["real_sql"] = ref_sql
             seed_results.append(sim_result)
         all_flat_results.extend(seed_results)
 
@@ -298,8 +349,6 @@ def _generate_multiseed_reports(
 
         query_agg["per_seed"] = seed_results
         aggregated.append(query_agg)
-
-        ref_sql = (reference_queries_dir / f"{qid}.sql").read_text().strip()
 
         seed_sql_sections = "\n## LLM-Generated SQL by Seed\n\n"
         for seed in seeds:
@@ -349,6 +398,7 @@ def _generate_multiseed_reports(
         + _format_summary_multiseed(aggregated, len(seeds))
     )
     (report_dir / "summary.md").write_text(summary)
+    _write_results_csv(all_flat_results, report_dir / "results.csv")
 
     print(f"  Reports generated -> {report_dir}")
     return report_dir, all_flat_results
@@ -364,6 +414,7 @@ def generate_cross_model_report(
     seeds: list[int] | None = None,
     precomputed: dict[str, list[dict]] | None = None,
     selected_ids: list[str] | None = None,
+    questions_dir: Path | None = None,
 ) -> Path:
     """Generate cross-model comparison report and CSV export."""
     all_ids = sorted(f.stem for f in reference_queries_dir.glob("*.sql"))
@@ -415,19 +466,18 @@ def generate_cross_model_report(
                         llm_sql=q_dir / f"{qid}.sql",
                     )
                     sim["seed"] = seed
+                    sim["nl_query"] = (
+                        read_business_question(questions_dir / f"{qid}.md") if questions_dir else None
+                    )
+                    prompt_path = q_dir / f"{qid}.prompt"
+                    sim["prompt"] = prompt_path.read_text() if prompt_path.exists() else None
+                    gen_sql_path = q_dir / f"{qid}.sql"
+                    sim["generated_sql"] = gen_sql_path.read_text().strip() if gen_sql_path.exists() else None
+                    ref_sql_path = reference_queries_dir / f"{qid}.sql"
+                    sim["real_sql"] = ref_sql_path.read_text().strip() if ref_sql_path.exists() else None
+                sim["model"] = model
                 seed_results.append(sim)
-
-                all_rows.append({
-                    "model": model,
-                    "query_id": qid,
-                    "seed": seed if seed is not None else "",
-                    "status": sim["status"],
-                    "result_f1": sim.get("result_f1", ""),
-                    "result_precision": sim.get("result_precision", ""),
-                    "result_recall": sim.get("result_recall", ""),
-                    "ast_similarity": sim.get("ast_similarity", ""),
-                    "error_category": sim.get("error_category", ""),
-                })
+                all_rows.append(sim)
 
             agg = {}
             for metric in metrics_to_aggregate:
@@ -442,18 +492,7 @@ def generate_cross_model_report(
             model_aggregated[model][qid] = agg
 
     # Write CSV
-    csv_path = report_dir / "results.csv"
-    csv_path.parent.mkdir(parents=True, exist_ok=True)
-    fieldnames = [
-        "model", "query_id", "seed", "status",
-        "result_f1", "result_precision", "result_recall",
-        "ast_similarity", "error_category",
-    ]
-    with open(csv_path, "w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
-        writer.writeheader()
-        writer.writerows(all_rows)
-    print(f"  CSV export -> {csv_path} ({len(all_rows)} rows)")
+    _write_results_csv(all_rows, report_dir / "results.csv")
 
     # Write comparison.md
     num_seeds = len(seeds) if seeds else 1
@@ -564,7 +603,10 @@ def _move_contents(src_dir: Path, dst_dir: Path, label: str) -> None:
         print(f"  Moved {len(subdirs)} dirs of {label} -> {dst_dir}")
 
     # Move flat files (single-seed, single-model / backward compat)
-    files = list(src_dir.glob("*.sql")) + list(src_dir.glob("*.csv")) + list(src_dir.glob("*.raw"))
+    files = (
+        list(src_dir.glob("*.sql")) + list(src_dir.glob("*.csv"))
+        + list(src_dir.glob("*.raw")) + list(src_dir.glob("*.prompt"))
+    )
     for f in files:
         shutil.move(str(f), str(dst_dir / f.name))
     if files:

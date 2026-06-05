@@ -74,6 +74,7 @@ def _run_single_model_benchmark(
         seeds=seeds,
         model=model,
         selected_ids=query_ids,
+        questions_dir=questions_dir,
     )
     print()
 
@@ -199,6 +200,7 @@ def main():
                 seeds=seeds,
                 precomputed=precomputed,
                 selected_ids=query_ids,
+                questions_dir=questions_dir,
             )
             print()
 

@@ -129,16 +129,18 @@ def get_sql_from_llm_streaming(
                         "type": "done",
                         "full_response": full_response,
                         "sql": _clean_sql_response(full_response),
+                        "prompt": prompt,
                     }
                     return
             except json.JSONDecodeError:
                 continue
-        
+
         # Stream ended without "done" - return what we have
         yield {
             "type": "done",
             "full_response": full_response,
             "sql": _clean_sql_response(full_response),
+            "prompt": prompt,
         }
         
     except requests.exceptions.Timeout:

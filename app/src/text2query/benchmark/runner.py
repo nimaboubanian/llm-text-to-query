@@ -1,9 +1,8 @@
-import re
 from pathlib import Path
 
 from text2query.database.schema import create_engine_for_database, get_database_schema_string
 from text2query.llm.service import get_sql_from_llm_streaming
-from text2query.benchmark.pipeline import execute_queries_to_csv
+from text2query.benchmark.pipeline import execute_queries_to_csv, read_business_question
 
 
 def run_llm_generation(
@@ -68,29 +67,30 @@ def _run_single_generation(
 
     for i, qfile in enumerate(to_process, 1):
         query_id = qfile.stem
-        content = qfile.read_text()
-
-        match = re.search(r'# Business Question:\s*\n\s*"([^"]+)"', content)
-        if not match:
+        question = read_business_question(qfile)
+        if not question:
             print(f"  [{i}/{len(to_process)}] Q{query_id}... ⚠ no question found, skipping")
             continue
-
-        question = match.group(1)
 
         print(f"  [{i}/{len(to_process)}] Q{query_id}...", end="", flush=True)
 
         generated_sql = None
         raw_response = None
+        prompt = None
         error = None
 
         for chunk in get_sql_from_llm_streaming(question, schema, model, seed=seed):
             if chunk["type"] == "done":
                 generated_sql = chunk.get("sql")
                 raw_response = chunk.get("full_response")
+                prompt = chunk.get("prompt")
                 break
             elif chunk["type"] == "error":
                 error = chunk.get("message")
                 break
+
+        if prompt is not None:
+            (output_dir / f"{query_id}.prompt").write_text(prompt)
 
         if generated_sql:
             output_file = output_dir / f"{query_id}.sql"

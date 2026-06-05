@@ -1,4 +1,5 @@
 import os
+import re
 import subprocess
 from pathlib import Path
 
@@ -16,6 +17,14 @@ from text2query.benchmark.validation import (
 )
 
 from text2query.benchmark.data_loader import load_tpch_data
+
+
+def read_business_question(qfile: Path) -> str | None:
+    """Extract the NL business question from a benchmark question file."""
+    if not qfile.exists():
+        return None
+    match = re.search(r'# Business Question:\s*\n\s*"([^"]+)"', qfile.read_text())
+    return match.group(1) if match else None
 
 
 def generate_data(scale_factor: int, output_dir: Path) -> Path:

@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from text2query.database.schema import create_engine_for_database, get_database_schema_string
-from text2query.llm.service import get_sql_from_llm_streaming
+from text2query.llm.service import get_sql_from_llm_streaming, warmup_model
 from text2query.benchmark.pipeline import execute_queries_to_csv, read_business_question
 
 
@@ -59,6 +59,9 @@ def _run_single_generation(
     seed_label = f" (seed={seed})" if seed is not None else ""
     cache_label = f", {len(existing)} cached" if existing else ""
     print(f"  Generating {len(to_process)} queries{seed_label}{cache_label}...")
+
+    print(f"  Warming up {model}...", end="", flush=True)
+    print(" ✓" if warmup_model(model) else " ⚠ (warmup failed, continuing)")
 
     engine = create_engine_for_database(db_url)
     schema = get_database_schema_string(engine)

@@ -1,8 +1,32 @@
 import os
 
+
+def _env_int(name: str, default: int) -> int:
+    """Read an int from the environment, falling back to default if unset or unparseable."""
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        return default
+
+
+def _env_float(name: str, default: float) -> float:
+    """Read a float from the environment, falling back to default if unset or unparseable."""
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        return float(raw)
+    except ValueError:
+        return default
+
+
 OLLAMA_URL = "http://ollama:11434"
 
-LLM_TEMPERATURE = 0.1
+LLM_TEMPERATURE = _env_float("LLM_TEMPERATURE", 0.1)
+LLM_NUM_CTX = _env_int("LLM_NUM_CTX", 4096)
 LLM_MAX_TOKENS = 2048
 
 DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "qwen2.5-coder:7b")
@@ -11,7 +35,7 @@ FRONTDESK_MODEL = os.getenv("FRONTDESK_MODEL", "llama3.2:3b")
 FRONTDESK_TEMPERATURE = 0.4
 
 BENCHMARK_SCALE_FACTOR = 1
-BENCHMARK_NUM_SEEDS = int(os.getenv("BENCHMARK_NUM_SEEDS", "1"))
+BENCHMARK_NUM_SEEDS = _env_int("BENCHMARK_NUM_SEEDS", 1)
 BENCHMARK_DATA_PATH = os.getenv("BENCHMARK_DATA_PATH")
 
 _models_raw = os.getenv("BENCHMARK_MODELS", "")

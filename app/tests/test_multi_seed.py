@@ -28,6 +28,7 @@ def test_run_llm_generation_single_seed_no_subdirs(tmp_path):
 
     with patch("text2query.benchmark.runner.get_sql_from_llm_streaming", side_effect=mock_streaming), \
          patch("text2query.benchmark.runner.create_engine_for_database"), \
+         patch("text2query.benchmark.runner.warmup_model", return_value=True), \
          patch("text2query.benchmark.runner.get_database_schema_string", return_value="schema"):
 
         run_llm_generation(questions_dir, output_dir, "db://url", "test-model", seeds=None)
@@ -51,6 +52,7 @@ def test_run_llm_generation_multi_seed_creates_subdirs(tmp_path):
 
     with patch("text2query.benchmark.runner.get_sql_from_llm_streaming", side_effect=mock_streaming), \
          patch("text2query.benchmark.runner.create_engine_for_database"), \
+         patch("text2query.benchmark.runner.warmup_model", return_value=True), \
          patch("text2query.benchmark.runner.get_database_schema_string", return_value="schema"):
 
         results = run_llm_generation(
@@ -90,6 +92,7 @@ def test_run_llm_generation_caching_per_seed(tmp_path):
 
     with patch("text2query.benchmark.runner.get_sql_from_llm_streaming", side_effect=mock_streaming), \
          patch("text2query.benchmark.runner.create_engine_for_database"), \
+         patch("text2query.benchmark.runner.warmup_model", return_value=True), \
          patch("text2query.benchmark.runner.get_database_schema_string", return_value="schema"):
 
         run_llm_generation(
@@ -99,6 +102,67 @@ def test_run_llm_generation_caching_per_seed(tmp_path):
     # seed_1 was already cached, only seed_2 should be generated
     assert call_count == 1
     assert (output_dir / "seed_2" / "01.sql").exists()
+
+
+def test_warmup_runs_before_generation(tmp_path):
+    """The model is warmed up once when there are queries to generate."""
+    questions_dir = tmp_path / "questions"
+    output_dir = tmp_path / "output"
+    questions_dir.mkdir()
+    _make_question_file(questions_dir, "01", "What are the customer names?")
+
+    def mock_streaming(*args, **kwargs):
+        yield {"type": "done", "sql": "SELECT name FROM customers;"}
+
+    warmup = MagicMock(return_value=True)
+    with patch("text2query.benchmark.runner.get_sql_from_llm_streaming", side_effect=mock_streaming), \
+         patch("text2query.benchmark.runner.create_engine_for_database"), \
+         patch("text2query.benchmark.runner.warmup_model", warmup), \
+         patch("text2query.benchmark.runner.get_database_schema_string", return_value="schema"):
+
+        run_llm_generation(questions_dir, output_dir, "db://url", "test-model", seeds=None)
+
+    warmup.assert_called_once_with("test-model")
+
+
+def test_warmup_skipped_when_fully_cached(tmp_path):
+    """No warmup happens when every query is already generated."""
+    questions_dir = tmp_path / "questions"
+    output_dir = tmp_path / "output"
+    questions_dir.mkdir()
+    output_dir.mkdir()
+    _make_question_file(questions_dir, "01", "What are the customer names?")
+    (output_dir / "01.sql").write_text("SELECT 1;")  # pre-cached
+
+    warmup = MagicMock(return_value=True)
+    with patch("text2query.benchmark.runner.get_sql_from_llm_streaming"), \
+         patch("text2query.benchmark.runner.create_engine_for_database"), \
+         patch("text2query.benchmark.runner.warmup_model", warmup), \
+         patch("text2query.benchmark.runner.get_database_schema_string", return_value="schema"):
+
+        run_llm_generation(questions_dir, output_dir, "db://url", "test-model", seeds=None)
+
+    warmup.assert_not_called()
+
+
+def test_generation_continues_when_warmup_fails(tmp_path):
+    """A failed warmup must not abort the generation run."""
+    questions_dir = tmp_path / "questions"
+    output_dir = tmp_path / "output"
+    questions_dir.mkdir()
+    _make_question_file(questions_dir, "01", "What are the customer names?")
+
+    def mock_streaming(*args, **kwargs):
+        yield {"type": "done", "sql": "SELECT name FROM customers;"}
+
+    with patch("text2query.benchmark.runner.get_sql_from_llm_streaming", side_effect=mock_streaming), \
+         patch("text2query.benchmark.runner.create_engine_for_database"), \
+         patch("text2query.benchmark.runner.warmup_model", return_value=False), \
+         patch("text2query.benchmark.runner.get_database_schema_string", return_value="schema"):
+
+        run_llm_generation(questions_dir, output_dir, "db://url", "test-model", seeds=None)
+
+    assert (output_dir / "01.sql").exists()
 
 
 def test_format_summary_multiseed():
@@ -204,6 +268,7 @@ def test_raw_file_written_on_api_error(tmp_path):
 
     with patch("text2query.benchmark.runner.get_sql_from_llm_streaming", side_effect=mock_streaming), \
          patch("text2query.benchmark.runner.create_engine_for_database"), \
+         patch("text2query.benchmark.runner.warmup_model", return_value=True), \
          patch("text2query.benchmark.runner.get_database_schema_string", return_value="schema"):
         run_llm_generation(questions_dir, output_dir, "db://url", "bad-model", seeds=None)
 
@@ -228,6 +293,7 @@ def test_raw_file_written_on_extraction_failure(tmp_path):
 
     with patch("text2query.benchmark.runner.get_sql_from_llm_streaming", side_effect=mock_streaming), \
          patch("text2query.benchmark.runner.create_engine_for_database"), \
+         patch("text2query.benchmark.runner.warmup_model", return_value=True), \
          patch("text2query.benchmark.runner.get_database_schema_string", return_value="schema"):
         run_llm_generation(questions_dir, output_dir, "db://url", "test-model", seeds=None)
 
@@ -254,6 +320,7 @@ def test_query_id_filter_llm_generation(tmp_path):
 
     with patch("text2query.benchmark.runner.get_sql_from_llm_streaming", side_effect=mock_streaming), \
          patch("text2query.benchmark.runner.create_engine_for_database"), \
+         patch("text2query.benchmark.runner.warmup_model", return_value=True), \
          patch("text2query.benchmark.runner.get_database_schema_string", return_value="schema"):
 
         run_llm_generation(questions_dir, output_dir, "db://url", "test-model",

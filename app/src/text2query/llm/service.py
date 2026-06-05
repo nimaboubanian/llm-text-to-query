@@ -6,7 +6,7 @@ import requests
 
 from text2query.core.config import (
     OLLAMA_URL, DEFAULT_MODEL,
-    LLM_TEMPERATURE, LLM_MAX_TOKENS,
+    LLM_TEMPERATURE, LLM_MAX_TOKENS, LLM_NUM_CTX,
 )
 
 
@@ -32,6 +32,29 @@ def list_available_models() -> list[str]:
     except requests.exceptions.RequestException:
         pass
     return []
+
+
+def warmup_model(model: str, timeout: int = 300) -> bool:
+    """Preload a model into memory before timed generation.
+
+    Sends an empty-prompt generate request, which makes Ollama load the model
+    and return immediately without generating tokens — avoiding a cold-load
+    timeout on the first real query. Returns True if the model loaded.
+    """
+    try:
+        resp = requests.post(
+            f"{OLLAMA_URL}/api/generate",
+            json={
+                "model": model,
+                "prompt": "",
+                "stream": False,
+                "options": {"num_ctx": LLM_NUM_CTX},
+            },
+            timeout=timeout,
+        )
+        return resp.status_code == 200
+    except requests.exceptions.RequestException:
+        return False
 
 
 def chat_with_model(
@@ -77,6 +100,7 @@ def get_sql_from_llm_streaming(
     options = {
         "temperature": LLM_TEMPERATURE,
         "num_predict": LLM_MAX_TOKENS,
+        "num_ctx": LLM_NUM_CTX,
     }
     if seed is not None:
         options["seed"] = seed

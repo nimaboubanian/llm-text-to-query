@@ -3,6 +3,8 @@ import re
 from collections.abc import Generator, Callable
 
 import requests
+import sqlglot
+from sqlglot import exp
 
 from text2query.core.config import (
     OLLAMA_URL, DEFAULT_MODEL,
@@ -193,6 +195,25 @@ def _is_single_statement(sql: str) -> bool:
     return ";" not in stripped
 
 
+def _is_select_only(sql: str) -> bool:
+    """Accept only SELECT statements (including CTEs and set operations); reject DDL/DML."""
+    try:
+        parsed = sqlglot.parse_one(sql, dialect="postgres")
+    except Exception:
+        parsed = None
+
+    if parsed is not None:
+        return isinstance(parsed, (exp.Select, exp.Union))
+
+    # sqlglot couldn't parse it (e.g. dialect quirks) — fall back to a conservative
+    # keyword-prefix check so valid SELECTs aren't unfairly rejected.
+    return bool(re.match(r"(?i)^\s*(SELECT|WITH)\b", sql))
+
+
+def _is_safe_sql(sql: str) -> bool:
+    return _is_single_statement(sql) and _is_select_only(sql)
+
+
 def _clean_sql_response(response: str) -> str | None:
     if not response:
         return None
@@ -200,11 +221,11 @@ def _clean_sql_response(response: str) -> str | None:
     match = re.search(r"```(?:sql)?\s*(.*?)```", response, re.DOTALL | re.IGNORECASE)
     if match:
         sql = match.group(1).strip()
-        return sql if _is_single_statement(sql) else None
+        return sql if _is_safe_sql(sql) else None
 
     match = re.search(r"(SELECT|WITH)\s+.*?;", response, re.DOTALL | re.IGNORECASE)
     if match:
         sql = match.group(0).strip()
-        return sql if _is_single_statement(sql) else None
+        return sql if _is_safe_sql(sql) else None
 
     return None

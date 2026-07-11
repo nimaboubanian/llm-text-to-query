@@ -80,3 +80,42 @@ def test_string_literal_semicolon_falsely_rejected():
     # BUG: _is_single_statement sees the ; inside the string and rejects it.
     # This test documents the current (broken) behavior.
     assert _clean_sql_response(response) is None
+
+
+def test_rejects_drop_in_fence():
+    response = "```sql\nDROP TABLE users\n```"
+    assert _clean_sql_response(response) is None
+
+
+def test_rejects_truncate_in_fence():
+    response = "```sql\nTRUNCATE TABLE users\n```"
+    assert _clean_sql_response(response) is None
+
+
+def test_rejects_alter_in_fence():
+    response = "```sql\nALTER TABLE users ADD COLUMN x INT\n```"
+    assert _clean_sql_response(response) is None
+
+
+def test_allows_cte_select_in_fence():
+    response = (
+        "```sql\nWITH recent AS (SELECT id FROM orders) "
+        "SELECT * FROM recent\n```"
+    )
+    result = _clean_sql_response(response)
+    assert result is not None
+    assert result.upper().startswith("WITH")
+
+
+def test_allows_union_select_in_fence():
+    response = "```sql\nSELECT id FROM a UNION SELECT id FROM b\n```"
+    result = _clean_sql_response(response)
+    assert result is not None
+
+
+def test_allows_unparsable_select_prefixed_fallback():
+    """sqlglot can't parse this malformed fragment, but the SELECT prefix keeps it safe."""
+    response = "```sql\nSELECT * FROM t WHERE (((\n```"
+    result = _clean_sql_response(response)
+    assert result is not None
+    assert result.upper().startswith("SELECT")

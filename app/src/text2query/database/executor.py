@@ -9,6 +9,7 @@ def execute_sql_query(engine, query: str) -> pd.DataFrame | str:
     try:
         with engine.connect() as conn:
             conn.execute(text(f"SET statement_timeout = {STATEMENT_TIMEOUT_MS}"))
+            conn.execute(text("SET TRANSACTION READ ONLY"))
             result = conn.execute(text(query))
             rows = result.fetchmany(MAX_RESULT_ROWS)
             return pd.DataFrame(rows, columns=result.keys())

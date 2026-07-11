@@ -43,6 +43,20 @@ A simple e-commerce database (customers, products, orders) loads automatically f
 
 Reset with `docker compose --profile benchmark down -v`.
 
+## Safety
+
+Generated SQL is constrained before execution:
+
+- **Single statement only** — multi-statement input (piggyback queries) is rejected.
+- **SELECT-only** — the statement must parse as a `SELECT` (including CTEs and set
+  operations like `UNION`); any DDL or DML (`INSERT`, `UPDATE`, `DELETE`, `DROP`, ...)
+  is rejected before it ever reaches the database.
+- **Read-only transaction** — as defense in depth, every query also runs inside a
+  Postgres `READ ONLY` transaction, so a write statement is rejected by the database
+  itself even if the SELECT-only check were bypassed.
+- **Statement timeout** — capped at 30s per query.
+- **Row limit** — results are capped at 10,000 rows.
+
 ## REPL Commands
 
 | Command | Description |

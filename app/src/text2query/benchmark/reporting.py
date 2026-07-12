@@ -306,51 +306,26 @@ def generate_cross_model_report(
         f"# Cross-Model Comparison ({len(models)} models, {num_seeds} seed{'s' if num_seeds > 1 else ''})\n",
     ]
 
-    # Per-query comparison table (F1)
-    lines += [
-        "",
-        "## F1\n",
-    ]
     header = "| Query | " + " | ".join(m for m in models) + " |"
     sep = "|---|" + "|".join("---" for _ in models) + "|"
-    lines += [header, sep]
 
-    for qid in query_ids:
-        row = f"| {qid} "
-        for model in models:
-            agg = model_aggregated[model][qid]
-            f1 = agg["result_f1"]
-            status = agg.get("status_summary", "")
-            if f1["mean"] is None:
-                row += f"| {status} "
-            elif num_seeds > 1:
-                row += f"| {status} · {f1['mean']:.4f} ± {f1['std']:.4f} "
-            else:
-                row += f"| {status} · {f1['mean']:.4f} "
-        row += "|"
-        lines.append(row)
-
-    # Per-query comparison table (AST Similarity)
-    lines += [
-        "",
-        "## AST Similarity\n",
-    ]
-    lines += [header, sep]
-
-    for qid in query_ids:
-        row = f"| {qid} "
-        for model in models:
-            agg = model_aggregated[model][qid]
-            ast = agg["ast_similarity"]
-            status = agg.get("status_summary", "")
-            if ast["mean"] is None:
-                row += f"| {status} "
-            elif num_seeds > 1:
-                row += f"| {ast['mean']:.4f} ± {ast['std']:.4f} "
-            else:
-                row += f"| {ast['mean']:.4f} "
-        row += "|"
-        lines.append(row)
+    for title, metric, show_status in [("F1", "result_f1", True), ("AST Similarity", "ast_similarity", False)]:
+        lines += ["", f"## {title}\n", header, sep]
+        for qid in query_ids:
+            row = f"| {qid} "
+            for model in models:
+                agg = model_aggregated[model][qid]
+                stats = agg[metric]
+                status = agg.get("status_summary", "") if show_status else ""
+                prefix = f"{status} · " if status else ""
+                if stats["mean"] is None:
+                    row += f"| {status} "
+                elif num_seeds > 1:
+                    row += f"| {prefix}{stats['mean']:.4f} ± {stats['std']:.4f} "
+                else:
+                    row += f"| {prefix}{stats['mean']:.4f} "
+            row += "|"
+            lines.append(row)
 
     comparison_path = report_dir / "comparison.md"
     comparison_path.write_text("\n".join(lines) + "\n")

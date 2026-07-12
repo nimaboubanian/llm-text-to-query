@@ -40,11 +40,9 @@ services:
     container_name: text2query-ollama
     volumes:
       - ollama_data:/root/.ollama
-      - ./app/ollama-entrypoint.sh:/entrypoint.sh:ro,Z
       - ./app/pull-models.sh:/usr/local/bin/pull-models:ro,Z
     environment:
       <<: *config
-    entrypoint: [ "/entrypoint.sh" ]
     restart: always
     healthcheck:
       test: [ "CMD", "ollama", "list" ]

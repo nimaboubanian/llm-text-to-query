@@ -10,7 +10,7 @@ import pandas as pd
 from text2query.core.config import DATABASE_URL, DEFAULT_MODEL, LOG_LEVEL, SERVER_PORT
 from text2query.database.executor import execute_sql_query
 from text2query.database.schema import create_engine_for_database, get_database_schema_string
-from text2query.llm.ollama import OllamaProvider
+from text2query.llm import ollama
 from text2query.llm.prompt_loader import get_prompt_template
 
 logger = logging.getLogger(__name__)
@@ -102,7 +102,7 @@ class AppContext:
         self.engine = create_engine_for_database(DATABASE_URL)
         self.schema = get_database_schema_string(self.engine)
         get_prompt_template()  # fail fast on a missing/invalid template; caches it
-        self.llm = OllamaProvider()
+        self.llm = ollama
         self.llm.warmup(DEFAULT_MODEL)
 
 

@@ -24,87 +24,82 @@ def _post_json(url: str, payload: dict, timeout: int) -> tuple[int, dict]:
         return e.code, {}
 
 
-class OllamaProvider:
-    """SQL-generation backend talking to a local Ollama server."""
+def warmup(model: str, base_url: str = OLLAMA_URL, timeout: int = 300) -> bool:
+    """Preload a model into memory before timed generation.
 
-    def __init__(self, base_url: str = OLLAMA_URL):
-        self.base_url = base_url
+    Sends an empty-prompt generate request, which makes Ollama load the model
+    and return immediately without generating tokens — avoiding a cold-load
+    timeout on the first real query. Returns True if the model loaded.
+    """
+    try:
+        status, _ = _post_json(
+            f"{base_url}/api/generate",
+            {
+                "model": model,
+                "prompt": "",
+                "stream": False,
+                "options": {"num_ctx": LLM_NUM_CTX},
+            },
+            timeout,
+        )
+        return status == 200
+    except (urllib.error.URLError, TimeoutError) as e:
+        logger.warning("Failed to warm up model %r: %s", model, e)
+        return False
 
-    def warmup(self, model: str, timeout: int = 300) -> bool:
-        """Preload a model into memory before timed generation.
 
-        Sends an empty-prompt generate request, which makes Ollama load the model
-        and return immediately without generating tokens — avoiding a cold-load
-        timeout on the first real query. Returns True if the model loaded.
-        """
-        try:
-            status, _ = _post_json(
-                f"{self.base_url}/api/generate",
-                {
-                    "model": model,
-                    "prompt": "",
-                    "stream": False,
-                    "options": {"num_ctx": LLM_NUM_CTX},
-                },
-                timeout,
-            )
-            return status == 200
-        except (urllib.error.URLError, TimeoutError) as e:
-            logger.warning("Failed to warm up model %r: %s", model, e)
-            return False
+def generate_sql(
+    user_query: str,
+    schema_str: str,
+    model: str | None = None,
+    seed: int | None = None,
+    base_url: str = OLLAMA_URL,
+) -> GenerationResult:
+    selected_model = model or DEFAULT_MODEL
+    prompt = _build_prompt(user_query, schema_str)
 
-    def generate_sql(
-        self,
-        user_query: str,
-        schema_str: str,
-        model: str | None = None,
-        seed: int | None = None,
-    ) -> GenerationResult:
-        selected_model = model or DEFAULT_MODEL
-        prompt = _build_prompt(user_query, schema_str)
+    options = {
+        "temperature": LLM_TEMPERATURE,
+        "num_predict": LLM_MAX_TOKENS,
+        "num_ctx": LLM_NUM_CTX,
+    }
+    if seed is not None:
+        options["seed"] = seed
 
-        options = {
-            "temperature": LLM_TEMPERATURE,
-            "num_predict": LLM_MAX_TOKENS,
-            "num_ctx": LLM_NUM_CTX,
-        }
-        if seed is not None:
-            options["seed"] = seed
+    try:
+        status, data = _post_json(
+            f"{base_url}/api/generate",
+            {
+                "model": selected_model,
+                "prompt": prompt,
+                "stream": False,
+                "options": options,
+            },
+            LLM_TIMEOUT,
+        )
 
-        try:
-            status, data = _post_json(
-                f"{self.base_url}/api/generate",
-                {
-                    "model": selected_model,
-                    "prompt": prompt,
-                    "stream": False,
-                    "options": options,
-                },
-                LLM_TIMEOUT,
-            )
-
-            if status == 404:
-                return GenerationResult(
-                    sql=None, prompt=prompt, error=f"Model '{selected_model}' not found."
-                )
-
-            if status != 200:
-                return GenerationResult(
-                    sql=None, prompt=prompt, error=f"LLM API error: {status}"
-                )
-
-            full_response = data.get("response", "")
+        if status == 404:
             return GenerationResult(
-                sql=_clean_sql_response(full_response),
-                raw_response=full_response,
-                prompt=prompt,
+                sql=None, prompt=prompt, error=f"Model '{selected_model}' not found."
             )
 
-        except TimeoutError:
-            logger.warning("Generate request timed out (model=%r)", selected_model)
+        if status != 200:
             return GenerationResult(
-                sql=None, prompt=prompt, error="Request timed out. Model might be loading."
+                sql=None, prompt=prompt, error=f"LLM API error: {status}"
             )
-        except urllib.error.URLError as e:
-            logger.warning("Generate request failed (model=%r): %s", selected_model, e)
-            return GenerationResult(sql=None, prompt=prompt, error=f"Connection failed: {e}")
+
+        full_response = data.get("response", "")
+        return GenerationResult(
+            sql=_clean_sql_response(full_response),
+            raw_response=full_response,
+            prompt=prompt,
+        )
+
+    except TimeoutError:
+        logger.warning("Generate request timed out (model=%r)", selected_model)
+        return GenerationResult(
+            sql=None, prompt=prompt, error="Request timed out. Model might be loading."
+        )
+    except urllib.error.URLError as e:
+        logger.warning("Generate request failed (model=%r): %s", selected_model, e)
+        return GenerationResult(sql=None, prompt=prompt, error=f"Connection failed: {e}")

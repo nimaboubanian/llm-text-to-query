@@ -27,8 +27,8 @@ def test_identical_config_resumes_from_cache(tmp_path):
         call_count["n"] += 1
         return GenerationResult(sql="SELECT name FROM customers;", raw_response="r", prompt="p")
 
-    with patch("text2query.llm.ollama.OllamaProvider.generate_sql", side_effect=mock_generate), \
-         patch("text2query.llm.ollama.OllamaProvider.warmup", return_value=True), \
+    with patch("text2query.llm.ollama.generate_sql", side_effect=mock_generate), \
+         patch("text2query.llm.ollama.warmup", return_value=True), \
          patch("text2query.benchmark.runner.create_engine_for_database"), \
          patch("text2query.benchmark.runner.get_database_schema_string", return_value="schema"):
 
@@ -54,8 +54,8 @@ def test_model_change_invalidates_and_regenerates(tmp_path, capsys):
         call_count["n"] += 1
         return GenerationResult(sql="SELECT name FROM customers;", raw_response="r", prompt="p")
 
-    with patch("text2query.llm.ollama.OllamaProvider.generate_sql", side_effect=mock_generate), \
-         patch("text2query.llm.ollama.OllamaProvider.warmup", return_value=True), \
+    with patch("text2query.llm.ollama.generate_sql", side_effect=mock_generate), \
+         patch("text2query.llm.ollama.warmup", return_value=True), \
          patch("text2query.benchmark.runner.create_engine_for_database"), \
          patch("text2query.benchmark.runner.get_database_schema_string", return_value="schema"):
 
@@ -82,8 +82,8 @@ def test_schema_change_invalidates_and_regenerates(tmp_path, capsys):
         call_count["n"] += 1
         return GenerationResult(sql="SELECT name FROM customers;", raw_response="r", prompt="p")
 
-    with patch("text2query.llm.ollama.OllamaProvider.generate_sql", side_effect=mock_generate), \
-         patch("text2query.llm.ollama.OllamaProvider.warmup", return_value=True), \
+    with patch("text2query.llm.ollama.generate_sql", side_effect=mock_generate), \
+         patch("text2query.llm.ollama.warmup", return_value=True), \
          patch("text2query.benchmark.runner.create_engine_for_database"), \
          patch("text2query.benchmark.runner.get_database_schema_string", side_effect=["schema-v1", "schema-v2"]):
 
@@ -109,8 +109,8 @@ def test_temperature_change_invalidates_and_regenerates(tmp_path, capsys, monkey
         call_count["n"] += 1
         return GenerationResult(sql="SELECT name FROM customers;", raw_response="r", prompt="p")
 
-    with patch("text2query.llm.ollama.OllamaProvider.generate_sql", side_effect=mock_generate), \
-         patch("text2query.llm.ollama.OllamaProvider.warmup", return_value=True), \
+    with patch("text2query.llm.ollama.generate_sql", side_effect=mock_generate), \
+         patch("text2query.llm.ollama.warmup", return_value=True), \
          patch("text2query.benchmark.runner.create_engine_for_database"), \
          patch("text2query.benchmark.runner.get_database_schema_string", return_value="schema"):
 

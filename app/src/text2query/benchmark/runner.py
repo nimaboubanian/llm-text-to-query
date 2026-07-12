@@ -3,7 +3,7 @@ from pathlib import Path
 
 from text2query.core.config import LLM_MAX_TOKENS, LLM_TEMPERATURE
 from text2query.database.schema import create_engine_for_database, get_database_schema_string
-from text2query.llm.ollama import OllamaProvider
+from text2query.llm import ollama
 from text2query.llm.prompt_loader import get_prompt_template
 from text2query.benchmark.fingerprint import (
     MANIFEST_FILENAME, GenerationFingerprint, read_manifest_fingerprint, write_manifest,
@@ -79,10 +79,8 @@ def _run_single_generation(
     cache_label = f", {len(existing)} cached" if existing else ""
     print(f"  Generating {len(to_process)} queries{seed_label}{cache_label}...")
 
-    llm = OllamaProvider()
-
     print(f"  Warming up {model}...", end="", flush=True)
-    print(" ✓" if llm.warmup(model) else " ⚠ (warmup failed, continuing)")
+    print(" ✓" if ollama.warmup(model) else " ⚠ (warmup failed, continuing)")
 
     results = []
 
@@ -95,7 +93,7 @@ def _run_single_generation(
 
         print(f"  [{i}/{len(to_process)}] Q{query_id}...", end="", flush=True)
 
-        result = llm.generate_sql(question, schema, model, seed=seed)
+        result = ollama.generate_sql(question, schema, model, seed=seed)
         generated_sql = result.sql
         raw_response = result.raw_response
         prompt = result.prompt

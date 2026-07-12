@@ -1,33 +1,34 @@
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Generator
+from dataclasses import dataclass
 from functools import lru_cache
 
 
+@dataclass
+class GenerationResult:
+    """Result of a single SQL-generation call."""
+
+    sql: str | None
+    raw_response: str | None = None
+    prompt: str | None = None
+    error: str | None = None
+
+
 class LLMProvider(ABC):
-    """Interface for a chat/completion backend used to generate SQL and converse."""
+    """Interface for a chat/completion backend used to generate SQL."""
 
     @abstractmethod
-    def generate_sql_streaming(
+    def generate_sql(
         self,
         user_query: str,
         schema_str: str,
         model: str | None = None,
-        stop_check: Callable[[], bool] | None = None,
         seed: int | None = None,
-    ) -> Generator[dict, None, None]:
-        """Stream SQL generation. Yields token/done/stopped/error dicts."""
-
-    @abstractmethod
-    def chat(self, messages: list[dict], model: str, temperature: float = 0.4) -> str | None:
-        """Send a chat-style request. Returns the response text, or None on failure."""
+    ) -> GenerationResult:
+        """Generate SQL for a natural-language question against the given schema."""
 
     @abstractmethod
     def list_models(self) -> list[str]:
         """List models available on the backend."""
-
-    @abstractmethod
-    def abort(self, model: str | None = None) -> bool:
-        """Abort an in-flight generation for the given model."""
 
     @abstractmethod
     def warmup(self, model: str, timeout: int = 300) -> bool:

@@ -101,20 +101,11 @@ def _run_single_generation(
 
         print(f"  [{i}/{len(to_process)}] Q{query_id}...", end="", flush=True)
 
-        generated_sql = None
-        raw_response = None
-        prompt = None
-        error = None
-
-        for chunk in llm.generate_sql_streaming(question, schema, model, seed=seed):
-            if chunk["type"] == "done":
-                generated_sql = chunk.get("sql")
-                raw_response = chunk.get("full_response")
-                prompt = chunk.get("prompt")
-                break
-            elif chunk["type"] == "error":
-                error = chunk.get("message")
-                break
+        result = llm.generate_sql(question, schema, model, seed=seed)
+        generated_sql = result.sql
+        raw_response = result.raw_response
+        prompt = result.prompt
+        error = result.error
 
         if prompt is not None:
             (output_dir / f"{query_id}.prompt").write_text(prompt)

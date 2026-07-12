@@ -35,19 +35,13 @@ def _run_single_model_benchmark(
     report_base: Path,
     db_url: str,
     seeds: list[int] | None,
-    multi_model: bool,
     query_ids: list[str] | None = None,
 ) -> tuple[Path, list[dict]]:
     """Run the full benchmark (generate + execute + report) for one model."""
-    if multi_model:
-        slug = model_slug(model)
-        output_dir = output_base / slug
-        generated_answers_dir = generated_answers_base / slug
-        report_dir = report_base / slug
-    else:
-        output_dir = output_base
-        generated_answers_dir = generated_answers_base
-        report_dir = report_base
+    slug = model_slug(model)
+    output_dir = output_base / slug
+    generated_answers_dir = generated_answers_base / slug
+    report_dir = report_base / slug
 
     print(f"\n--- LLM SQL Generation (model: {model}, seeds: {len(seeds)}) ---\n")
 
@@ -195,7 +189,6 @@ def main():
                 report_base=report_dir,
                 db_url=DATABASE_URL,
                 seeds=seeds,
-                multi_model=multi_model,
                 query_ids=query_ids,
             )
             precomputed[model] = results

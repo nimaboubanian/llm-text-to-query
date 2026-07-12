@@ -377,10 +377,7 @@ def archive_session(
     session_queries.mkdir(parents=True, exist_ok=True)
     session_answers.mkdir(parents=True, exist_ok=True)
 
-    # Move queries — handle both flat files and seed subdirectories
     _move_contents(queries_dir, session_queries, "queries")
-
-    # Move answers — handle both flat files and seed subdirectories
     _move_contents(answers_dir, session_answers, "answers")
 
     if report_dir.exists():
@@ -396,27 +393,15 @@ def archive_session(
 
 
 def _move_contents(src_dir: Path, dst_dir: Path, label: str) -> None:
-    """Move files and subdirectories from src to dst."""
+    """Move a directory's subdirectories (model dirs, seed dirs, or nested layouts) to dst."""
     if not src_dir.exists():
         return
 
-    # Move subdirectories (model dirs, seed dirs, or any nested structure)
     subdirs = sorted(d for d in src_dir.iterdir() if d.is_dir())
+    for sd in subdirs:
+        shutil.move(str(sd), str(dst_dir))
     if subdirs:
-        for sd in subdirs:
-            shutil.move(str(sd), str(dst_dir))
         print(f"  Moved {len(subdirs)} dirs of {label} -> {dst_dir}")
-
-    # Move flat files (single-seed, single-model / backward compat)
-    files = (
-        list(src_dir.glob("*.sql")) + list(src_dir.glob("*.csv"))
-        + list(src_dir.glob("*.raw")) + list(src_dir.glob("*.prompt"))
-        + list(src_dir.glob("*.error"))
-    )
-    for f in files:
-        shutil.move(str(f), str(dst_dir / f.name))
-    if files:
-        print(f"  Moved {len(files)} {label} -> {dst_dir}")
 
 
 def _redact_db_url(db_url: str) -> str:

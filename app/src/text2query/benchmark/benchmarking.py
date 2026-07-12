@@ -119,7 +119,11 @@ def main():
     data_dir = Path(BENCHMARK_DATA_PATH) if BENCHMARK_DATA_PATH else Path(f"benchmark/.tpch/data/sf{BENCHMARK_SCALE_FACTOR}")
 
     seeds = list(range(1, BENCHMARK_NUM_SEEDS + 1)) if BENCHMARK_NUM_SEEDS > 1 else None
-    models = BENCHMARK_MODELS if BENCHMARK_MODELS else [DEFAULT_MODEL]
+    if BENCHMARK_MODELS:
+        models = BENCHMARK_MODELS
+    else:
+        models = [DEFAULT_MODEL]
+        print(f"BENCHMARK_MODELS is empty — falling back to DEFAULT_MODEL ({DEFAULT_MODEL}).")
     multi_model = len(models) > 1
 
     try:

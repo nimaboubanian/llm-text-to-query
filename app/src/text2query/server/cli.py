@@ -3,9 +3,13 @@ import sys
 import urllib.error
 import urllib.request
 
-from text2query.core.config import SERVER_PORT
+from text2query.core.config import LLM_TIMEOUT, SERVER_PORT
 
 SERVER_URL = f"http://127.0.0.1:{SERVER_PORT}/query"
+
+# Wait a little longer than the server's own generation timeout so the client
+# doesn't give up on a slow query the server would still answer.
+CLIENT_TIMEOUT = LLM_TIMEOUT + 30
 
 
 def format_table(columns: list[str], rows: list[list]) -> str:
@@ -33,7 +37,7 @@ def format_result(payload: dict) -> str:
     ])
 
 
-def query_server(question: str, timeout: int = 125) -> dict:
+def query_server(question: str, timeout: int = CLIENT_TIMEOUT) -> dict:
     """POST a question to the app server and return the parsed JSON response."""
     body = json.dumps({"question": question}).encode("utf-8")
     req = urllib.request.Request(

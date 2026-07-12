@@ -31,6 +31,11 @@ LLM_TEMPERATURE = _env_float("LLM_TEMPERATURE", 0.1)
 LLM_NUM_CTX = _env_int("LLM_NUM_CTX", 4096)
 LLM_MAX_TOKENS = _env_int("LLM_MAX_TOKENS", 2048)
 
+# Whole-generation timeout (seconds) for a single non-streaming request. With
+# stream=false the model must finish within this window with no bytes flowing,
+# so it needs to be generous on CPU-only setups where a 7B model is slow.
+LLM_TIMEOUT = _env_int("LLM_TIMEOUT", 600)
+
 DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "qwen2.5-coder:7b")
 
 PROMPT_TEMPLATE_PATH = os.getenv("PROMPT_TEMPLATE_PATH", "prompts/sql_generation.txt")

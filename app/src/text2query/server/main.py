@@ -1,17 +1,52 @@
 import json
 import logging
+import math
+from datetime import date, datetime
+from decimal import Decimal
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+import pandas as pd
 
 from text2query.core.config import DATABASE_URL, DEFAULT_MODEL, LOG_LEVEL, SERVER_PORT
 from text2query.core.flags import GenerationFlags
 from text2query.database.executor import execute_sql_query
 from text2query.database.schema import create_engine_for_database, get_database_schema_string
-from text2query.llm.prompt_loader import load_prompt_template
+from text2query.llm.prompt_loader import get_prompt_template
 from text2query.llm.provider import get_llm_provider
 
 logger = logging.getLogger(__name__)
 
 MAX_QUESTION_LENGTH = 2000
+
+
+def _json_safe(value):
+    """Convert a single DataFrame cell into a JSON-serializable value.
+
+    Postgres hands back types json.dumps can't encode: NUMERIC -> Decimal,
+    DATE/TIMESTAMP -> date/datetime, and NULLs in numeric columns -> NaN.
+    Left unhandled these raise inside json.dumps and surface as a bare 500.
+    """
+    if value is None:
+        return None
+    try:
+        if pd.isna(value):  # NaN, NaT, pd.NA — all become null
+            return None
+    except (TypeError, ValueError):
+        pass  # non-scalar (e.g. array/list cell) — leave for json.dumps
+    if isinstance(value, Decimal):
+        return float(value)
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
+    if hasattr(value, "item"):  # numpy integer/bool scalars
+        return value.item()
+    return value
+
+
+def _rows_to_json(df: pd.DataFrame) -> list[list]:
+    """Convert a result DataFrame into JSON-safe row lists, preserving dtypes."""
+    return [[_json_safe(v) for v in row] for row in df.itertuples(index=False, name=None)]
 
 
 class RequestError(Exception):
@@ -54,8 +89,8 @@ def handle_query(llm, engine, schema: str, model: str, question: str) -> dict:
     df = exec_result.data
     return {
         "sql": result.sql,
-        "columns": list(df.columns),
-        "rows": df.values.tolist(),
+        "columns": [str(c) for c in df.columns],
+        "rows": _rows_to_json(df),
         "row_count": len(df),
         "error": None,
     }
@@ -67,7 +102,7 @@ class AppContext:
     def __init__(self):
         self.engine = create_engine_for_database(DATABASE_URL)
         self.schema = get_database_schema_string(self.engine)
-        load_prompt_template()  # fail fast on a missing/invalid prompt template
+        get_prompt_template()  # fail fast on a missing/invalid template; caches it
         self.flags = GenerationFlags.from_env()
         self.llm = get_llm_provider()
         self.llm.warmup(DEFAULT_MODEL)
@@ -120,9 +155,13 @@ def main():
     )
 
     ctx = AppContext()
+    enabled_flags = [name for name, value in ctx.flags.to_dict().items() if value]
     handler_cls = _make_handler(ctx)
     server = ThreadingHTTPServer(("0.0.0.0", SERVER_PORT), handler_cls)
-    logger.warning("text2query server listening on port %s", SERVER_PORT)
+    logger.warning(
+        "text2query server listening on port %s (model=%s, flags=%s)",
+        SERVER_PORT, DEFAULT_MODEL, ", ".join(enabled_flags) or "none",
+    )
     server.serve_forever()
 
 

@@ -5,7 +5,7 @@ from text2query.core.config import LLM_MAX_TOKENS, LLM_TEMPERATURE
 from text2query.core.flags import GenerationFlags
 from text2query.database.schema import create_engine_for_database, get_database_schema_string
 from text2query.llm.provider import get_llm_provider
-from text2query.llm.prompt_loader import load_prompt_template
+from text2query.llm.prompt_loader import get_prompt_template
 from text2query.benchmark.fingerprint import (
     MANIFEST_FILENAME, GenerationFingerprint, read_manifest_fingerprint, write_manifest,
 )
@@ -63,7 +63,7 @@ def _run_single_generation(
 
     fingerprint = GenerationFingerprint(
         model=model,
-        prompt_template=load_prompt_template(),
+        prompt_template=get_prompt_template(),
         schema=schema,
         temperature=LLM_TEMPERATURE,
         max_tokens=LLM_MAX_TOKENS,

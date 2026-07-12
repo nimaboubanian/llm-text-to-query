@@ -4,9 +4,22 @@ from text2query.benchmark.fingerprint import GenerationFingerprint
 from text2query.llm.prompt_loader import (
     MAX_TEMPLATE_SIZE,
     PromptTemplateError,
+    get_prompt_template,
     load_prompt_template,
     render_prompt,
 )
+
+
+def test_binary_file_raises(tmp_path):
+    path = tmp_path / "template.bin"
+    path.write_bytes(b"\xff\xfe{schema}{query}\x00\x80")
+    with pytest.raises(PromptTemplateError, match="not valid UTF-8"):
+        load_prompt_template(path)
+
+
+def test_get_prompt_template_is_cached():
+    # Same object returned across calls — proves the disk read happens once.
+    assert get_prompt_template() is get_prompt_template()
 
 
 def test_missing_file_raises(tmp_path):

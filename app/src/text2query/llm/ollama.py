@@ -3,7 +3,7 @@ import logging
 import requests
 
 from text2query.core.config import (
-    DEFAULT_MODEL, LLM_MAX_TOKENS, LLM_NUM_CTX, LLM_TEMPERATURE, OLLAMA_URL,
+    DEFAULT_MODEL, LLM_MAX_TOKENS, LLM_NUM_CTX, LLM_TEMPERATURE, LLM_TIMEOUT, OLLAMA_URL,
 )
 from text2query.llm.provider import GenerationResult, LLMProvider
 from text2query.llm.service import _build_prompt, _clean_sql_response
@@ -77,7 +77,7 @@ class OllamaProvider(LLMProvider):
                     "stream": False,
                     "options": options,
                 },
-                timeout=120,
+                timeout=LLM_TIMEOUT,
             )
 
             if resp.status_code == 404:

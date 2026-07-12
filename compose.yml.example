@@ -11,6 +11,7 @@ x-config: &config
   LLM_TEMPERATURE: "0.1"                    # Sampling temperature
   LLM_NUM_CTX: "4096"                       # Context window (tokens)
   LLM_MAX_TOKENS: "2048"                    # Max tokens generated per query
+  LLM_TIMEOUT: "600"                        # Whole-generation timeout (s) — raise on slow CPU-only setups
   SERVER_PORT: "8000"                       # Internal HTTP port (Docker network only, not host-exposed)
   # Path (inside the container) to the user-editable SQL-generation prompt.
   # Mounted read-only from ./prompts on the host — edit that file, not this path.
@@ -95,7 +96,9 @@ services:
     healthcheck:
       # Keep the port here in sync with SERVER_PORT above if you change it.
       test: [ "CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3)\"" ]
-      start_period: 10s
+      # The server warms up the model before it starts listening, so a cold
+      # model load must fit inside start_period or the container reads unhealthy.
+      start_period: 300s
       interval: 10s
       timeout: 5s
       retries: 5

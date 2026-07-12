@@ -5,10 +5,10 @@ from sqlglot import exp
 
 
 def _build_prompt(user_query: str, schema_str: str) -> str:
-    from text2query.llm.prompt_loader import load_prompt_template, render_prompt
+    from text2query.llm.prompt_loader import get_prompt_template, render_prompt
     # Insertion point for flags.chain_of_thought: select/augment the template
     # here once chain-of-thought prompting is implemented.
-    template = load_prompt_template()
+    template = get_prompt_template()
     return render_prompt(template, schema_str, user_query)
 
 

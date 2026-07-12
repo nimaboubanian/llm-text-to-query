@@ -1,4 +1,5 @@
 import re
+from functools import lru_cache
 from pathlib import Path
 
 from text2query.core.config import PROMPT_TEMPLATE_PATH
@@ -24,11 +25,16 @@ def load_prompt_template(path: str | Path | None = None) -> str:
     """
     template_path = Path(path) if path is not None else Path(PROMPT_TEMPLATE_PATH)
     try:
-        text = template_path.read_text()
+        text = template_path.read_text(encoding="utf-8")
     except OSError as e:
         raise PromptTemplateError(
             f"Could not read prompt template at '{template_path}' — check that "
             f"PROMPT_TEMPLATE_PATH is set correctly and the file is mounted: {e}"
+        ) from e
+    except UnicodeDecodeError as e:
+        raise PromptTemplateError(
+            f"Prompt template '{template_path}' is not valid UTF-8 text — "
+            f"PROMPT_TEMPLATE_PATH may be pointing at a binary file: {e}"
         ) from e
 
     if len(text.encode("utf-8")) > MAX_TEMPLATE_SIZE:
@@ -44,6 +50,19 @@ def load_prompt_template(path: str | Path | None = None) -> str:
         )
 
     return text
+
+
+@lru_cache(maxsize=1)
+def get_prompt_template() -> str:
+    """Return the process-wide SQL-generation template, loaded once from disk.
+
+    The template is read and validated on first use and cached for the process
+    lifetime — so every query in a benchmark run (and every request the server
+    answers) uses the same template the fingerprint was computed from, and
+    editing the file requires a restart to take effect (like the cached schema).
+    Tests that need a fresh read pass an explicit path to load_prompt_template().
+    """
+    return load_prompt_template()
 
 
 def render_prompt(template: str, schema_str: str, user_query: str) -> str:

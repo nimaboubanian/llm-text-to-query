@@ -4,8 +4,6 @@ from pathlib import Path
 
 from text2query.core.config import PROMPT_TEMPLATE_PATH
 
-MAX_TEMPLATE_SIZE = 16 * 1024
-
 REQUIRED_PLACEHOLDERS = ("{schema}", "{query}")
 
 _PLACEHOLDER_PATTERN = re.compile(r"\{schema\}|\{query\}")
@@ -36,11 +34,6 @@ def load_prompt_template(path: str | Path | None = None) -> str:
             f"Prompt template '{template_path}' is not valid UTF-8 text — "
             f"PROMPT_TEMPLATE_PATH may be pointing at a binary file: {e}"
         ) from e
-
-    if len(text.encode("utf-8")) > MAX_TEMPLATE_SIZE:
-        raise PromptTemplateError(
-            f"Prompt template '{template_path}' exceeds the {MAX_TEMPLATE_SIZE}-byte limit."
-        )
 
     missing = [p for p in REQUIRED_PLACEHOLDERS if p not in text]
     if missing:

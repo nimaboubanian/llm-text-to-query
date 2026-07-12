@@ -180,7 +180,7 @@ def generate_answers(
     queries_dir: Path,
     answers_dir: Path,
     db_url: str
-) -> list[dict]:
+) -> None:
     print("  Checking answer files...")
 
     expected = {q.stem for q in queries_dir.glob("*.sql")}
@@ -191,11 +191,11 @@ def generate_answers(
     if is_complete:
         query_count = len(list(queries_dir.glob('*.sql')))
         print(f"  ✓ All {query_count} answer files exist")
-        return []
+        return
 
     print(f"  Generating {len(missing_ids)} missing answer files...")
     query_files = [queries_dir / f"{qid}.sql" for qid in sorted(missing_ids)]
-    return execute_queries_to_csv(query_files, answers_dir, db_url, write_error_file=False)
+    execute_queries_to_csv(query_files, answers_dir, db_url, write_error_file=False)
 
 
 def execute_queries_to_csv(

@@ -18,18 +18,13 @@ def run_llm_generation(
     model: str,
     seeds: list[int] | None = None,
     query_ids: list[str] | None = None,
-) -> list[dict]:
-    all_results = []
+) -> None:
     for seed in seeds or [1]:
         seed_dir = output_dir / f"seed_{seed}"
         print(f"\n  --- Seed {seed} ---")
-        results = _run_single_generation(
+        _run_single_generation(
             questions_dir, seed_dir, db_url, model, seed=seed, query_ids=query_ids,
         )
-        all_results.extend(
-            {**r, "seed": seed} for r in results
-        )
-    return all_results
 
 
 def _run_single_generation(
@@ -39,7 +34,7 @@ def _run_single_generation(
     model: str,
     seed: int | None = None,
     query_ids: list[str] | None = None,
-) -> list[dict]:
+) -> None:
     question_files = sorted(questions_dir.glob("*.md"))
     if query_ids is not None:
         question_files = [q for q in question_files if q.stem in query_ids]
@@ -73,7 +68,7 @@ def _run_single_generation(
 
     if not to_process:
         print(f"  ✓ All {total} queries already generated in {output_dir}")
-        return []
+        return
 
     seed_label = f" (seed={seed})" if seed is not None else ""
     cache_label = f", {len(existing)} cached" if existing else ""
@@ -82,7 +77,8 @@ def _run_single_generation(
     print(f"  Warming up {model}...", end="", flush=True)
     print(" ✓" if ollama.warmup(model) else " ⚠ (warmup failed, continuing)")
 
-    results = []
+    success = 0
+    errors = []
 
     for i, qfile in enumerate(to_process, 1):
         query_id = qfile.stem
@@ -106,7 +102,7 @@ def _run_single_generation(
             output_file = output_dir / f"{query_id}.sql"
             output_file.write_text(generated_sql)
             print(" ✓")
-            results.append({"query_id": query_id, "status": "success"})
+            success += 1
         else:
             raw_file = output_dir / f"{query_id}.raw"
             if error:
@@ -114,18 +110,13 @@ def _run_single_generation(
             elif raw_response:
                 raw_file.write_text(raw_response)
             print(" ✗")
-            results.append({"query_id": query_id, "status": "error", "error": error or "No SQL extracted"})
+            errors.append((query_id, error or "No SQL extracted"))
 
-    success = sum(1 for r in results if r["status"] == "success")
-    errors = sum(1 for r in results if r["status"] == "error")
     print(f"  ✓ Generated {success} queries -> {output_dir}")
-    if errors > 0:
-        print(f"  ⚠ {errors} failed:")
-        for r in results:
-            if r["status"] == "error":
-                print(f"    - Q{r['query_id']}: {r.get('error', 'Unknown')[:60]}")
-
-    return results
+    if errors:
+        print(f"  ⚠ {len(errors)} failed:")
+        for query_id, error in errors:
+            print(f"    - Q{query_id}: {error[:60]}")
 
 
 def execute_generated_queries(
@@ -134,17 +125,12 @@ def execute_generated_queries(
     db_url: str,
     seeds: list[int] | None = None,
     query_ids: list[str] | None = None,
-) -> list[dict]:
-    all_results = []
+) -> None:
     for seed in seeds or [1]:
         seed_queries = queries_dir / f"seed_{seed}"
         seed_answers = answers_dir / f"seed_{seed}"
         print(f"\n  --- Seed {seed} ---")
-        results = _execute_single(seed_queries, seed_answers, db_url, query_ids=query_ids)
-        all_results.extend(
-            {**r, "seed": seed} for r in results
-        )
-    return all_results
+        _execute_single(seed_queries, seed_answers, db_url, query_ids=query_ids)
 
 
 def _execute_single(
@@ -152,7 +138,7 @@ def _execute_single(
     answers_dir: Path,
     db_url: str,
     query_ids: list[str] | None = None,
-) -> list[dict]:
+) -> None:
     query_files = sorted(queries_dir.glob("*.sql"))
     if query_ids is not None:
         query_files = [q for q in query_files if q.stem in query_ids]
@@ -180,11 +166,11 @@ def _execute_single(
 
     if not to_process:
         print(f"  ✓ All {total} answer files already exist in {answers_dir}")
-        return []
+        return
 
     cache_label = f", {len(existing)} cached" if existing else ""
     print(f"  Executing {len(to_process)} queries{cache_label}...")
-    return execute_queries_to_csv(to_process, answers_dir, db_url, write_error_file=True)
+    execute_queries_to_csv(to_process, answers_dir, db_url, write_error_file=True)
 
 
 def _clear(directory: Path, patterns: tuple[str, ...]) -> None:

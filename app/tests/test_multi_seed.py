@@ -34,7 +34,7 @@ def test_run_llm_generation_multi_seed_creates_subdirs(tmp_path):
          patch("text2query.llm.ollama.warmup", return_value=True), \
          patch("text2query.benchmark.runner.get_database_schema_string", return_value="schema"):
 
-        results = run_llm_generation(
+        run_llm_generation(
             questions_dir, output_dir, "db://url", "test-model", seeds=[1, 2, 3],
         )
 
@@ -45,9 +45,6 @@ def test_run_llm_generation_multi_seed_creates_subdirs(tmp_path):
 
     # Seeds should be passed to the LLM
     assert captured_seeds == [1, 2, 3]
-
-    # Results should include seed info
-    assert all("seed" in r for r in results)
 
 
 def test_run_llm_generation_caching_per_seed(tmp_path):

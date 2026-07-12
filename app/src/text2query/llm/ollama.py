@@ -1,4 +1,5 @@
 import json
+import logging
 from collections.abc import Callable, Generator
 
 import requests
@@ -8,6 +9,8 @@ from text2query.core.config import (
 )
 from text2query.llm.provider import LLMProvider
 from text2query.llm.service import _build_prompt, _clean_sql_response
+
+logger = logging.getLogger(__name__)
 
 
 class OllamaProvider(LLMProvider):
@@ -24,7 +27,8 @@ class OllamaProvider(LLMProvider):
                 timeout=5,
             )
             return resp.status_code == 200
-        except requests.exceptions.RequestException:
+        except requests.exceptions.RequestException as e:
+            logger.warning("Failed to abort generation for model %r: %s", model, e)
             return False
 
     def list_models(self) -> list[str]:
@@ -33,8 +37,8 @@ class OllamaProvider(LLMProvider):
             if resp.status_code == 200:
                 data = resp.json()
                 return [m["name"] for m in data.get("models", [])]
-        except requests.exceptions.RequestException:
-            pass
+        except requests.exceptions.RequestException as e:
+            logger.warning("Failed to list models from %s: %s", self.base_url, e)
         return []
 
     def warmup(self, model: str, timeout: int = 300) -> bool:
@@ -56,7 +60,8 @@ class OllamaProvider(LLMProvider):
                 timeout=timeout,
             )
             return resp.status_code == 200
-        except requests.exceptions.RequestException:
+        except requests.exceptions.RequestException as e:
+            logger.warning("Failed to warm up model %r: %s", model, e)
             return False
 
     def chat(self, messages: list[dict], model: str, temperature: float = 0.4) -> str | None:
@@ -74,7 +79,8 @@ class OllamaProvider(LLMProvider):
             if resp.status_code != 200:
                 return None
             return resp.json().get("message", {}).get("content")
-        except requests.exceptions.RequestException:
+        except requests.exceptions.RequestException as e:
+            logger.warning("Chat request to %s failed (model=%r): %s", self.base_url, model, e)
             return None
 
     def generate_sql_streaming(
@@ -152,7 +158,8 @@ class OllamaProvider(LLMProvider):
                             "prompt": prompt,
                         }
                         return
-                except json.JSONDecodeError:
+                except json.JSONDecodeError as e:
+                    logger.debug("Skipping malformed stream line: %s", e)
                     continue
 
             # Stream ended without "done" - return what we have
@@ -164,9 +171,11 @@ class OllamaProvider(LLMProvider):
             }
 
         except requests.exceptions.Timeout:
+            logger.warning("Generate request timed out (model=%r)", selected_model)
             yield {"type": "error", "message": "Request timed out. Model might be loading."}
         except requests.exceptions.RequestException as e:
             if not stopped:
+                logger.warning("Generate request failed (model=%r): %s", selected_model, e)
                 yield {"type": "error", "message": f"Connection failed: {e}"}
         finally:
             if response:

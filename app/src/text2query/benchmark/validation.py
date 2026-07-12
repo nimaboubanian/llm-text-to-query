@@ -1,7 +1,10 @@
+import logging
 from pathlib import Path
 from sqlalchemy import inspect, text
 
 from text2query.benchmark.data_loader import TPCH_TABLES
+
+logger = logging.getLogger(__name__)
 
 
 def check_directory(directory: Path, extension: str, expected_count: int) -> None:
@@ -34,7 +37,8 @@ def check_database_ready(db_url: str) -> bool:
                 row = conn.execute(text(f"SELECT 1 FROM {table} LIMIT 1")).fetchone()
                 if row is None:
                     return False
-    except Exception:
+    except Exception as e:
+        logger.warning("Database readiness check failed: %s", e)
         return False
 
     return True

@@ -24,6 +24,7 @@ x-config: &config
   DEFAULT_MODEL:        "qwen2.5-coder:7b"     # SQL generation model
   FRONTDESK_MODEL:      "qwen2.5:3b"           # Intent routing model
   OLLAMA_URL:            "http://ollama:11434" # LLM backend endpoint
+  LOG_LEVEL:             "WARNING"             # DEBUG/INFO/WARNING/ERROR
   BENCHMARK_MODELS:     "llama3.2:3b,qwen2.5-coder:7b"
   BENCHMARK_NUM_SEEDS:  "1"   # Repetitions per query for statistical robustness
   BENCHMARK_QUERY_IDS:  "all" # Comma-separated IDs to run, e.g. "1,3,7" — "all" runs everything
@@ -93,6 +94,11 @@ docker compose --profile benchmark up --build benchmark
 If you haven't changed `BENCHMARK_MODELS`, the benchmark runs with the default model — just make sure you've already run `pull-models chat`.
 
 Runs a three-phase TPC-H pipeline: **Setup** (data generation, schema loading) → **Generation** (LLM query generation and execution) → **Analysis** (similarity metrics, reports, archiving).
+
+Each archived session under `benchmark/results/<timestamp>/` includes a `session_manifest.json`
+recording the models, seeds, query filter, scale factor, generation parameters, the fingerprint(s)
+that gate the resume cache, the package version, and the database URL (credentials stripped) —
+so every archived result is self-describing without cross-referencing logs or git history.
 
 ### Evaluation Metrics
 

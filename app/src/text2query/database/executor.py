@@ -1,7 +1,10 @@
+import logging
 from dataclasses import dataclass
 
 import pandas as pd
 from sqlalchemy import text
+
+logger = logging.getLogger(__name__)
 
 STATEMENT_TIMEOUT_MS = 30_000
 MAX_RESULT_ROWS = 10_000
@@ -27,4 +30,5 @@ def execute_sql_query(engine, query: str) -> ExecutionResult:
             rows = result.fetchmany(MAX_RESULT_ROWS)
             return ExecutionResult(pd.DataFrame(rows, columns=result.keys()), None)
     except Exception as e:
+        logger.warning("Query execution failed: %s", e)
         return ExecutionResult(None, str(e))

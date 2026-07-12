@@ -1,8 +1,11 @@
 import csv
+import json
 import math
+import re
 import shutil
 import statistics
 from datetime import datetime
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
 
@@ -612,4 +615,43 @@ def _move_contents(src_dir: Path, dst_dir: Path, label: str) -> None:
         shutil.move(str(f), str(dst_dir / f.name))
     if files:
         print(f"  Moved {len(files)} {label} -> {dst_dir}")
+
+
+def _redact_db_url(db_url: str) -> str:
+    """Strip user:password from a database URL before persisting it in a provenance record."""
+    return re.sub(r"//[^@/]*@", "//***:***@", db_url)
+
+
+def write_session_manifest(
+    session_dir: Path,
+    *,
+    models: list[str],
+    seeds: list[int] | None,
+    query_ids: list[str] | None,
+    scale_factor: int,
+    generation_parameters: dict,
+    fingerprints: dict[str, str],
+    database_url: str,
+) -> Path:
+    """Write a self-describing provenance manifest for an archived benchmark session."""
+    try:
+        package_version = version("text2query")
+    except PackageNotFoundError:
+        package_version = None
+
+    manifest = {
+        "timestamp": datetime.now().isoformat(),
+        "package_version": package_version,
+        "models": models,
+        "seeds": seeds,
+        "query_ids": query_ids,
+        "scale_factor": scale_factor,
+        "generation_parameters": generation_parameters,
+        "fingerprints": fingerprints,
+        "database_url": _redact_db_url(database_url),
+    }
+    manifest_path = session_dir / "session_manifest.json"
+    manifest_path.write_text(json.dumps(manifest, indent=2, default=str))
+    print(f"  Session manifest -> {manifest_path}")
+    return manifest_path
 

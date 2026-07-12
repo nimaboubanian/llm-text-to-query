@@ -38,3 +38,23 @@ def read_manifest_fingerprint(directory: Path) -> str | None:
         return json.loads(manifest_file.read_text()).get("fingerprint")
     except json.JSONDecodeError:
         return None
+
+
+def collect_fingerprints(root: Path) -> dict[str, str]:
+    """Collect fingerprint hashes from every manifest under a directory tree.
+
+    Keys are the manifest's directory relative to root ("." for root itself,
+    "seed_1", "model_slug/seed_2", etc. for nested generation layouts).
+    """
+    fingerprints = {}
+    if not root.exists():
+        return fingerprints
+    for manifest_file in sorted(root.rglob(MANIFEST_FILENAME)):
+        try:
+            fingerprint_hash = json.loads(manifest_file.read_text()).get("fingerprint")
+        except json.JSONDecodeError:
+            continue
+        if fingerprint_hash is not None:
+            key = str(manifest_file.relative_to(root).parent)
+            fingerprints[key] = fingerprint_hash
+    return fingerprints

@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 
+import logging
 import sys
 
 from text2query.database.schema import create_engine_for_database, get_database_schema_string
 from text2query.database.executor import execute_sql_query
 from text2query.llm.provider import get_llm_provider
-from text2query.core.config import DATABASE_URL, DEFAULT_MODEL, FRONTDESK_MODEL
+from text2query.core.config import DATABASE_URL, DEFAULT_MODEL, FRONTDESK_MODEL, LOG_LEVEL
 from text2query.cli.frontdesk import quick_classify, classify_intent, summarize_results
 from text2query.cli.style import (
     BG_BASE, FG_CYAN, FG_FROST, FG_MUTED, FG_RED, FG_YELLOW, FG_GREEN, FG_TEXT, BOLD, RESET,
@@ -141,6 +142,11 @@ def handle_model_command(args: str, current_model: str) -> str:
 
 
 def main():
+    logging.basicConfig(
+        level=getattr(logging, LOG_LEVEL.upper(), logging.WARNING),
+        format="%(levelname)s %(name)s: %(message)s",
+    )
+
     current_model = DEFAULT_MODEL
     show_sql = False
 

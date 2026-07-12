@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import logging
 from pathlib import Path
 import sys
 
@@ -19,7 +20,9 @@ from text2query.benchmark.reporting import (
     generate_cross_model_report,
     archive_session,
     model_slug,
+    write_session_manifest,
 )
+from text2query.benchmark.fingerprint import collect_fingerprints
 
 
 
@@ -90,6 +93,15 @@ def main():
         BENCHMARK_NUM_SEEDS,
         BENCHMARK_MODELS,
         BENCHMARK_QUERY_IDS,
+        LLM_TEMPERATURE,
+        LLM_MAX_TOKENS,
+        LLM_NUM_CTX,
+        LOG_LEVEL,
+    )
+
+    logging.basicConfig(
+        level=getattr(logging, LOG_LEVEL.upper(), logging.WARNING),
+        format="%(levelname)s %(name)s: %(message)s",
     )
 
     schema_file = Path("benchmark/.tpch/schema.sql")
@@ -207,10 +219,27 @@ def main():
         # === Archive ===
         print("\n--- Archiving ---\n")
 
+        fingerprints = collect_fingerprints(output_dir)
+
         print("Archive Session")
         session_dir = archive_session(
             queries_dir=output_dir, answers_dir=generated_answers_dir,
             report_dir=report_dir, results_base=results_base,
+        )
+
+        write_session_manifest(
+            session_dir,
+            models=models,
+            seeds=seeds,
+            query_ids=query_ids,
+            scale_factor=BENCHMARK_SCALE_FACTOR,
+            generation_parameters={
+                "temperature": LLM_TEMPERATURE,
+                "max_tokens": LLM_MAX_TOKENS,
+                "num_ctx": LLM_NUM_CTX,
+            },
+            fingerprints=fingerprints,
+            database_url=DATABASE_URL,
         )
         print()
 

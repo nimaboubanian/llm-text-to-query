@@ -1,3 +1,4 @@
+import logging
 import math
 import re
 from collections import Counter
@@ -8,6 +9,8 @@ import pandas as pd
 import sqlglot
 from sqlglot import exp
 from sqlglot.diff import Keep, diff
+
+logger = logging.getLogger(__name__)
 
 
 def evaluate_query(
@@ -58,8 +61,8 @@ def _classify_error(sql: str, error_text: str) -> str:
         sqlglot.parse_one(sql, dialect="postgres", error_level=sqlglot.ErrorLevel.RAISE)
     except sqlglot.errors.ParseError:
         return "SyntaxError"
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("Unexpected error classifying SQL error: %s", e)
 
     # sqlglot is more lenient than PostgreSQL; check the actual error text too
     if any(re.search(p, error_lower) for p in (
@@ -125,7 +128,8 @@ def _has_top_level_order_limit(sql: str) -> bool:
     try:
         tree = sqlglot.parse_one(sql, dialect="postgres")
         return tree.args.get("order") is not None and tree.args.get("limit") is not None
-    except Exception:
+    except Exception as e:
+        logger.debug("Failed to parse SQL for order/limit check, falling back to keyword search: %s", e)
         return "ORDER BY" in sql.upper() and "LIMIT" in sql.upper()
 
 
@@ -183,12 +187,14 @@ def _ast_similarity(gt_sql: str, llm_sql: str) -> float | None:
         llm_tree = sqlglot.parse(llm_sql, dialect="postgres")[0]
         if gt_tree is None or llm_tree is None:
             return None
-    except Exception:
+    except Exception as e:
+        logger.debug("Failed to parse SQL for AST similarity: %s", e)
         return None
 
     try:
         changes = diff(gt_tree, llm_tree)
-    except Exception:
+    except Exception as e:
+        logger.debug("Failed to diff SQL ASTs: %s", e)
         return None
 
     kept = sum(1 for c in changes if isinstance(c, Keep))

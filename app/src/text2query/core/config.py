@@ -25,6 +25,8 @@ def _env_float(name: str, default: float) -> float:
 
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://ollama:11434")
 
+LOG_LEVEL = os.getenv("LOG_LEVEL", "WARNING")
+
 LLM_TEMPERATURE = _env_float("LLM_TEMPERATURE", 0.1)
 LLM_NUM_CTX = _env_int("LLM_NUM_CTX", 4096)
 LLM_MAX_TOKENS = 2048

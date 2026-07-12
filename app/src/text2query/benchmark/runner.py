@@ -1,7 +1,13 @@
+from dataclasses import asdict
 from pathlib import Path
 
+from text2query.core.config import LLM_MAX_TOKENS, LLM_TEMPERATURE
 from text2query.database.schema import create_engine_for_database, get_database_schema_string
 from text2query.llm.provider import get_llm_provider
+from text2query.llm.prompts import DEFAULT_SQL_GENERATION_TEMPLATE
+from text2query.benchmark.fingerprint import (
+    MANIFEST_FILENAME, GenerationFingerprint, read_manifest_fingerprint, write_manifest,
+)
 from text2query.benchmark.pipeline import execute_queries_to_csv, read_business_question
 
 
@@ -47,8 +53,27 @@ def _run_single_generation(
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Cache: skip queries whose .sql file already exists. Assumes model/prompt/schema
-    # haven't changed since the file was generated — safe for resuming interrupted runs.
+    engine = create_engine_for_database(db_url)
+    schema = get_database_schema_string(engine)
+
+    fingerprint = GenerationFingerprint(
+        model=model,
+        prompt_template=DEFAULT_SQL_GENERATION_TEMPLATE,
+        schema=schema,
+        temperature=LLM_TEMPERATURE,
+        max_tokens=LLM_MAX_TOKENS,
+        seed=seed,
+    )
+
+    cached_fingerprint = read_manifest_fingerprint(output_dir)
+    if cached_fingerprint is not None and cached_fingerprint != fingerprint.hash:
+        print(f"  ⚠ Generation config changed since last run — clearing stale cache in {output_dir}")
+        _clear_generated_files(output_dir)
+    write_manifest(output_dir, fingerprint.hash, asdict(fingerprint))
+
+    # Cache: skip queries whose .sql file already exists. Safe to resume from — the
+    # fingerprint check above guarantees the cache reflects the current model, prompt,
+    # schema, temperature, and seed; a mismatch clears it before we get here.
     existing = {f.stem for f in output_dir.glob("*.sql")}
     to_process = [q for q in question_files if q.stem not in existing]
 
@@ -64,9 +89,6 @@ def _run_single_generation(
 
     print(f"  Warming up {model}...", end="", flush=True)
     print(" ✓" if llm.warmup(model) else " ⚠ (warmup failed, continuing)")
-
-    engine = create_engine_for_database(db_url)
-    schema = get_database_schema_string(engine)
 
     results = []
 
@@ -158,6 +180,21 @@ def _execute_single(
 
     answers_dir.mkdir(parents=True, exist_ok=True)
 
+    # The generated queries carry a fingerprint from run_llm_generation. If it no longer
+    # matches what these answers were last executed against, the queries were regenerated
+    # since — clear the stale answers so they can't be paired with the new queries.
+    generation_fingerprint = read_manifest_fingerprint(queries_dir)
+    cached_fingerprint = read_manifest_fingerprint(answers_dir)
+    if (
+        generation_fingerprint is not None
+        and cached_fingerprint is not None
+        and cached_fingerprint != generation_fingerprint
+    ):
+        print(f"  ⚠ Generated queries changed since last execution — clearing stale answers in {answers_dir}")
+        _clear_answer_files(answers_dir)
+    if generation_fingerprint is not None:
+        write_manifest(answers_dir, generation_fingerprint, {"source": str(queries_dir / MANIFEST_FILENAME)})
+
     existing = {f.stem for f in answers_dir.glob("*.csv")} | {f.stem for f in answers_dir.glob("*.error")}
     to_process = [q for q in query_files if q.stem not in existing]
 
@@ -168,3 +205,15 @@ def _execute_single(
     cache_label = f", {len(existing)} cached" if existing else ""
     print(f"  Executing {len(to_process)} queries{cache_label}...")
     return execute_queries_to_csv(to_process, answers_dir, db_url, write_error_file=True)
+
+
+def _clear_generated_files(output_dir: Path) -> None:
+    for pattern in ("*.sql", "*.prompt", "*.raw"):
+        for f in output_dir.glob(pattern):
+            f.unlink()
+
+
+def _clear_answer_files(answers_dir: Path) -> None:
+    for pattern in ("*.csv", "*.error"):
+        for f in answers_dir.glob(pattern):
+            f.unlink()

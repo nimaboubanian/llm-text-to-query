@@ -632,6 +632,7 @@ def write_session_manifest(
     generation_parameters: dict,
     fingerprints: dict[str, str],
     database_url: str,
+    flags: dict | None = None,
 ) -> Path:
     """Write a self-describing provenance manifest for an archived benchmark session."""
     try:
@@ -647,6 +648,7 @@ def write_session_manifest(
         "query_ids": query_ids,
         "scale_factor": scale_factor,
         "generation_parameters": generation_parameters,
+        "flags": flags or {},
         "fingerprints": fingerprints,
         "database_url": _redact_db_url(database_url),
     }

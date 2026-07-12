@@ -54,14 +54,14 @@ def test_prompt_template_edit_changes_fingerprint(tmp_path):
     original = load_prompt_template(path)
     fp_before = GenerationFingerprint(
         model="m", prompt_template=original, schema="s",
-        temperature=0.1, max_tokens=10, seed=None,
+        temperature=0.1, max_tokens=10, seed=None, flags={},
     ).hash
 
     path.write_text("Schema: {schema}\nQuery: {query}\nExtra rule.\n")
     edited = load_prompt_template(path)
     fp_after = GenerationFingerprint(
         model="m", prompt_template=edited, schema="s",
-        temperature=0.1, max_tokens=10, seed=None,
+        temperature=0.1, max_tokens=10, seed=None, flags={},
     ).hash
 
     assert fp_before != fp_after

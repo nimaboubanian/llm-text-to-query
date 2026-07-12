@@ -19,23 +19,17 @@ def run_llm_generation(
     seeds: list[int] | None = None,
     query_ids: list[str] | None = None,
 ) -> list[dict]:
-    if seeds and len(seeds) > 1:
-        all_results = []
-        for seed in seeds:
-            seed_dir = output_dir / f"seed_{seed}"
-            print(f"\n  --- Seed {seed} ---")
-            results = _run_single_generation(
-                questions_dir, seed_dir, db_url, model, seed=seed, query_ids=query_ids,
-            )
-            all_results.extend(
-                {**r, "seed": seed} for r in results
-            )
-        return all_results
-    else:
-        seed = seeds[0] if seeds else None
-        return _run_single_generation(
-            questions_dir, output_dir, db_url, model, seed=seed, query_ids=query_ids,
+    all_results = []
+    for seed in seeds or [1]:
+        seed_dir = output_dir / f"seed_{seed}"
+        print(f"\n  --- Seed {seed} ---")
+        results = _run_single_generation(
+            questions_dir, seed_dir, db_url, model, seed=seed, query_ids=query_ids,
         )
+        all_results.extend(
+            {**r, "seed": seed} for r in results
+        )
+    return all_results
 
 
 def _run_single_generation(
@@ -143,19 +137,16 @@ def execute_generated_queries(
     seeds: list[int] | None = None,
     query_ids: list[str] | None = None,
 ) -> list[dict]:
-    if seeds and len(seeds) > 1:
-        all_results = []
-        for seed in seeds:
-            seed_queries = queries_dir / f"seed_{seed}"
-            seed_answers = answers_dir / f"seed_{seed}"
-            print(f"\n  --- Seed {seed} ---")
-            results = _execute_single(seed_queries, seed_answers, db_url, query_ids=query_ids)
-            all_results.extend(
-                {**r, "seed": seed} for r in results
-            )
-        return all_results
-    else:
-        return _execute_single(queries_dir, answers_dir, db_url, query_ids=query_ids)
+    all_results = []
+    for seed in seeds or [1]:
+        seed_queries = queries_dir / f"seed_{seed}"
+        seed_answers = answers_dir / f"seed_{seed}"
+        print(f"\n  --- Seed {seed} ---")
+        results = _execute_single(seed_queries, seed_answers, db_url, query_ids=query_ids)
+        all_results.extend(
+            {**r, "seed": seed} for r in results
+        )
+    return all_results
 
 
 def _execute_single(

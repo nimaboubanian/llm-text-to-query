@@ -130,8 +130,8 @@ def test_raw_file_written_on_api_error(tmp_path):
          patch("text2query.benchmark.runner.get_database_schema_string", return_value="schema"):
         run_llm_generation(questions_dir, output_dir, "db://url", "bad-model", seeds=None)
 
-    assert not (output_dir / "01.sql").exists()
-    raw = output_dir / "01.raw"
+    assert not (output_dir / "seed_1" / "01.sql").exists()
+    raw = output_dir / "seed_1" / "01.raw"
     assert raw.exists()
     assert raw.read_text().startswith("ERROR:")
     assert "not found" in raw.read_text()
@@ -155,8 +155,8 @@ def test_raw_file_written_on_extraction_failure(tmp_path):
          patch("text2query.benchmark.runner.get_database_schema_string", return_value="schema"):
         run_llm_generation(questions_dir, output_dir, "db://url", "test-model", seeds=None)
 
-    assert not (output_dir / "01.sql").exists()
-    raw = output_dir / "01.raw"
+    assert not (output_dir / "seed_1" / "01.sql").exists()
+    raw = output_dir / "seed_1" / "01.raw"
     assert raw.exists()
     assert raw.read_text() == raw_model_output
 
@@ -180,8 +180,8 @@ def test_cross_model_csv_export(tmp_path):
 
     # Create model outputs (2 models, single seed)
     for model_name in ["model_a", "model_b"]:
-        mq = gen_queries / model_name
-        ma = gen_answers / model_name
+        mq = gen_queries / model_name / "seed_1"
+        ma = gen_answers / model_name / "seed_1"
         mq.mkdir(parents=True)
         ma.mkdir(parents=True)
         (mq / "01.sql").write_text("SELECT name FROM customers;")

@@ -34,12 +34,12 @@ def test_results_csv_single_seed(tmp_path):
     """Single-model single-seed runs should emit results.csv with the new columns."""
     ref_queries = tmp_path / "ref_queries"
     ref_answers = tmp_path / "ref_answers"
-    gen_queries = tmp_path / "gen_queries"
-    gen_answers = tmp_path / "gen_answers"
+    gen_queries = tmp_path / "gen_queries" / "seed_1"
+    gen_answers = tmp_path / "gen_answers" / "seed_1"
     questions = tmp_path / "questions"
     report_dir = tmp_path / "report"
     for d in [ref_queries, ref_answers, gen_queries, gen_answers, questions]:
-        d.mkdir()
+        d.mkdir(parents=True)
 
     (ref_queries / "01.sql").write_text("SELECT name FROM customers;")
     (ref_answers / "01.csv").write_text("name\nAlice\n")
@@ -49,9 +49,9 @@ def test_results_csv_single_seed(tmp_path):
     (questions / "01.md").write_text('# Business Question:\n  "What are the customer names?"\n')
 
     generate_reports(
-        generated_queries_dir=gen_queries,
+        generated_queries_dir=gen_queries.parent,
         reference_queries_dir=ref_queries,
-        generated_answers_dir=gen_answers,
+        generated_answers_dir=gen_answers.parent,
         reference_answers_dir=ref_answers,
         report_dir=report_dir,
         model="m1",
@@ -65,7 +65,7 @@ def test_results_csv_single_seed(tmp_path):
 
     assert len(rows) == 1
     r = rows[0]
-    assert r["seed"] == ""  # single-seed → blank
+    assert r["seed"] == "1"
     assert r["model"] == "m1"
     assert r["query_id"] == "01"
     assert r["nl_query"] == "What are the customer names?"

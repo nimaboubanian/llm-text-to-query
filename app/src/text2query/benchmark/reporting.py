@@ -69,27 +69,8 @@ def _compute_stats(values: list[float]) -> dict:
     }
 
 
-def _format_per_query_similarity(result: dict) -> str:
-    lines = [
-        "## Similarity Analysis\n",
-        "| Metric | Value |",
-        "|---|---|",
-        f"| Result F1 | {_v(result['result_f1'])} |",
-        f"| Precision | {_v(result['result_precision'])} |",
-        f"| Recall | {_v(result['result_recall'])} |",
-        f"| AST Similarity | {_v(result['ast_similarity'])} |",
-    ]
-
-    if result.get("error_category"):
-        lines.append(f"| Error Category | {result['error_category']} |")
-    if result.get("error_detail"):
-        lines.append(f"| Error Detail | `{result['error_detail']}` |")
-
-    return "\n".join(lines) + "\n"
-
-
-def _format_per_query_multiseed(seed_results: list[dict]) -> str:
-    """Format per-query report for multi-seed runs showing all seeds + aggregated stats."""
+def _format_per_query(seed_results: list[dict]) -> str:
+    """Format a per-query report showing all seeds + aggregated stats."""
     lines = [
         "## Per-Seed Results\n",
         "| Seed | Status | Result F1 | AST Sim |",
@@ -131,22 +112,8 @@ def _format_per_query_multiseed(seed_results: list[dict]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _format_summary_similarity(all_results: list[dict]) -> str:
-    lines = [
-        "| Query | Status | Result F1 | AST Sim |",
-        "|---|---|---|---|",
-    ]
-    for r in all_results:
-        qid = f"{r['query_id']:02d}"
-        lines.append(
-            f"| {qid} | {r['status']} | {_v(r['result_f1'])} "
-            f"| {_v(r['ast_similarity'])} |"
-        )
-    return "\n".join(lines) + "\n"
-
-
-def _format_summary_multiseed(aggregated: list[dict], num_seeds: int) -> str:
-    """Format per-query table for multi-seed runs with mean±std columns."""
+def _format_summary(aggregated: list[dict], num_seeds: int) -> str:
+    """Format per-query summary table with mean±std columns."""
     lines = [
         "| Query | Seeds ok | F1 (mean±std) | AST (mean±std) | F1 95% CI |",
         "|---|---|---|---|---|",
@@ -178,132 +145,8 @@ def generate_reports(
     selected_ids: list[str] | None = None,
     questions_dir: Path | None = None,
 ) -> tuple[Path, list[dict]]:
-    if seeds and len(seeds) > 1:
-        return _generate_multiseed_reports(
-            generated_queries_dir, reference_queries_dir,
-            generated_answers_dir, reference_answers_dir,
-            report_dir, seeds, model=model, selected_ids=selected_ids,
-            questions_dir=questions_dir,
-        )
-    else:
-        return _generate_single_reports(
-            generated_queries_dir, reference_queries_dir,
-            generated_answers_dir, reference_answers_dir,
-            report_dir, model=model, selected_ids=selected_ids,
-            questions_dir=questions_dir,
-        )
-
-
-def _generate_single_reports(
-    generated_queries_dir: Path,
-    reference_queries_dir: Path,
-    generated_answers_dir: Path,
-    reference_answers_dir: Path,
-    report_dir: Path,
-    model: str | None = None,
-    selected_ids: list[str] | None = None,
-    questions_dir: Path | None = None,
-) -> tuple[Path, list[dict]]:
-    """Single-seed report generation."""
-    per_query_dir = report_dir / "per_query"
-    per_query_dir.mkdir(parents=True, exist_ok=True)
-
-    all_ids = sorted(f.stem for f in reference_queries_dir.glob("*.sql"))
-    query_ids = [q for q in all_ids if q in selected_ids] if selected_ids is not None else all_ids
-
-    all_results = []
-
-    for qid in query_ids:
-        sim_result = evaluate_query(
-            query_id=int(qid),
-            gt_csv=reference_answers_dir / f"{qid}.csv",
-            llm_csv=generated_answers_dir / f"{qid}.csv",
-            gt_sql=reference_queries_dir / f"{qid}.sql",
-            llm_sql=generated_queries_dir / f"{qid}.sql",
-        )
-        sim_result["seed"] = None
-        all_results.append(sim_result)
-
-        ref_sql = (reference_queries_dir / f"{qid}.sql").read_text().strip()
-        llm_sql_path = generated_queries_dir / f"{qid}.sql"
-        raw_path = generated_queries_dir / f"{qid}.raw"
-        prompt_path = generated_queries_dir / f"{qid}.prompt"
-        llm_sql = llm_sql_path.read_text().strip() if llm_sql_path.exists() else None
-
-        sim_result["model"] = model
-        sim_result["nl_query"] = (
-            read_business_question(questions_dir / f"{qid}.md") if questions_dir else None
-        )
-        sim_result["prompt"] = prompt_path.read_text() if prompt_path.exists() else None
-        sim_result["generated_sql"] = llm_sql
-        sim_result["real_sql"] = ref_sql
-
-        if llm_sql:
-            llm_section = f"```sql\n{llm_sql}\n```\n\n"
-        elif raw_path.exists():
-            raw_content = raw_path.read_text().strip()
-            if raw_content.startswith("ERROR:"):
-                llm_section = f"*(generation failed — {raw_content})*\n\n"
-            else:
-                snippet = raw_content[:800] + ("\n\n*[truncated]*" if len(raw_content) > 800 else "")
-                llm_section = f"*(SQL extraction failed — model output:)*\n\n```\n{snippet}\n```\n\n"
-        else:
-            llm_section = "*(not generated)*\n\n"
-
-        status = sim_result["status"]
-        meta = f"- **Model:** {model}\n" if model else ""
-        report = (
-            f"# Query {qid} — Report\n\n"
-            f"{meta}"
-            f"- **Benchmark:** TPC-H\n"
-            f"- **Status:** {status}\n\n"
-            f"## Reference SQL\n\n```sql\n{ref_sql}\n```\n\n"
-            f"## LLM-Generated SQL\n\n"
-            + llm_section
-            + _format_per_query_similarity(sim_result)
-        )
-        (per_query_dir / f"{qid}.md").write_text(report)
-        print(f"  [{qid}] {status}")
-
-    total = len(all_results)
-    executed = sum(1 for r in all_results if r["status"] == "ok")
-    errors = sum(1 for r in all_results if r["status"] == "exec_error")
-    not_generated = sum(1 for r in all_results if r["status"] == "missing")
-    exact_matches = sum(1 for r in all_results if r.get("result_f1") == 1.0)
-
-    model_line = f"| Model | {model} |\n" if model else ""
-    summary = (
-        f"# Benchmark Summary\n\n"
-        f"| Metric | Count |\n"
-        f"|---|---|\n"
-        f"{model_line}"
-        f"| Benchmark | TPC-H |\n"
-        f"| Total queries | {total} |\n"
-        f"| Executed successfully | {executed} |\n"
-        f"| Exact matches (F1 = 1.0) | {exact_matches} |\n"
-        f"| Execution errors | {errors} |\n"
-        f"| Not generated | {not_generated} |\n\n"
-        + _format_summary_similarity(all_results)
-    )
-    (report_dir / "summary.md").write_text(summary)
-    _write_results_csv(all_results, report_dir / "results.csv")
-
-    print(f"  Reports generated -> {report_dir}")
-    return report_dir, all_results
-
-
-def _generate_multiseed_reports(
-    generated_queries_dir: Path,
-    reference_queries_dir: Path,
-    generated_answers_dir: Path,
-    reference_answers_dir: Path,
-    report_dir: Path,
-    seeds: list[int],
-    model: str | None = None,
-    selected_ids: list[str] | None = None,
-    questions_dir: Path | None = None,
-) -> tuple[Path, list[dict]]:
-    """Generate reports aggregating multiple seed runs with statistical analysis."""
+    """Generate per-query and summary reports, aggregating stats across seeds."""
+    seeds = seeds or [1]
     per_query_dir = report_dir / "per_query"
     per_query_dir.mkdir(parents=True, exist_ok=True)
 
@@ -368,15 +211,15 @@ def _generate_multiseed_reports(
 
         meta = f"- **Model:** {model}\n" if model else ""
         report = (
-            f"# Query {qid} — Multi-Seed Report ({len(seeds)} seeds)\n\n"
+            f"# Query {qid} — Report ({len(seeds)} seed{'s' if len(seeds) > 1 else ''})\n\n"
             f"{meta}"
             f"- **Benchmark:** TPC-H\n\n"
             f"## Reference SQL\n\n```sql\n{ref_sql}\n```\n\n"
-            + _format_per_query_multiseed(seed_results)
+            + _format_per_query(seed_results)
             + seed_sql_sections
         )
         (per_query_dir / f"{qid}.md").write_text(report)
-        print(f"  [{qid}] evaluated across {len(seeds)} seeds")
+        print(f"  [{qid}] evaluated across {len(seeds)} seed{'s' if len(seeds) > 1 else ''}")
 
     total = len(query_ids)
     exact_matches = sum(
@@ -386,7 +229,7 @@ def _generate_multiseed_reports(
 
     model_line = f"| Model | {model} |\n" if model else ""
     summary = (
-        f"# Benchmark Summary (Multi-Seed)\n\n"
+        f"# Benchmark Summary\n\n"
         f"| Metric | Value |\n"
         f"|---|---|\n"
         f"{model_line}"
@@ -395,7 +238,7 @@ def _generate_multiseed_reports(
         f"| Seeds per query | {len(seeds)} |\n"
         f"| Total evaluations | {total * len(seeds)} |\n"
         f"| Exact matches (F1 = 1.0 mean) | {exact_matches} |\n\n"
-        + _format_summary_multiseed(aggregated, len(seeds))
+        + _format_summary(aggregated, len(seeds))
     )
     (report_dir / "summary.md").write_text(summary)
     _write_results_csv(all_flat_results, report_dir / "results.csv")
@@ -419,8 +262,7 @@ def generate_cross_model_report(
     """Generate cross-model comparison report and CSV export."""
     all_ids = sorted(f.stem for f in reference_queries_dir.glob("*.sql"))
     query_ids = [q for q in all_ids if q in selected_ids] if selected_ids is not None else all_ids
-    seeds_list = seeds or [None]
-    multi_seed = seeds is not None and len(seeds) > 1
+    seeds_list = seeds or [1]
 
     # Collect all raw results
     all_rows = []
@@ -451,12 +293,8 @@ def generate_cross_model_report(
                 if key in precomputed_lookup:
                     sim = precomputed_lookup[key]
                 else:
-                    if multi_seed:
-                        q_dir = model_queries / f"seed_{seed}"
-                        a_dir = model_answers / f"seed_{seed}"
-                    else:
-                        q_dir = model_queries
-                        a_dir = model_answers
+                    q_dir = model_queries / f"seed_{seed}"
+                    a_dir = model_answers / f"seed_{seed}"
 
                     sim = evaluate_query(
                         query_id=int(qid),

@@ -49,8 +49,7 @@ def _run_single_model_benchmark(
         generated_answers_dir = generated_answers_base
         report_dir = report_base
 
-    seed_info = f", seeds: {len(seeds)}" if seeds else ""
-    print(f"\n--- LLM SQL Generation (model: {model}{seed_info}) ---\n")
+    print(f"\n--- LLM SQL Generation (model: {model}, seeds: {len(seeds)}) ---\n")
 
     print("Generate SQL Queries via LLM")
     run_llm_generation(
@@ -112,7 +111,7 @@ def main():
     results_base = Path("benchmark/results")
     data_dir = Path(BENCHMARK_DATA_PATH) if BENCHMARK_DATA_PATH else Path(f"benchmark/.tpch/data/sf{BENCHMARK_SCALE_FACTOR}")
 
-    seeds = list(range(1, BENCHMARK_NUM_SEEDS + 1)) if BENCHMARK_NUM_SEEDS > 1 else None
+    seeds = list(range(1, BENCHMARK_NUM_SEEDS + 1))
     if BENCHMARK_MODELS:
         models = BENCHMARK_MODELS
     else:
@@ -263,10 +262,9 @@ def main():
             print(f"  - Models:              {', '.join(models)}")
         else:
             print(f"  - Model:               {models[0]}")
-        if seeds:
-            print(f"  - Seeds per query:     {BENCHMARK_NUM_SEEDS}")
-            total_evals = len(query_ids) * BENCHMARK_NUM_SEEDS if query_ids else total_questions * BENCHMARK_NUM_SEEDS
-            print(f"  - Total evaluations:   {total_evals} ({len(query_ids) if query_ids else total_questions} queries × {BENCHMARK_NUM_SEEDS} seeds × {len(models)} model{'s' if len(models) > 1 else ''})")
+        print(f"  - Seeds per query:     {BENCHMARK_NUM_SEEDS}")
+        total_evals = len(query_ids) * BENCHMARK_NUM_SEEDS if query_ids else total_questions * BENCHMARK_NUM_SEEDS
+        print(f"  - Total evaluations:   {total_evals} ({len(query_ids) if query_ids else total_questions} queries × {BENCHMARK_NUM_SEEDS} seeds × {len(models)} model{'s' if len(models) > 1 else ''})")
         print(f"  - Session:             {session_dir}")
         print(f"  - Database:            {DATABASE_URL}")
         print()

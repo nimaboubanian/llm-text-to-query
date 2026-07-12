@@ -38,8 +38,8 @@ def test_identical_config_resumes_from_cache(tmp_path):
         run_llm_generation(questions_dir, output_dir, "db://url", "test-model", seeds=None)
         assert call_count["n"] == 1  # cache hit — no second LLM call
 
-    assert (output_dir / "01.sql").exists()
-    assert (output_dir / "manifest.json").exists()
+    assert (output_dir / "seed_1" / "01.sql").exists()
+    assert (output_dir / "seed_1" / "manifest.json").exists()
 
 
 def test_model_change_invalidates_and_regenerates(tmp_path, capsys):
@@ -67,7 +67,7 @@ def test_model_change_invalidates_and_regenerates(tmp_path, capsys):
 
     assert call_count["n"] == 2  # regenerated, not reused
     assert "config changed" in capsys.readouterr().out
-    assert (output_dir / "01.sql").exists()
+    assert (output_dir / "seed_1" / "01.sql").exists()
 
 
 def test_schema_change_invalidates_and_regenerates(tmp_path, capsys):
@@ -129,9 +129,10 @@ def test_temperature_change_invalidates_and_regenerates(tmp_path, capsys, monkey
 def test_stale_answers_cleared_when_queries_manifest_changes(tmp_path, monkeypatch):
     queries_dir = tmp_path / "queries"
     answers_dir = tmp_path / "answers"
-    queries_dir.mkdir()
-    (queries_dir / "01.sql").write_text("SELECT 1")
-    write_manifest(queries_dir, "fp-old", {"model": "m1"})
+    seed_queries_dir = queries_dir / "seed_1"
+    seed_queries_dir.mkdir(parents=True)
+    (seed_queries_dir / "01.sql").write_text("SELECT 1")
+    write_manifest(seed_queries_dir, "fp-old", {"model": "m1"})
 
     call_count = {"n": 0}
 
@@ -144,15 +145,15 @@ def test_stale_answers_cleared_when_queries_manifest_changes(tmp_path, monkeypat
 
     execute_generated_queries(queries_dir, answers_dir, "db://url", seeds=None)
     assert call_count["n"] == 1
-    assert read_manifest_fingerprint(answers_dir) == "fp-old"
+    assert read_manifest_fingerprint(answers_dir / "seed_1") == "fp-old"
 
     # Same fingerprint on resume — cache hit, no re-execution
     execute_generated_queries(queries_dir, answers_dir, "db://url", seeds=None)
     assert call_count["n"] == 1
 
     # Queries regenerated with a new fingerprint
-    write_manifest(queries_dir, "fp-new", {"model": "m2"})
+    write_manifest(seed_queries_dir, "fp-new", {"model": "m2"})
 
     execute_generated_queries(queries_dir, answers_dir, "db://url", seeds=None)
     assert call_count["n"] == 2  # stale answer cleared, re-executed
-    assert read_manifest_fingerprint(answers_dir) == "fp-new"
+    assert read_manifest_fingerprint(answers_dir / "seed_1") == "fp-new"

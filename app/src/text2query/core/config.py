@@ -29,7 +29,7 @@ LOG_LEVEL = os.getenv("LOG_LEVEL", "WARNING")
 
 LLM_TEMPERATURE = _env_float("LLM_TEMPERATURE", 0.1)
 LLM_NUM_CTX = _env_int("LLM_NUM_CTX", 4096)
-LLM_MAX_TOKENS = 2048
+LLM_MAX_TOKENS = _env_int("LLM_MAX_TOKENS", 2048)
 
 DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "qwen2.5-coder:7b")
 
@@ -37,12 +37,12 @@ PROMPT_TEMPLATE_PATH = os.getenv("PROMPT_TEMPLATE_PATH", "prompts/sql_generation
 
 SERVER_PORT = _env_int("SERVER_PORT", 8000)
 
-BENCHMARK_SCALE_FACTOR = 1
+BENCHMARK_SCALE_FACTOR = _env_int("BENCHMARK_SCALE_FACTOR", 1)
 BENCHMARK_NUM_SEEDS = _env_int("BENCHMARK_NUM_SEEDS", 1)
 BENCHMARK_DATA_PATH = os.getenv("BENCHMARK_DATA_PATH")
 
 _models_raw = os.getenv("BENCHMARK_MODELS", "")
-BENCHMARK_MODELS = [m.strip() for m in _models_raw.split(",") if m.strip()][:3]
+BENCHMARK_MODELS = [m.strip() for m in _models_raw.split(",") if m.strip()]
 
 _query_ids_raw = os.getenv("BENCHMARK_QUERY_IDS", "all").strip().lower()
 BENCHMARK_QUERY_IDS: list[str] | None = (

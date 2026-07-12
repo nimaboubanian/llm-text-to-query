@@ -20,7 +20,6 @@ dev = ["pytest>=8.0"]
 
 [project.scripts]
 benchmark = "text2query.benchmark.benchmarking:main"
-text2query = "text2query.cli.repl:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

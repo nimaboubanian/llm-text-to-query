@@ -5,10 +5,6 @@ case "$1" in
   chat)
     echo "Pulling default model: $DEFAULT_MODEL"
     ollama pull "$DEFAULT_MODEL"
-    if [ -n "$FRONTDESK_MODEL" ] && [ "$FRONTDESK_MODEL" != "$DEFAULT_MODEL" ]; then
-      echo "Pulling front-desk model: $FRONTDESK_MODEL"
-      ollama pull "$FRONTDESK_MODEL"
-    fi
     ;;
   benchmark)
     if [ -z "$BENCHMARK_MODELS" ]; then

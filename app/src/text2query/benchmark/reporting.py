@@ -44,11 +44,9 @@ def _write_results_csv(results: list[dict], csv_path: Path) -> None:
     print(f"  CSV export -> {csv_path} ({len(results)} rows)")
 
 
-def _v(val: float | bool | None) -> str:
+def _v(val: float | None) -> str:
     if val is None:
         return "—"
-    if isinstance(val, bool):
-        return "Yes" if val else "No"
     return f"{val:.4f}"
 
 

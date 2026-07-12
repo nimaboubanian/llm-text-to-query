@@ -46,12 +46,8 @@ def collect_fingerprints(root: Path) -> dict[str, str]:
     Keys are the manifest's directory relative to root ("." for root itself,
     "seed_1", "model_slug/seed_2", etc. for nested generation layouts).
     """
-    fingerprints = {}
-    if not root.exists():
-        return fingerprints
-    for manifest_file in sorted(root.rglob(MANIFEST_FILENAME)):
-        fingerprint_hash = read_manifest_fingerprint(manifest_file.parent)
-        if fingerprint_hash is not None:
-            key = str(manifest_file.relative_to(root).parent)
-            fingerprints[key] = fingerprint_hash
-    return fingerprints
+    return {
+        str(manifest_file.relative_to(root).parent): fingerprint_hash
+        for manifest_file in sorted(root.rglob(MANIFEST_FILENAME))
+        if (fingerprint_hash := read_manifest_fingerprint(manifest_file.parent)) is not None
+    }

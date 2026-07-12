@@ -132,14 +132,12 @@ def _has_top_level_order_limit(sql: str) -> bool:
 def _result_set_comparison(
     gt_csv: Path, llm_csv: Path, ref_sql: str = "", float_epsilon: float = 1e-4,
 ) -> tuple[str, float | None, float | None, float | None, str | None]:
+    error_file = llm_csv.with_suffix(".error")
+    if error_file.exists():
+        return "exec_error", 0.0, 0.0, 0.0, error_file.read_text().strip()
+
     if not llm_csv.exists():
         return "missing", None, None, None, None
-
-    content = llm_csv.read_text()
-    first_line = content.split("\n", 1)[0].strip()
-    if first_line == "ERROR":
-        error_detail = content.split("\n", 1)[1].strip() if "\n" in content else ""
-        return "exec_error", 0.0, 0.0, 0.0, error_detail
 
     gt_df = pd.read_csv(gt_csv)
     llm_df = pd.read_csv(llm_csv)

@@ -3,7 +3,6 @@ import re
 import subprocess
 from pathlib import Path
 
-import pandas as pd
 from sqlalchemy import text
 
 from text2query.database.schema import create_engine_for_database
@@ -169,7 +168,7 @@ def generate_answers(
 
     print(f"  Generating {len(missing_ids)} missing answer files...")
     query_files = [queries_dir / f"{qid}.sql" for qid in sorted(missing_ids)]
-    return execute_queries_to_csv(query_files, answers_dir, db_url, write_error_csv=False)
+    return execute_queries_to_csv(query_files, answers_dir, db_url, write_error_file=False)
 
 
 def execute_queries_to_csv(
@@ -177,7 +176,7 @@ def execute_queries_to_csv(
     output_dir: Path,
     db_url: str,
     *,
-    write_error_csv: bool = False,
+    write_error_file: bool = False,
 ) -> list[dict]:
     """Execute SQL files and save results as CSV.
 
@@ -185,7 +184,7 @@ def execute_queries_to_csv(
         query_files: .sql files to execute
         output_dir: directory for .csv results
         db_url: database connection URL
-        write_error_csv: write error CSV on failure
+        write_error_file: on failure, write the error message to a sidecar .error file
     """
     output_dir.mkdir(parents=True, exist_ok=True)
     engine = create_engine_for_database(db_url)
@@ -197,23 +196,22 @@ def execute_queries_to_csv(
 
         try:
             sql = query_file.read_text().strip()
-            result_df = execute_sql_query(engine, sql)
-            output_file = output_dir / f"{query_id}.csv"
+            result = execute_sql_query(engine, sql)
 
-            if isinstance(result_df, str):
-                if write_error_csv:
-                    pd.DataFrame({"ERROR": [result_df]}).to_csv(output_file, index=False)
+            if not result.ok:
+                if write_error_file:
+                    (output_dir / f"{query_id}.error").write_text(result.error)
                 print(" ✗ (error)")
-                results.append({"query_id": query_id, "status": "error", "error": result_df})
+                results.append({"query_id": query_id, "status": "error", "error": result.error})
             else:
-                result_df.to_csv(output_file, index=False)
-                print(f" ✓ ({len(result_df)} rows)")
-                results.append({"query_id": query_id, "status": "success", "rows": len(result_df)})
+                output_file = output_dir / f"{query_id}.csv"
+                result.data.to_csv(output_file, index=False)
+                print(f" ✓ ({len(result.data)} rows)")
+                results.append({"query_id": query_id, "status": "success", "rows": len(result.data)})
 
         except Exception as e:
-            if write_error_csv:
-                output_file = output_dir / f"{query_id}.csv"
-                pd.DataFrame({"ERROR": [str(e)]}).to_csv(output_file, index=False)
+            if write_error_file:
+                (output_dir / f"{query_id}.error").write_text(str(e))
             print(" ✗ (error)")
             results.append({"query_id": query_id, "status": "error", "error": str(e)})
 

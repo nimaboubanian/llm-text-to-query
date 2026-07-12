@@ -606,6 +606,7 @@ def _move_contents(src_dir: Path, dst_dir: Path, label: str) -> None:
     files = (
         list(src_dir.glob("*.sql")) + list(src_dir.glob("*.csv"))
         + list(src_dir.glob("*.raw")) + list(src_dir.glob("*.prompt"))
+        + list(src_dir.glob("*.error"))
     )
     for f in files:
         shutil.move(str(f), str(dst_dir / f.name))

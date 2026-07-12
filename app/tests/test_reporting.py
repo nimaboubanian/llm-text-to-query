@@ -171,6 +171,23 @@ def test_results_csv_missing_prompt_and_questions(tmp_path):
     assert rows[0]["real_sql"] == "SELECT 1;"
 
 
+def test_archive_moves_error_files(tmp_path):
+    queries = tmp_path / "queries"
+    answers = tmp_path / "answers"
+    report = tmp_path / "report"
+    results_base = tmp_path / "results"
+    queries.mkdir()
+    answers.mkdir()
+
+    (queries / "01.sql").write_text("SELECT 1")
+    (answers / "01.error").write_text("division by zero")
+
+    session_dir = archive_session(queries, answers, report, results_base)
+
+    assert (session_dir / "answers" / "01.error").exists()
+    assert (session_dir / "answers" / "01.error").read_text() == "division by zero"
+
+
 def test_archive_empty_dirs(tmp_path):
     queries = tmp_path / "queries"
     answers = tmp_path / "answers"

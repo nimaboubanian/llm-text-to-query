@@ -89,20 +89,20 @@ def summarize_results(
     model: str,
 ) -> str | None:
     """Generate a natural-language summary of query results."""
-    if isinstance(result, str):
+    if not result.ok:
         return None
 
-    if result.empty:
+    if result.data.empty:
         prompt = SUMMARIZE_EMPTY_TEMPLATE.format(
             question=question,
             db_name=db_name,
             tables=", ".join(tables),
         )
     else:
-        result_summary = _prepare_result_summary(result)
+        result_summary = _prepare_result_summary(result.data)
         prompt = SUMMARIZE_RESULTS_TEMPLATE.format(
             question=question,
-            row_count=len(result),
+            row_count=len(result.data),
             result_summary=result_summary,
         )
 

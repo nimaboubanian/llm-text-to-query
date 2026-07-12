@@ -1,4 +1,3 @@
-import pandas as pd
 import pytest
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import OperationalError
@@ -21,8 +20,8 @@ def _live_engine():
 def test_select_succeeds_against_live_database():
     engine = _live_engine()
     result = execute_sql_query(engine, "SELECT 1 AS x")
-    assert isinstance(result, pd.DataFrame)
-    assert result.iloc[0]["x"] == 1
+    assert result.ok
+    assert result.data.iloc[0]["x"] == 1
 
 
 @pytest.mark.integration
@@ -37,8 +36,8 @@ def test_write_statement_rejected_by_read_only_transaction():
 
     result = execute_sql_query(engine, "DELETE FROM _readonly_probe")
 
-    assert isinstance(result, str)
-    assert "read-only transaction" in result.lower()
+    assert not result.ok
+    assert "read-only transaction" in result.error.lower()
 
     with engine.begin() as conn:
         count = conn.execute(text("SELECT count(*) FROM _readonly_probe")).scalar()

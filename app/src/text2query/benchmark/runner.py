@@ -156,7 +156,7 @@ def _execute_single(
 
     answers_dir.mkdir(parents=True, exist_ok=True)
 
-    existing = {f.stem for f in answers_dir.glob("*.csv")}
+    existing = {f.stem for f in answers_dir.glob("*.csv")} | {f.stem for f in answers_dir.glob("*.error")}
     to_process = [q for q in query_files if q.stem not in existing]
 
     if not to_process:
@@ -165,4 +165,4 @@ def _execute_single(
 
     cache_label = f", {len(existing)} cached" if existing else ""
     print(f"  Executing {len(to_process)} queries{cache_label}...")
-    return execute_queries_to_csv(to_process, answers_dir, db_url, write_error_csv=True)
+    return execute_queries_to_csv(to_process, answers_dir, db_url, write_error_file=True)

@@ -26,20 +26,20 @@ def print_help():
 
 
 def print_result(result, max_rows: int = 20):
-    if isinstance(result, str):
-        out(f"  {FG_RED}{ERROR}{RESET} {result}")
+    if not result.ok:
+        out(f"  {FG_RED}{ERROR}{RESET} {result.error}")
         return
 
-    if result.empty:
+    if result.data.empty:
         out(f"  {FG_MUTED}(empty result set){RESET}")
         return
 
-    count = len(result)
+    count = len(result.data)
     row_label = f"{count} row{'s' if count != 1 else ''}"
     if count > max_rows:
         row_label = f"showing {max_rows} of {count} rows"
     out(f"  {FG_MUTED}Result  {row_label}{RESET}")
-    out(format_table(result, max_rows))
+    out(format_table(result.data, max_rows))
 
 
 def handle_schema(engine):

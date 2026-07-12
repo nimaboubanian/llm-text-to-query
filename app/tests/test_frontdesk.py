@@ -4,6 +4,7 @@ from unittest.mock import patch
 import pandas as pd
 
 from text2query.cli.frontdesk import quick_classify, classify_intent, summarize_results
+from text2query.database.executor import ExecutionResult
 
 
 # ── Heuristic pre-filter ──────────────────────────────────────────────
@@ -82,7 +83,7 @@ def test_classify_defaults_to_conversation_on_failure(mock_chat):
 def test_summarize_small_dataframe(mock_chat):
     mock_chat.return_value = "There are 3 customers."
     df = pd.DataFrame({"name": ["Alice", "Bob", "Charlie"], "age": [30, 25, 35]})
-    result = summarize_results("how many customers?", df, "testdb", TABLES, "qwen2.5:3b")
+    result = summarize_results("how many customers?", ExecutionResult(df, None), "testdb", TABLES, "qwen2.5:3b")
     assert result == "There are 3 customers."
     # Verify the full table was passed in the prompt (not a summary)
     prompt = mock_chat.call_args[0][0][0]["content"]
@@ -94,7 +95,7 @@ def test_summarize_small_dataframe(mock_chat):
 def test_summarize_large_dataframe_uses_head(mock_chat):
     mock_chat.return_value = "Summary of 50 rows."
     df = pd.DataFrame({"id": range(50), "value": range(50)})
-    summarize_results("show all", df, "testdb", TABLES, "qwen2.5:3b")
+    summarize_results("show all", ExecutionResult(df, None), "testdb", TABLES, "qwen2.5:3b")
     prompt = mock_chat.call_args[0][0][0]["content"]
     assert "First 5 rows" in prompt
     assert "Numeric summary" in prompt
@@ -104,12 +105,14 @@ def test_summarize_large_dataframe_uses_head(mock_chat):
 def test_summarize_empty_dataframe(mock_chat):
     mock_chat.return_value = "No matching results found."
     df = pd.DataFrame()
-    result = summarize_results("find something", df, "testdb", TABLES, "qwen2.5:3b")
+    result = summarize_results("find something", ExecutionResult(df, None), "testdb", TABLES, "qwen2.5:3b")
     assert result == "No matching results found."
     prompt = mock_chat.call_args[0][0][0]["content"]
     assert "no results" in prompt.lower()
 
 
 def test_summarize_error_returns_none():
-    result = summarize_results("query", "SQL error: table not found", "testdb", TABLES, "qwen2.5:3b")
+    result = summarize_results(
+        "query", ExecutionResult(None, "SQL error: table not found"), "testdb", TABLES, "qwen2.5:3b"
+    )
     assert result is None

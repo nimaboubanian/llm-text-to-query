@@ -116,16 +116,29 @@ class TestResultSetComparison:
         assert status == "missing"
         assert prec is None
 
-    def test_error_csv(self, tmp_path):
+    def test_error_sidecar_file(self, tmp_path):
         gt = tmp_path / "gt.csv"
         llm = tmp_path / "llm.csv"
+        error_file = tmp_path / "llm.error"
         gt.write_text("id\n1\n")
-        llm.write_text("ERROR\nsome failure\n")
+        error_file.write_text("some failure")
 
         status, prec, rec, f1, err = _result_set_comparison(gt, llm)
         assert status == "exec_error"
         assert f1 == 0.0
         assert err == "some failure"
+
+    def test_real_error_column_treated_as_data(self, tmp_path):
+        """A result set with a legitimate column literally named ERROR is not
+        mistaken for a failed execution — only a sidecar .error file signals that."""
+        gt = tmp_path / "gt.csv"
+        llm = tmp_path / "llm.csv"
+        gt.write_text("ERROR\nsome failure\n")
+        llm.write_text("ERROR\nsome failure\n")
+
+        status, prec, rec, f1, err = _result_set_comparison(gt, llm)
+        assert status == "ok"
+        assert f1 == 1.0
 
     def test_column_count_mismatch(self, tmp_path):
         gt = tmp_path / "gt.csv"

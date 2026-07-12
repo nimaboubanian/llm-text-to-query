@@ -88,22 +88,16 @@ def _format_per_query(seed_results: list[dict]) -> str:
     lines.append("## Aggregated Statistics\n")
     lines.append(f"*Seeds executed successfully: {ok_count} / {n}*\n")
 
-    metrics = ["result_f1", "ast_similarity"]
-    metric_labels = {
-        "result_f1": "Result F1",
-        "ast_similarity": "AST Similarity",
-    }
-
     lines.append("| Metric | Mean | Std | 95% CI |")
     lines.append("|---|---|---|---|")
 
-    for metric in metrics:
+    for label, metric in [("Result F1", "result_f1"), ("AST Similarity", "ast_similarity")]:
         vals = [r.get(metric) for r in seed_results if r.get(metric) is not None]
         stats = _compute_stats(vals)
         if stats["mean"] is not None:
             ci = f"[{stats['ci_lower']:.4f}, {stats['ci_upper']:.4f}]"
             lines.append(
-                f"| {metric_labels[metric]} | {stats['mean']:.4f} "
+                f"| {label} | {stats['mean']:.4f} "
                 f"| {stats['std']:.4f} | {ci} |"
             )
 

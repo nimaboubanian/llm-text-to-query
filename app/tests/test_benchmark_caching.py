@@ -7,7 +7,7 @@ import pandas as pd
 from text2query.benchmark.fingerprint import read_manifest_fingerprint, write_manifest
 from text2query.benchmark.runner import run_llm_generation, execute_generated_queries
 from text2query.database.executor import ExecutionResult
-from text2query.llm.provider import GenerationResult
+from text2query.llm.ollama import GenerationResult
 
 
 def _make_question_file(questions_dir: Path, qid: str, question: str):

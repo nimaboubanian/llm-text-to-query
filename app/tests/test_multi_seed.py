@@ -7,7 +7,7 @@ from text2query.benchmark.runner import run_llm_generation
 from text2query.benchmark.reporting import (
     archive_session, generate_cross_model_report, generate_reports,
 )
-from text2query.llm.provider import GenerationResult
+from text2query.llm.ollama import GenerationResult
 
 
 def _make_question_file(questions_dir: Path, qid: str, question: str):

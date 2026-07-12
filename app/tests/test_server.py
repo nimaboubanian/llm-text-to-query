@@ -10,7 +10,7 @@ import pandas as pd
 import pytest
 
 from text2query.database.executor import ExecutionResult
-from text2query.llm.provider import GenerationResult
+from text2query.llm.ollama import GenerationResult
 from text2query.server.main import AppContext, RequestError, _make_handler, handle_query, parse_question
 
 

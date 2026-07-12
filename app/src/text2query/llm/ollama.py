@@ -2,14 +2,24 @@ import json
 import logging
 import urllib.error
 import urllib.request
+from dataclasses import dataclass
 
 from text2query.core.config import (
     DEFAULT_MODEL, LLM_MAX_TOKENS, LLM_NUM_CTX, LLM_TEMPERATURE, LLM_TIMEOUT, OLLAMA_URL,
 )
-from text2query.llm.provider import GenerationResult
 from text2query.llm.service import _build_prompt, _clean_sql_response
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class GenerationResult:
+    """Result of a single SQL-generation call."""
+
+    sql: str | None
+    raw_response: str | None = None
+    prompt: str | None = None
+    error: str | None = None
 
 
 def _post_json(url: str, payload: dict, timeout: int) -> tuple[int, dict]:

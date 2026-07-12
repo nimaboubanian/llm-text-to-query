@@ -35,7 +35,7 @@ def _post_json(url: str, payload: dict, timeout: int) -> tuple[int, dict]:
         return e.code, {}
 
 
-def warmup(model: str, base_url: str = OLLAMA_URL, timeout: int = 300) -> bool:
+def warmup(model: str) -> bool:
     """Preload a model into memory before timed generation.
 
     Sends an empty-prompt generate request, which makes Ollama load the model
@@ -44,14 +44,14 @@ def warmup(model: str, base_url: str = OLLAMA_URL, timeout: int = 300) -> bool:
     """
     try:
         status, _ = _post_json(
-            f"{base_url}/api/generate",
+            f"{OLLAMA_URL}/api/generate",
             {
                 "model": model,
                 "prompt": "",
                 "stream": False,
                 "options": {"num_ctx": LLM_NUM_CTX},
             },
-            timeout,
+            300,
         )
         return status == 200
     except (urllib.error.URLError, TimeoutError) as e:
@@ -64,7 +64,6 @@ def generate_sql(
     schema_str: str,
     model: str | None = None,
     seed: int | None = None,
-    base_url: str = OLLAMA_URL,
 ) -> GenerationResult:
     selected_model = model or DEFAULT_MODEL
     prompt = render_prompt(get_prompt_template(), schema_str, user_query)
@@ -79,7 +78,7 @@ def generate_sql(
 
     try:
         status, data = _post_json(
-            f"{base_url}/api/generate",
+            f"{OLLAMA_URL}/api/generate",
             {
                 "model": selected_model,
                 "prompt": prompt,

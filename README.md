@@ -1,6 +1,11 @@
 # LLM Text-to-Query
 
-Convert natural language to SQL queries using local LLMs. Using TPC-H benchmark to evaluate the models.
+Convert natural language to SQL queries using local LLMs. Two modes, each with a single, non-interactive interface:
+
+- **App** — ask a question, get an answer. `docker compose exec app text2query '...'`, or POST the same question from any container on the Docker network.
+- **Benchmark** — evaluate SQL-generation quality against the TPC-H benchmark, with heavy, feature-rich reporting.
+
+Everything runs inside Docker. There is no REPL, no in-session settings, and no model-switching at runtime — all configuration lives in `compose.yml`.
 
 ## Quick Start
 
@@ -8,26 +13,67 @@ Convert natural language to SQL queries using local LLMs. Using TPC-H benchmark 
 # Start services
 docker compose up -d
 
-# Pull models (first run only)
+# Pull the model (first run only)
 docker compose exec ollama pull-models chat
 
-# Enter interactive mode
-docker compose exec app text2query
+# Ask a question
+docker compose exec app text2query 'What are the customers'"'"' names?'
 ```
+
+The terminal prints the generated SQL, a table of results, and the row count, then exits.
+
+## App Mode
+
+`docker compose exec app text2query '<question>'` is the only supported CLI interaction. It is a thin client: it POSTs the question to an HTTP server that is the app container's main process, prints the JSON response, and exits.
+
+The same server is reachable from any other container on the Docker network (it is not exposed to the host by default):
+
+```bash
+curl -X POST http://app:8000/query \
+  -H 'Content-Type: application/json' \
+  -d '{"question": "How many customers are there?"}'
+```
+
+Response shape:
+
+```json
+{
+  "sql": "SELECT count(*) FROM customers;",
+  "columns": ["count"],
+  "rows": [[42]],
+  "row_count": 1,
+  "error": null
+}
+```
+
+Errors use the body's `error` field with an HTTP status that indicates where the request failed: `400` for bad input, `422` when SQL couldn't be safely generated, `502` when the database rejects the query. Uncomment the `ports:` line under the `app` service in `compose.yml` to expose port 8000 to the host as well.
+
+The database schema is cached at server startup; if you change the schema, restart the `app` container.
 
 ## Configuration
 
-All user-configurable settings are at the top of `compose.yml` in the `x-config` block:
+All user-configurable settings are at the top of `compose.yml` in the `x-config` block, split into an App-mode section and a Benchmark-mode section:
 
 ```yaml
 x-config: &config
-  DEFAULT_MODEL:        "qwen2.5-coder:7b"     # SQL generation model
-  FRONTDESK_MODEL:      "qwen2.5:3b"           # Intent routing model
-  OLLAMA_URL:            "http://ollama:11434" # LLM backend endpoint
-  LOG_LEVEL:             "WARNING"             # DEBUG/INFO/WARNING/ERROR
-  BENCHMARK_MODELS:     "llama3.2:3b,qwen2.5-coder:7b"
-  BENCHMARK_NUM_SEEDS:  "1"   # Repetitions per query for statistical robustness
-  BENCHMARK_QUERY_IDS:  "all" # Comma-separated IDs to run, e.g. "1,3,7" — "all" runs everything
+  # --- App mode ---
+  DEFAULT_MODEL: "qwen2.5-coder:7b"     # Model used for SQL generation
+  OLLAMA_URL: "http://ollama:11434"     # LLM backend endpoint
+  LOG_LEVEL: "WARNING"                  # DEBUG/INFO/WARNING/ERROR
+  LLM_TEMPERATURE: "0.1"                # Sampling temperature
+  LLM_NUM_CTX: "4096"                   # Context window (tokens)
+  LLM_MAX_TOKENS: "2048"                # Max tokens generated per query
+  SERVER_PORT: "8000"                   # Internal HTTP port
+  PROMPT_TEMPLATE_PATH: "prompts/sql_generation.txt"
+  FEATURE_RETRY: "false"
+  FEATURE_CHAIN_OF_THOUGHT: "false"
+  FEATURE_SELF_CORRECTION: "false"
+
+  # --- Benchmark mode ---
+  BENCHMARK_MODELS: "llama3.2:3b,qwen2.5-coder:7b"
+  BENCHMARK_NUM_SEEDS: "1"
+  BENCHMARK_QUERY_IDS: "all"
+  BENCHMARK_SCALE_FACTOR: "1"
 ```
 
 After changing models, recreate the Ollama container to pull them:
@@ -36,6 +82,18 @@ After changing models, recreate the Ollama container to pull them:
 docker compose up -d --force-recreate ollama
 docker compose logs -f ollama   # watch download progress
 ```
+
+## SQL-Generation Prompt
+
+The prompt template used to generate SQL is a plain, user-editable file at `prompts/sql_generation.txt` (mounted read-only into both the `app` and `benchmark` containers). It must contain a `{schema}` and a `{query}` placeholder; edit the rest freely to tune generation behavior.
+
+A small loader validates the file at startup — a missing file, an oversized file, or a template missing a required placeholder fails fast with a clear error rather than producing broken prompts at runtime. Substitution is single-pass plain-token replacement, not string formatting, so placeholder-like text inside the schema or a user's question can never be reinterpreted as template syntax.
+
+The real safety boundary for generated SQL stays output-side (see **Safety** below) — prompt validation only guards against operator misconfiguration, not malicious input.
+
+## Feature Flags
+
+Three flags exist as architectural placeholders for prompt-improvement techniques that are not implemented yet: `FEATURE_RETRY`, `FEATURE_CHAIN_OF_THOUGHT`, `FEATURE_SELF_CORRECTION`. All default to `"false"`. They are threaded through the generation pipeline and recorded in the Benchmark session manifest and generation fingerprint (so flipping one invalidates cached results), ready for the corresponding behavior to be added later without further plumbing changes.
 
 ## Mini Database
 
@@ -58,17 +116,7 @@ Generated SQL is constrained before execution:
   itself even if the SELECT-only check were bypassed.
 - **Statement timeout** — capped at 30s per query.
 - **Row limit** — results are capped at 10,000 rows.
-
-## REPL Commands
-
-| Command | Description |
-|---|---|
-| `/help` | Show available commands |
-| `/schema` | Display the database schema |
-| `/sql` | Display the SQL query |
-| `/model` | List available models and the active one |
-| `/model <name>` | Switch to a different model |
-| `/quit` | Exit |
+- **Request boundary** — the App server rejects empty or oversized (>2000 char) questions and non-JSON bodies before they reach the LLM.
 
 ## External Database
 
@@ -82,9 +130,9 @@ environment:
 
 For databases on the Docker host, add `extra_hosts: ["host.docker.internal:host-gateway"]` to the `app` service.
 
-## Benchmark
+## Benchmark Mode
 
-Edit `BENCHMARK_MODELS` in the `x-config` block of `compose.yml` to choose which models to compare (comma-separated, up to 3). Then pull them and run:
+Edit `BENCHMARK_MODELS` in the `x-config` block of `compose.yml` to choose which models to compare (comma-separated). Then pull them and run:
 
 ```bash
 docker compose exec ollama pull-models benchmark
@@ -93,12 +141,13 @@ docker compose --profile benchmark up --build benchmark
 
 If you haven't changed `BENCHMARK_MODELS`, the benchmark runs with the default model — just make sure you've already run `pull-models chat`.
 
-Runs a three-phase TPC-H pipeline: **Setup** (data generation, schema loading) → **Generation** (LLM query generation and execution) → **Analysis** (similarity metrics, reports, archiving).
+Runs a three-phase TPC-H pipeline: **Setup** (data generation, schema loading) → **Generation** (LLM query generation and execution) → **Analysis** (similarity metrics, reports, archiving). The repo-root `benchmark/` directory holds TPC-H data, generated queries/answers, reports, and archived session results — kept under that name for compatibility with existing caches.
 
 Each archived session under `benchmark/results/<timestamp>/` includes a `session_manifest.json`
-recording the models, seeds, query filter, scale factor, generation parameters, the fingerprint(s)
-that gate the resume cache, the package version, and the database URL (credentials stripped) —
-so every archived result is self-describing without cross-referencing logs or git history.
+recording the models, seeds, query filter, scale factor, generation parameters, feature flags,
+the fingerprint(s) that gate the resume cache, the package version, and the database URL
+(credentials stripped) — so every archived result is self-describing without cross-referencing
+logs or git history.
 
 ### Evaluation Metrics
 
@@ -124,7 +173,7 @@ Unknown IDs are warned and skipped; if no valid IDs remain the pipeline aborts. 
 
 ### Multi-Model Mode
 
-Set `BENCHMARK_MODELS` in `x-config` to compare up to 3 models side-by-side. Output includes per-model reports plus `comparison.md` and `results.csv`.
+Set `BENCHMARK_MODELS` in `x-config` to compare models side-by-side. Output includes per-model reports plus `comparison.md` and `results.csv`.
 
 ## GPU Acceleration
 
@@ -146,7 +195,7 @@ docker compose -f compose.yml -f compose.amd.yml up -d
 
 ```bash
 cd app && uv sync --extra dev
-uv run pytest -v            # run all 99 tests
+uv run pytest -v
 ```
 
 ### Project Structure
@@ -154,14 +203,16 @@ uv run pytest -v            # run all 99 tests
 ```
 app/src/text2query/
   core/config.py          # Centralized configuration (env vars)
-  llm/provider.py         # LLMProvider interface + factory
-  llm/ollama.py           # Ollama implementation of LLMProvider
-  llm/service.py          # Prompt building + SQL extraction/safety (provider-independent)
-  llm/prompts.py          # Prompt templates
-  database/executor.py    # SQL execution → DataFrame
-  database/schema.py      # Schema introspection
-  cli/repl.py             # Interactive REPL
-  cli/frontdesk.py        # Intent classification + summarization
-  cli/style.py            # Nord-themed TUI
-  benchmark/              # TPC-H benchmark pipeline
+  core/flags.py            # Feature-flag placeholders (retry/CoT/self-correction)
+  llm/provider.py          # LLMProvider interface + factory
+  llm/ollama.py            # Ollama implementation of LLMProvider (blocking calls)
+  llm/service.py           # Prompt building + SQL extraction/safety (provider-independent)
+  llm/prompt_loader.py      # SQL-generation prompt loading + validated substitution
+  database/executor.py      # SQL execution -> DataFrame
+  database/schema.py        # Schema introspection
+  server/main.py            # App-mode HTTP server (POST /query, GET /health)
+  server/cli.py             # text2query thin CLI client
+  benchmark/                # TPC-H benchmark pipeline + reporting
+
+prompts/sql_generation.txt  # User-editable SQL-generation prompt template
 ```

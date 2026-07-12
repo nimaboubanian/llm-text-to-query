@@ -166,34 +166,32 @@ def test_raw_file_written_on_extraction_failure(tmp_path):
 def test_cross_model_csv_export(tmp_path):
     """CSV export should contain one row per (model, query, seed) combination."""
     ref_queries = tmp_path / "ref_queries"
-    ref_answers = tmp_path / "ref_answers"
-    gen_queries = tmp_path / "gen_queries"
-    gen_answers = tmp_path / "gen_answers"
     report_dir = tmp_path / "report"
 
     ref_queries.mkdir()
-    ref_answers.mkdir()
 
     # Create reference data
     (ref_queries / "01.sql").write_text("SELECT name FROM customers;")
-    (ref_answers / "01.csv").write_text("name\nAlice\nBob\n")
 
-    # Create model outputs (2 models, single seed)
-    for model_name in ["model_a", "model_b"]:
-        mq = gen_queries / model_name / "seed_1"
-        ma = gen_answers / model_name / "seed_1"
-        mq.mkdir(parents=True)
-        ma.mkdir(parents=True)
-        (mq / "01.sql").write_text("SELECT name FROM customers;")
-        (ma / "01.csv").write_text("name\nAlice\nBob\n")
+    # Precomputed evaluation results (2 models, single seed, from generate_reports)
+    precomputed = {
+        model_name: [{
+            "query_id": 1, "seed": 1, "status": "ok",
+            "result_precision": 1.0, "result_recall": 1.0, "result_f1": 1.0,
+            "ast_similarity": 1.0, "error_category": None,
+            "nl_query": "What are the customer names?",
+            "prompt": "prompt text",
+            "generated_sql": "SELECT name FROM customers;",
+            "real_sql": "SELECT name FROM customers;",
+        }]
+        for model_name in ["model_a", "model_b"]
+    }
 
     generate_cross_model_report(
         models=["model_a", "model_b"],
         reference_queries_dir=ref_queries,
-        reference_answers_dir=ref_answers,
-        generated_queries_base=gen_queries,
-        generated_answers_base=gen_answers,
         report_dir=report_dir,
+        precomputed=precomputed,
         seeds=None,
     )
 

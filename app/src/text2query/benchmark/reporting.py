@@ -250,16 +250,12 @@ def generate_reports(
 def generate_cross_model_report(
     models: list[str],
     reference_queries_dir: Path,
-    reference_answers_dir: Path,
-    generated_queries_base: Path,
-    generated_answers_base: Path,
     report_dir: Path,
+    precomputed: dict[str, list[dict]],
     seeds: list[int] | None = None,
-    precomputed: dict[str, list[dict]] | None = None,
     selected_ids: list[str] | None = None,
-    questions_dir: Path | None = None,
 ) -> Path:
-    """Generate cross-model comparison report and CSV export."""
+    """Generate cross-model comparison report and CSV export from already-evaluated results."""
     all_ids = sorted(f.stem for f in reference_queries_dir.glob("*.sql"))
     query_ids = [q for q in all_ids if q in selected_ids] if selected_ids is not None else all_ids
     seeds_list = seeds or [1]
@@ -274,45 +270,18 @@ def generate_cross_model_report(
     ]
 
     for model in models:
-        slug = model_slug(model)
-        model_queries = generated_queries_base / slug
-        model_answers = generated_answers_base / slug
         model_aggregated[model] = {}
 
         # Build (query_id_int, seed) → sim lookup from precomputed results
-        precomputed_lookup: dict[tuple, dict] = {}
-        if precomputed and model in precomputed:
-            for r in precomputed[model]:
-                precomputed_lookup[(r["query_id"], r.get("seed"))] = r
+        precomputed_lookup: dict[tuple, dict] = {
+            (r["query_id"], r.get("seed")): r for r in precomputed[model]
+        }
 
         for qid in query_ids:
             seed_results = []
 
             for seed in seeds_list:
-                key = (int(qid), seed)
-                if key in precomputed_lookup:
-                    sim = precomputed_lookup[key]
-                else:
-                    q_dir = model_queries / f"seed_{seed}"
-                    a_dir = model_answers / f"seed_{seed}"
-
-                    sim = evaluate_query(
-                        query_id=int(qid),
-                        gt_csv=reference_answers_dir / f"{qid}.csv",
-                        llm_csv=a_dir / f"{qid}.csv",
-                        gt_sql=reference_queries_dir / f"{qid}.sql",
-                        llm_sql=q_dir / f"{qid}.sql",
-                    )
-                    sim["seed"] = seed
-                    sim["nl_query"] = (
-                        read_business_question(questions_dir / f"{qid}.md") if questions_dir else None
-                    )
-                    prompt_path = q_dir / f"{qid}.prompt"
-                    sim["prompt"] = prompt_path.read_text() if prompt_path.exists() else None
-                    gen_sql_path = q_dir / f"{qid}.sql"
-                    sim["generated_sql"] = gen_sql_path.read_text().strip() if gen_sql_path.exists() else None
-                    ref_sql_path = reference_queries_dir / f"{qid}.sql"
-                    sim["real_sql"] = ref_sql_path.read_text().strip() if ref_sql_path.exists() else None
+                sim = precomputed_lookup[(int(qid), seed)]
                 sim["model"] = model
                 seed_results.append(sim)
                 all_rows.append(sim)

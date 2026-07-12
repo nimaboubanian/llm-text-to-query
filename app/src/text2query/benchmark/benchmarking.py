@@ -206,14 +206,10 @@ def main():
             generate_cross_model_report(
                 models=models,
                 reference_queries_dir=queries_dir,
-                reference_answers_dir=answers_dir,
-                generated_queries_base=output_dir,
-                generated_answers_base=generated_answers_dir,
                 report_dir=report_dir,
-                seeds=seeds,
                 precomputed=precomputed,
+                seeds=seeds,
                 selected_ids=query_ids,
-                questions_dir=questions_dir,
             )
             print()
 

@@ -4,12 +4,6 @@ import sqlglot
 from sqlglot import exp
 
 
-def _build_prompt(user_query: str, schema_str: str) -> str:
-    from text2query.llm.prompt_loader import get_prompt_template, render_prompt
-    template = get_prompt_template()
-    return render_prompt(template, schema_str, user_query)
-
-
 def _is_single_statement(sql: str) -> bool:
     """Reject multi-statement SQL to prevent piggyback attacks."""
     stripped = sql.strip().rstrip(";")

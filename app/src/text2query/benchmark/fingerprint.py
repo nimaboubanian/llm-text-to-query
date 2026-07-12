@@ -50,10 +50,7 @@ def collect_fingerprints(root: Path) -> dict[str, str]:
     if not root.exists():
         return fingerprints
     for manifest_file in sorted(root.rglob(MANIFEST_FILENAME)):
-        try:
-            fingerprint_hash = json.loads(manifest_file.read_text()).get("fingerprint")
-        except json.JSONDecodeError:
-            continue
+        fingerprint_hash = read_manifest_fingerprint(manifest_file.parent)
         if fingerprint_hash is not None:
             key = str(manifest_file.relative_to(root).parent)
             fingerprints[key] = fingerprint_hash

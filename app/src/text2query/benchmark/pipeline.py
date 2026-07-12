@@ -1,5 +1,4 @@
 import logging
-import os
 import re
 import subprocess
 from pathlib import Path
@@ -41,15 +40,10 @@ def generate_data(scale_factor: int, output_dir: Path) -> Path:
     print(f"  Generating TPC-H data (scale factor: {scale_factor})...")
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    cwd = Path("benchmark/.tpch").resolve()
-    output_abs = output_dir.resolve()
-    rel_path = os.path.relpath(output_abs, cwd)
-
-    print(f"  Running: uv run tpchgen-cli -s {scale_factor} --output-dir {rel_path}")
+    print(f"  Running: uvx tpchgen-cli -s {scale_factor} --output-dir {output_dir}")
 
     result = subprocess.run(
-        ["uv", "run", "tpchgen-cli", "-s", str(scale_factor), "--output-dir", str(rel_path)],
-        cwd="benchmark/.tpch",
+        ["uvx", "tpchgen-cli>=2.0.1", "-s", str(scale_factor), "--output-dir", str(output_dir.resolve())],
         capture_output=True,
         text=True,
     )

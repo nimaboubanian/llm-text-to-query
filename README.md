@@ -23,6 +23,7 @@ All user-configurable settings are at the top of `compose.yml` in the `x-config`
 x-config: &config
   DEFAULT_MODEL:        "qwen2.5-coder:7b"     # SQL generation model
   FRONTDESK_MODEL:      "qwen2.5:3b"           # Intent routing model
+  OLLAMA_URL:            "http://ollama:11434" # LLM backend endpoint
   BENCHMARK_MODELS:     "llama3.2:3b,qwen2.5-coder:7b"
   BENCHMARK_NUM_SEEDS:  "1"   # Repetitions per query for statistical robustness
   BENCHMARK_QUERY_IDS:  "all" # Comma-separated IDs to run, e.g. "1,3,7" — "all" runs everything
@@ -147,7 +148,9 @@ uv run pytest -v            # run all 99 tests
 ```
 app/src/text2query/
   core/config.py          # Centralized configuration (env vars)
-  llm/service.py          # Ollama streaming + SQL extraction
+  llm/provider.py         # LLMProvider interface + factory
+  llm/ollama.py           # Ollama implementation of LLMProvider
+  llm/service.py          # Prompt building + SQL extraction/safety (provider-independent)
   llm/prompts.py          # Prompt templates
   database/executor.py    # SQL execution → DataFrame
   database/schema.py      # Schema introspection

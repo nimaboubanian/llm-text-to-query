@@ -1,6 +1,6 @@
 """Tests for REPL model switching."""
 import re
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 from text2query.cli.repl import handle_model_command
 
@@ -20,8 +20,14 @@ def test_model_command_show_current(capsys):
     assert "qwen2.5-coder:7b" in output
 
 
+def _mock_provider(models):
+    provider = MagicMock()
+    provider.list_models.return_value = models
+    return provider
+
+
 def test_model_command_list_available(capsys):
-    with patch("text2query.cli.repl.list_available_models", return_value=["model-a", "model-b"]):
+    with patch("text2query.cli.repl.get_llm_provider", return_value=_mock_provider(["model-a", "model-b"])):
         handle_model_command("", "model-a")
     output = strip_ansi(capsys.readouterr().out)
     assert "model-a" in output
@@ -30,14 +36,14 @@ def test_model_command_list_available(capsys):
 
 
 def test_model_command_switch(capsys):
-    with patch("text2query.cli.repl.list_available_models", return_value=["model-a", "model-b"]):
+    with patch("text2query.cli.repl.get_llm_provider", return_value=_mock_provider(["model-a", "model-b"])):
         result = handle_model_command("model-b", "model-a")
     assert result == "model-b"
     assert "Switched to:" in strip_ansi(capsys.readouterr().out)
 
 
 def test_model_command_switch_not_found(capsys):
-    with patch("text2query.cli.repl.list_available_models", return_value=["model-a"]):
+    with patch("text2query.cli.repl.get_llm_provider", return_value=_mock_provider(["model-a"])):
         result = handle_model_command("nonexistent", "model-a")
     assert result == "model-a"  # unchanged
     assert "not found" in strip_ansi(capsys.readouterr().out)
@@ -45,7 +51,7 @@ def test_model_command_switch_not_found(capsys):
 
 def test_model_command_ollama_unavailable(capsys):
     """When Ollama can't be reached, switch anyway (trust the user)."""
-    with patch("text2query.cli.repl.list_available_models", return_value=[]):
+    with patch("text2query.cli.repl.get_llm_provider", return_value=_mock_provider([])):
         result = handle_model_command("", "model-a")
     output = strip_ansi(capsys.readouterr().out)
     assert "Could not fetch" in output

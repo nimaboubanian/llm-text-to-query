@@ -4,7 +4,7 @@ import sys
 
 from text2query.database.schema import create_engine_for_database, get_database_schema_string
 from text2query.database.executor import execute_sql_query
-from text2query.llm.service import get_sql_from_llm_streaming, list_available_models
+from text2query.llm.provider import get_llm_provider
 from text2query.core.config import DATABASE_URL, DEFAULT_MODEL, FRONTDESK_MODEL
 from text2query.cli.frontdesk import quick_classify, classify_intent, summarize_results
 from text2query.cli.style import (
@@ -69,7 +69,7 @@ def handle_query(
     error = None
     spinner_idx = 0
 
-    for chunk in get_sql_from_llm_streaming(question, schema, model):
+    for chunk in get_llm_provider().generate_sql_streaming(question, schema, model):
         if chunk["type"] == "token":
             frame = SPINNER[spinner_idx % len(SPINNER)]
             write_spinner(f"  {FG_CYAN}{frame}{RESET} {FG_MUTED}Thinking...{RESET}")
@@ -114,9 +114,10 @@ def handle_query(
 
 def handle_model_command(args: str, current_model: str) -> str:
     """Handle /model command. Returns the (possibly changed) current model."""
+    llm = get_llm_provider()
     if not args:
         out(f"  {FG_MUTED}Current:{RESET} {FG_CYAN}{current_model}{RESET}")
-        available = list_available_models()
+        available = llm.list_models()
         if available:
             out(f"  {FG_MUTED}Available:{RESET}")
             for m in available:
@@ -130,7 +131,7 @@ def handle_model_command(args: str, current_model: str) -> str:
 
     # Switch to specified model
     target = args.strip()
-    available = list_available_models()
+    available = llm.list_models()
     if available and target not in available:
         out(f"  {FG_YELLOW}{WARN}{RESET} Model '{target}' not found. Available: {', '.join(available)}")
         return current_model
@@ -163,7 +164,7 @@ def main():
 
     # Check front-desk model availability
     frontdesk_model = FRONTDESK_MODEL
-    available = list_available_models()
+    available = get_llm_provider().list_models()
     if available and frontdesk_model not in available:
         frontdesk_model = None
 

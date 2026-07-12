@@ -26,9 +26,9 @@ def test_run_llm_generation_single_seed_no_subdirs(tmp_path):
     def mock_streaming(*args, **kwargs):
         yield {"type": "done", "sql": "SELECT name FROM customers;"}
 
-    with patch("text2query.benchmark.runner.get_sql_from_llm_streaming", side_effect=mock_streaming), \
+    with patch("text2query.llm.ollama.OllamaProvider.generate_sql_streaming", side_effect=mock_streaming), \
          patch("text2query.benchmark.runner.create_engine_for_database"), \
-         patch("text2query.benchmark.runner.warmup_model", return_value=True), \
+         patch("text2query.llm.ollama.OllamaProvider.warmup", return_value=True), \
          patch("text2query.benchmark.runner.get_database_schema_string", return_value="schema"):
 
         run_llm_generation(questions_dir, output_dir, "db://url", "test-model", seeds=None)
@@ -50,9 +50,9 @@ def test_run_llm_generation_multi_seed_creates_subdirs(tmp_path):
         captured_seeds.append(kwargs.get("seed"))
         yield {"type": "done", "sql": f"SELECT name FROM customers; -- seed={kwargs.get('seed')}"}
 
-    with patch("text2query.benchmark.runner.get_sql_from_llm_streaming", side_effect=mock_streaming), \
+    with patch("text2query.llm.ollama.OllamaProvider.generate_sql_streaming", side_effect=mock_streaming), \
          patch("text2query.benchmark.runner.create_engine_for_database"), \
-         patch("text2query.benchmark.runner.warmup_model", return_value=True), \
+         patch("text2query.llm.ollama.OllamaProvider.warmup", return_value=True), \
          patch("text2query.benchmark.runner.get_database_schema_string", return_value="schema"):
 
         results = run_llm_generation(
@@ -90,9 +90,9 @@ def test_run_llm_generation_caching_per_seed(tmp_path):
         call_count += 1
         yield {"type": "done", "sql": "SELECT name FROM customers;"}
 
-    with patch("text2query.benchmark.runner.get_sql_from_llm_streaming", side_effect=mock_streaming), \
+    with patch("text2query.llm.ollama.OllamaProvider.generate_sql_streaming", side_effect=mock_streaming), \
          patch("text2query.benchmark.runner.create_engine_for_database"), \
-         patch("text2query.benchmark.runner.warmup_model", return_value=True), \
+         patch("text2query.llm.ollama.OllamaProvider.warmup", return_value=True), \
          patch("text2query.benchmark.runner.get_database_schema_string", return_value="schema"):
 
         run_llm_generation(
@@ -115,9 +115,9 @@ def test_warmup_runs_before_generation(tmp_path):
         yield {"type": "done", "sql": "SELECT name FROM customers;"}
 
     warmup = MagicMock(return_value=True)
-    with patch("text2query.benchmark.runner.get_sql_from_llm_streaming", side_effect=mock_streaming), \
+    with patch("text2query.llm.ollama.OllamaProvider.generate_sql_streaming", side_effect=mock_streaming), \
          patch("text2query.benchmark.runner.create_engine_for_database"), \
-         patch("text2query.benchmark.runner.warmup_model", warmup), \
+         patch("text2query.llm.ollama.OllamaProvider.warmup", warmup), \
          patch("text2query.benchmark.runner.get_database_schema_string", return_value="schema"):
 
         run_llm_generation(questions_dir, output_dir, "db://url", "test-model", seeds=None)
@@ -135,9 +135,9 @@ def test_warmup_skipped_when_fully_cached(tmp_path):
     (output_dir / "01.sql").write_text("SELECT 1;")  # pre-cached
 
     warmup = MagicMock(return_value=True)
-    with patch("text2query.benchmark.runner.get_sql_from_llm_streaming"), \
+    with patch("text2query.llm.ollama.OllamaProvider.generate_sql_streaming"), \
          patch("text2query.benchmark.runner.create_engine_for_database"), \
-         patch("text2query.benchmark.runner.warmup_model", warmup), \
+         patch("text2query.llm.ollama.OllamaProvider.warmup", warmup), \
          patch("text2query.benchmark.runner.get_database_schema_string", return_value="schema"):
 
         run_llm_generation(questions_dir, output_dir, "db://url", "test-model", seeds=None)
@@ -155,9 +155,9 @@ def test_generation_continues_when_warmup_fails(tmp_path):
     def mock_streaming(*args, **kwargs):
         yield {"type": "done", "sql": "SELECT name FROM customers;"}
 
-    with patch("text2query.benchmark.runner.get_sql_from_llm_streaming", side_effect=mock_streaming), \
+    with patch("text2query.llm.ollama.OllamaProvider.generate_sql_streaming", side_effect=mock_streaming), \
          patch("text2query.benchmark.runner.create_engine_for_database"), \
-         patch("text2query.benchmark.runner.warmup_model", return_value=False), \
+         patch("text2query.llm.ollama.OllamaProvider.warmup", return_value=False), \
          patch("text2query.benchmark.runner.get_database_schema_string", return_value="schema"):
 
         run_llm_generation(questions_dir, output_dir, "db://url", "test-model", seeds=None)
@@ -266,9 +266,9 @@ def test_raw_file_written_on_api_error(tmp_path):
     def mock_streaming(*args, **kwargs):
         yield {"type": "error", "message": "Model 'bad-model' not found."}
 
-    with patch("text2query.benchmark.runner.get_sql_from_llm_streaming", side_effect=mock_streaming), \
+    with patch("text2query.llm.ollama.OllamaProvider.generate_sql_streaming", side_effect=mock_streaming), \
          patch("text2query.benchmark.runner.create_engine_for_database"), \
-         patch("text2query.benchmark.runner.warmup_model", return_value=True), \
+         patch("text2query.llm.ollama.OllamaProvider.warmup", return_value=True), \
          patch("text2query.benchmark.runner.get_database_schema_string", return_value="schema"):
         run_llm_generation(questions_dir, output_dir, "db://url", "bad-model", seeds=None)
 
@@ -291,9 +291,9 @@ def test_raw_file_written_on_extraction_failure(tmp_path):
     def mock_streaming(*args, **kwargs):
         yield {"type": "done", "sql": None, "full_response": raw_model_output}
 
-    with patch("text2query.benchmark.runner.get_sql_from_llm_streaming", side_effect=mock_streaming), \
+    with patch("text2query.llm.ollama.OllamaProvider.generate_sql_streaming", side_effect=mock_streaming), \
          patch("text2query.benchmark.runner.create_engine_for_database"), \
-         patch("text2query.benchmark.runner.warmup_model", return_value=True), \
+         patch("text2query.llm.ollama.OllamaProvider.warmup", return_value=True), \
          patch("text2query.benchmark.runner.get_database_schema_string", return_value="schema"):
         run_llm_generation(questions_dir, output_dir, "db://url", "test-model", seeds=None)
 
@@ -318,9 +318,9 @@ def test_query_id_filter_llm_generation(tmp_path):
         generated.append(args[0])
         yield {"type": "done", "sql": "SELECT 1;"}
 
-    with patch("text2query.benchmark.runner.get_sql_from_llm_streaming", side_effect=mock_streaming), \
+    with patch("text2query.llm.ollama.OllamaProvider.generate_sql_streaming", side_effect=mock_streaming), \
          patch("text2query.benchmark.runner.create_engine_for_database"), \
-         patch("text2query.benchmark.runner.warmup_model", return_value=True), \
+         patch("text2query.llm.ollama.OllamaProvider.warmup", return_value=True), \
          patch("text2query.benchmark.runner.get_database_schema_string", return_value="schema"):
 
         run_llm_generation(questions_dir, output_dir, "db://url", "test-model",

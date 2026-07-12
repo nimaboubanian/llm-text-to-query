@@ -3,7 +3,7 @@ import re
 import pandas as pd
 
 from text2query.core.config import FRONTDESK_TEMPERATURE
-from text2query.llm.service import chat_with_model
+from text2query.llm.provider import get_llm_provider
 from text2query.llm.prompts import (
     INTENT_CLASSIFY_TEMPLATE,
     SUMMARIZE_RESULTS_TEMPLATE,
@@ -67,7 +67,7 @@ def classify_intent(
         {"role": "user", "content": user_input},
     ]
 
-    raw = chat_with_model(messages, model, FRONTDESK_TEMPERATURE)
+    raw = get_llm_provider().chat(messages, model, FRONTDESK_TEMPERATURE)
     if not raw:
         return ("conversation", None)  # safe fallback: don't execute SQL on LLM failure
 
@@ -107,7 +107,7 @@ def summarize_results(
         )
 
     messages = [{"role": "user", "content": prompt}]
-    return chat_with_model(messages, model, FRONTDESK_TEMPERATURE)
+    return get_llm_provider().chat(messages, model, FRONTDESK_TEMPERATURE)
 
 
 def _prepare_result_summary(df: pd.DataFrame) -> str:

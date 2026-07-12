@@ -47,67 +47,67 @@ def test_quick_classify_data_word_without_table_is_ambiguous():
 
 # ── LLM intent classification ────────────────────────────────────────
 
-@patch("text2query.cli.frontdesk.chat_with_model")
-def test_classify_routes_sql_intent(mock_chat):
-    mock_chat.return_value = "SQL_QUERY"
+@patch("text2query.cli.frontdesk.get_llm_provider")
+def test_classify_routes_sql_intent(mock_get_provider):
+    mock_get_provider.return_value.chat.return_value = "SQL_QUERY"
     intent, response = classify_intent("how many orders?", "testdb", TABLES, "qwen2.5:3b")
     assert intent == "sql"
     assert response is None
 
 
-@patch("text2query.cli.frontdesk.chat_with_model")
-def test_classify_routes_conversation(mock_chat):
-    mock_chat.return_value = "CONVERSATION\nHello! I can help you query the database."
+@patch("text2query.cli.frontdesk.get_llm_provider")
+def test_classify_routes_conversation(mock_get_provider):
+    mock_get_provider.return_value.chat.return_value = "CONVERSATION\nHello! I can help you query the database."
     intent, response = classify_intent("hi there", "testdb", TABLES, "qwen2.5:3b")
     assert intent == "conversation"
     assert "Hello" in response
 
 
-@patch("text2query.cli.frontdesk.chat_with_model")
-def test_classify_defaults_to_sql_on_garbage(mock_chat):
-    mock_chat.return_value = "asdf random garbage"
+@patch("text2query.cli.frontdesk.get_llm_provider")
+def test_classify_defaults_to_sql_on_garbage(mock_get_provider):
+    mock_get_provider.return_value.chat.return_value = "asdf random garbage"
     intent, response = classify_intent("something weird", "testdb", TABLES, "qwen2.5:3b")
     assert intent == "sql"
 
 
-@patch("text2query.cli.frontdesk.chat_with_model")
-def test_classify_defaults_to_conversation_on_failure(mock_chat):
-    mock_chat.return_value = None
+@patch("text2query.cli.frontdesk.get_llm_provider")
+def test_classify_defaults_to_conversation_on_failure(mock_get_provider):
+    mock_get_provider.return_value.chat.return_value = None
     intent, _ = classify_intent("anything", "testdb", TABLES, "qwen2.5:3b")
     assert intent == "conversation"
 
 
 # ── Result summarization ─────────────────────────────────────────────
 
-@patch("text2query.cli.frontdesk.chat_with_model")
-def test_summarize_small_dataframe(mock_chat):
-    mock_chat.return_value = "There are 3 customers."
+@patch("text2query.cli.frontdesk.get_llm_provider")
+def test_summarize_small_dataframe(mock_get_provider):
+    mock_get_provider.return_value.chat.return_value = "There are 3 customers."
     df = pd.DataFrame({"name": ["Alice", "Bob", "Charlie"], "age": [30, 25, 35]})
     result = summarize_results("how many customers?", ExecutionResult(df, None), "testdb", TABLES, "qwen2.5:3b")
     assert result == "There are 3 customers."
     # Verify the full table was passed in the prompt (not a summary)
-    prompt = mock_chat.call_args[0][0][0]["content"]
+    prompt = mock_get_provider.return_value.chat.call_args[0][0][0]["content"]
     assert "Alice" in prompt
     assert "Charlie" in prompt
 
 
-@patch("text2query.cli.frontdesk.chat_with_model")
-def test_summarize_large_dataframe_uses_head(mock_chat):
-    mock_chat.return_value = "Summary of 50 rows."
+@patch("text2query.cli.frontdesk.get_llm_provider")
+def test_summarize_large_dataframe_uses_head(mock_get_provider):
+    mock_get_provider.return_value.chat.return_value = "Summary of 50 rows."
     df = pd.DataFrame({"id": range(50), "value": range(50)})
     summarize_results("show all", ExecutionResult(df, None), "testdb", TABLES, "qwen2.5:3b")
-    prompt = mock_chat.call_args[0][0][0]["content"]
+    prompt = mock_get_provider.return_value.chat.call_args[0][0][0]["content"]
     assert "First 5 rows" in prompt
     assert "Numeric summary" in prompt
 
 
-@patch("text2query.cli.frontdesk.chat_with_model")
-def test_summarize_empty_dataframe(mock_chat):
-    mock_chat.return_value = "No matching results found."
+@patch("text2query.cli.frontdesk.get_llm_provider")
+def test_summarize_empty_dataframe(mock_get_provider):
+    mock_get_provider.return_value.chat.return_value = "No matching results found."
     df = pd.DataFrame()
     result = summarize_results("find something", ExecutionResult(df, None), "testdb", TABLES, "qwen2.5:3b")
     assert result == "No matching results found."
-    prompt = mock_chat.call_args[0][0][0]["content"]
+    prompt = mock_get_provider.return_value.chat.call_args[0][0][0]["content"]
     assert "no results" in prompt.lower()
 
 

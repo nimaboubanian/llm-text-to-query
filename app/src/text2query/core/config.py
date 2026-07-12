@@ -23,7 +23,7 @@ def _env_float(name: str, default: float) -> float:
         return default
 
 
-OLLAMA_URL = "http://ollama:11434"
+OLLAMA_URL = os.getenv("OLLAMA_URL", "http://ollama:11434")
 
 LLM_TEMPERATURE = _env_float("LLM_TEMPERATURE", 0.1)
 LLM_NUM_CTX = _env_int("LLM_NUM_CTX", 4096)

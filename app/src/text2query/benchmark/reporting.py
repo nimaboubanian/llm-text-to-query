@@ -131,7 +131,7 @@ def generate_reports(
     model: str | None = None,
     selected_ids: list[str] | None = None,
     questions_dir: Path | None = None,
-) -> tuple[Path, list[dict]]:
+) -> list[dict]:
     """Generate per-query and summary reports, aggregating stats across seeds."""
     seeds = seeds or [1]
     per_query_dir = report_dir / "per_query"
@@ -231,7 +231,7 @@ def generate_reports(
     _write_results_csv(all_flat_results, report_dir / "results.csv")
 
     print(f"  Reports generated -> {report_dir}")
-    return report_dir, all_flat_results
+    return all_flat_results
 
 
 def generate_cross_model_report(
@@ -241,7 +241,7 @@ def generate_cross_model_report(
     precomputed: dict[str, list[dict]],
     seeds: list[int] | None = None,
     selected_ids: list[str] | None = None,
-) -> Path:
+) -> None:
     """Generate cross-model comparison report and CSV export from already-evaluated results."""
     all_ids = sorted(f.stem for f in reference_queries_dir.glob("*.sql"))
     query_ids = [q for q in all_ids if q in selected_ids] if selected_ids is not None else all_ids
@@ -319,8 +319,6 @@ def generate_cross_model_report(
     comparison_path = report_dir / "comparison.md"
     comparison_path.write_text("\n".join(lines) + "\n")
     print(f"  Comparison report -> {comparison_path}")
-
-    return report_dir
 
 
 def archive_session(

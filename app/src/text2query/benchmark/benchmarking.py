@@ -36,7 +36,7 @@ def _run_single_model_benchmark(
     db_url: str,
     seeds: list[int] | None,
     query_ids: list[str] | None = None,
-) -> tuple[Path, list[dict]]:
+) -> list[dict]:
     """Run the full benchmark (generate + execute + report) for one model."""
     slug = model_slug(model)
     output_dir = output_base / slug
@@ -61,7 +61,7 @@ def _run_single_model_benchmark(
     print()
 
     print("Generate Reports")
-    _, results = generate_reports(
+    results = generate_reports(
         generated_queries_dir=output_dir, reference_queries_dir=queries_dir,
         generated_answers_dir=generated_answers_dir, reference_answers_dir=answers_dir,
         report_dir=report_dir,
@@ -72,7 +72,7 @@ def _run_single_model_benchmark(
     )
     print()
 
-    return report_dir, results
+    return results
 
 
 def main():
@@ -179,7 +179,7 @@ def main():
                 print(f"  Model {i}/{len(models)}: {model}")
                 print(f"{'=' * 60}")
 
-            _, results = _run_single_model_benchmark(
+            results = _run_single_model_benchmark(
                 model=model,
                 questions_dir=questions_dir,
                 queries_dir=queries_dir,

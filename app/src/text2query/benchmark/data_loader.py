@@ -1,7 +1,6 @@
 import os
 import subprocess
 from pathlib import Path
-from sqlalchemy import text
 
 TPCH_TABLES = [
     'region', 'nation', 'part', 'supplier',

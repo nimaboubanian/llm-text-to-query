@@ -33,13 +33,8 @@ def _write_results_csv(results: list[dict], csv_path: Path) -> None:
         writer = csv.DictWriter(f, fieldnames=CSV_FIELDNAMES, extrasaction="ignore")
         writer.writeheader()
         for r in results:
-            row = {field: r.get(field, "") for field in CSV_FIELDNAMES}
-            if row["seed"] is None:
-                row["seed"] = ""
+            row = {field: v if (v := r.get(field)) is not None else "" for field in CSV_FIELDNAMES}
             row["query_id"] = f"{int(r['query_id']):02d}"
-            for field in CSV_FIELDNAMES:
-                if row[field] is None:
-                    row[field] = ""
             writer.writerow(row)
     print(f"  CSV export -> {csv_path} ({len(results)} rows)")
 

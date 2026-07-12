@@ -19,7 +19,6 @@ from text2query.benchmark.reporting import (
     generate_reports,
     generate_cross_model_report,
     archive_session,
-    model_slug,
     write_session_manifest,
 )
 from text2query.benchmark.fingerprint import collect_fingerprints
@@ -38,7 +37,7 @@ def _run_single_model_benchmark(
     query_ids: list[str] | None = None,
 ) -> list[dict]:
     """Run the full benchmark (generate + execute + report) for one model."""
-    slug = model_slug(model)
+    slug = model.replace(":", "_").replace("/", "_")
     output_dir = output_base / slug
     generated_answers_dir = generated_answers_base / slug
     report_dir = report_base / slug

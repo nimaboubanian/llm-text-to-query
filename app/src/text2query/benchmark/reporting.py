@@ -21,11 +21,6 @@ CSV_FIELDNAMES = [
 ]
 
 
-def model_slug(model_name: str) -> str:
-    """Convert model name to a filesystem-safe slug."""
-    return model_name.replace(":", "_").replace("/", "_")
-
-
 def _write_results_csv(results: list[dict], csv_path: Path) -> None:
     """Write enriched evaluation results to CSV with the fixed column schema."""
     csv_path.parent.mkdir(parents=True, exist_ok=True)

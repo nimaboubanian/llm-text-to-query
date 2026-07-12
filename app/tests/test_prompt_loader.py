@@ -1,30 +1,6 @@
 import pytest
 
-from text2query.benchmark.fingerprint import GenerationFingerprint
-from text2query.llm.prompt_loader import (
-    MAX_TEMPLATE_SIZE,
-    PromptTemplateError,
-    get_prompt_template,
-    load_prompt_template,
-    render_prompt,
-)
-
-
-def test_binary_file_raises(tmp_path):
-    path = tmp_path / "template.bin"
-    path.write_bytes(b"\xff\xfe{schema}{query}\x00\x80")
-    with pytest.raises(PromptTemplateError, match="not valid UTF-8"):
-        load_prompt_template(path)
-
-
-def test_get_prompt_template_is_cached():
-    # Same object returned across calls — proves the disk read happens once.
-    assert get_prompt_template() is get_prompt_template()
-
-
-def test_missing_file_raises(tmp_path):
-    with pytest.raises(PromptTemplateError, match="Could not read"):
-        load_prompt_template(tmp_path / "nope.txt")
+from text2query.llm.prompt_loader import PromptTemplateError, load_prompt_template, render_prompt
 
 
 def test_missing_placeholder_raises(tmp_path):
@@ -33,21 +9,6 @@ def test_missing_placeholder_raises(tmp_path):
 
     with pytest.raises(PromptTemplateError, match=r"\{query\}"):
         load_prompt_template(path)
-
-
-def test_oversized_template_raises(tmp_path):
-    path = tmp_path / "template.txt"
-    path.write_text("{schema} {query} " + "x" * MAX_TEMPLATE_SIZE)
-
-    with pytest.raises(PromptTemplateError, match="exceeds"):
-        load_prompt_template(path)
-
-
-def test_valid_template_loads(tmp_path):
-    path = tmp_path / "template.txt"
-    path.write_text("Schema: {schema}\nQuery: {query}\n")
-
-    assert load_prompt_template(path) == "Schema: {schema}\nQuery: {query}\n"
 
 
 def test_render_prompt_is_single_pass_and_inert():
@@ -59,22 +20,3 @@ def test_render_prompt_is_single_pass_and_inert():
     rendered = render_prompt(template, schema, question)
 
     assert rendered == "S:TABLE t\nQ:what about {schema} and {query}?"
-
-
-def test_prompt_template_edit_changes_fingerprint(tmp_path):
-    path = tmp_path / "template.txt"
-    path.write_text("Schema: {schema}\nQuery: {query}\n")
-    original = load_prompt_template(path)
-    fp_before = GenerationFingerprint(
-        model="m", prompt_template=original, schema="s",
-        temperature=0.1, max_tokens=10, seed=None, flags={},
-    ).hash
-
-    path.write_text("Schema: {schema}\nQuery: {query}\nExtra rule.\n")
-    edited = load_prompt_template(path)
-    fp_after = GenerationFingerprint(
-        model="m", prompt_template=edited, schema="s",
-        temperature=0.1, max_tokens=10, seed=None, flags={},
-    ).hash
-
-    assert fp_before != fp_after

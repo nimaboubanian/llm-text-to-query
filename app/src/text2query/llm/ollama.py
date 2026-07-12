@@ -1,31 +1,34 @@
+import json
 import logging
-
-import requests
+import urllib.error
+import urllib.request
 
 from text2query.core.config import (
     DEFAULT_MODEL, LLM_MAX_TOKENS, LLM_NUM_CTX, LLM_TEMPERATURE, LLM_TIMEOUT, OLLAMA_URL,
 )
-from text2query.llm.provider import GenerationResult, LLMProvider
+from text2query.llm.provider import GenerationResult
 from text2query.llm.service import _build_prompt, _clean_sql_response
 
 logger = logging.getLogger(__name__)
 
 
-class OllamaProvider(LLMProvider):
-    """LLMProvider backed by a local Ollama server."""
+def _post_json(url: str, payload: dict, timeout: int) -> tuple[int, dict]:
+    body = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(
+        url, data=body, headers={"Content-Type": "application/json"}, method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return resp.status, json.loads(resp.read())
+    except urllib.error.HTTPError as e:
+        return e.code, {}
+
+
+class OllamaProvider:
+    """SQL-generation backend talking to a local Ollama server."""
 
     def __init__(self, base_url: str = OLLAMA_URL):
         self.base_url = base_url
-
-    def list_models(self) -> list[str]:
-        try:
-            resp = requests.get(f"{self.base_url}/api/tags", timeout=10)
-            if resp.status_code == 200:
-                data = resp.json()
-                return [m["name"] for m in data.get("models", [])]
-        except requests.exceptions.RequestException as e:
-            logger.warning("Failed to list models from %s: %s", self.base_url, e)
-        return []
 
     def warmup(self, model: str, timeout: int = 300) -> bool:
         """Preload a model into memory before timed generation.
@@ -35,18 +38,18 @@ class OllamaProvider(LLMProvider):
         timeout on the first real query. Returns True if the model loaded.
         """
         try:
-            resp = requests.post(
+            status, _ = _post_json(
                 f"{self.base_url}/api/generate",
-                json={
+                {
                     "model": model,
                     "prompt": "",
                     "stream": False,
                     "options": {"num_ctx": LLM_NUM_CTX},
                 },
-                timeout=timeout,
+                timeout,
             )
-            return resp.status_code == 200
-        except requests.exceptions.RequestException as e:
+            return status == 200
+        except (urllib.error.URLError, TimeoutError) as e:
             logger.warning("Failed to warm up model %r: %s", model, e)
             return False
 
@@ -69,39 +72,39 @@ class OllamaProvider(LLMProvider):
             options["seed"] = seed
 
         try:
-            resp = requests.post(
+            status, data = _post_json(
                 f"{self.base_url}/api/generate",
-                json={
+                {
                     "model": selected_model,
                     "prompt": prompt,
                     "stream": False,
                     "options": options,
                 },
-                timeout=LLM_TIMEOUT,
+                LLM_TIMEOUT,
             )
 
-            if resp.status_code == 404:
+            if status == 404:
                 return GenerationResult(
                     sql=None, prompt=prompt, error=f"Model '{selected_model}' not found."
                 )
 
-            if resp.status_code != 200:
+            if status != 200:
                 return GenerationResult(
-                    sql=None, prompt=prompt, error=f"LLM API error: {resp.status_code}"
+                    sql=None, prompt=prompt, error=f"LLM API error: {status}"
                 )
 
-            full_response = resp.json().get("response", "")
+            full_response = data.get("response", "")
             return GenerationResult(
                 sql=_clean_sql_response(full_response),
                 raw_response=full_response,
                 prompt=prompt,
             )
 
-        except requests.exceptions.Timeout:
+        except TimeoutError:
             logger.warning("Generate request timed out (model=%r)", selected_model)
             return GenerationResult(
                 sql=None, prompt=prompt, error="Request timed out. Model might be loading."
             )
-        except requests.exceptions.RequestException as e:
+        except urllib.error.URLError as e:
             logger.warning("Generate request failed (model=%r): %s", selected_model, e)
             return GenerationResult(sql=None, prompt=prompt, error=f"Connection failed: {e}")

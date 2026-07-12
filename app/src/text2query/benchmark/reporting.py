@@ -312,10 +312,7 @@ def _generate_multiseed_reports(
 
     aggregated = []
     all_flat_results = []
-    metrics_to_aggregate = [
-        "result_f1", "result_precision", "result_recall",
-        "ast_similarity",
-    ]
+    metrics_to_aggregate = ["result_f1", "ast_similarity"]
 
     for qid in query_ids:
         seed_results = []
@@ -580,8 +577,7 @@ def archive_session(
     _move_contents(answers_dir, session_answers, "answers")
 
     if report_dir.exists():
-        shutil.copytree(str(report_dir), str(session_report), dirs_exist_ok=True)
-        shutil.rmtree(str(report_dir))
+        shutil.move(str(report_dir), str(session_report))
         print(f"  Moved reports -> {session_report}")
 
     for d in [queries_dir, answers_dir]:
@@ -601,8 +597,7 @@ def _move_contents(src_dir: Path, dst_dir: Path, label: str) -> None:
     subdirs = sorted(d for d in src_dir.iterdir() if d.is_dir())
     if subdirs:
         for sd in subdirs:
-            target = dst_dir / sd.name
-            shutil.copytree(str(sd), str(target), dirs_exist_ok=True)
+            shutil.move(str(sd), str(dst_dir))
         print(f"  Moved {len(subdirs)} dirs of {label} -> {dst_dir}")
 
     # Move flat files (single-seed, single-model / backward compat)
@@ -632,7 +627,6 @@ def write_session_manifest(
     generation_parameters: dict,
     fingerprints: dict[str, str],
     database_url: str,
-    flags: dict | None = None,
 ) -> Path:
     """Write a self-describing provenance manifest for an archived benchmark session."""
     try:
@@ -648,7 +642,6 @@ def write_session_manifest(
         "query_ids": query_ids,
         "scale_factor": scale_factor,
         "generation_parameters": generation_parameters,
-        "flags": flags or {},
         "fingerprints": fingerprints,
         "database_url": _redact_db_url(database_url),
     }

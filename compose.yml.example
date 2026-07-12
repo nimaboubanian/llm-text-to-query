@@ -16,10 +16,6 @@ x-config: &config
   # Path (inside the container) to the user-editable SQL-generation prompt.
   # Mounted read-only from ./prompts on the host — edit that file, not this path.
   PROMPT_TEMPLATE_PATH: "prompts/sql_generation.txt"
-  # Feature flags — architectural placeholders, not yet implemented. Off by default.
-  FEATURE_RETRY: "false"
-  FEATURE_CHAIN_OF_THOUGHT: "false"
-  FEATURE_SELF_CORRECTION: "false"
 
   # --- Benchmark mode -----------------------------------------------------
   # Used by `docker compose --profile benchmark up benchmark`.

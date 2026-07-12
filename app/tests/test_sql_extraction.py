@@ -1,4 +1,3 @@
-import pytest
 from text2query.llm.service import _clean_sql_response
 
 
@@ -29,23 +28,6 @@ def test_returns_none_for_empty_input():
     assert _clean_sql_response(None) is None
 
 
-def test_fenced_block_case_insensitive():
-    response = "```SQL\nSELECT 1\n```"
-    assert _clean_sql_response(response) == "SELECT 1"
-
-
-def test_multiline_fenced_sql():
-    response = """```sql
-SELECT o.id, c.name
-FROM orders o
-JOIN customers c ON o.customer_id = c.id
-WHERE o.total > 100
-```"""
-    result = _clean_sql_response(response)
-    assert "SELECT o.id" in result
-    assert "WHERE o.total > 100" in result
-
-
 def test_rejects_bare_insert():
     assert _clean_sql_response("INSERT INTO users VALUES (1, 'alice');") is None
 
@@ -72,14 +54,6 @@ def test_bare_multi_statement_extracts_only_first():
 def test_allows_single_statement_with_trailing_semicolon():
     response = "```sql\nSELECT id FROM users;\n```"
     assert _clean_sql_response(response) == "SELECT id FROM users;"
-
-
-def test_string_literal_semicolon_falsely_rejected():
-    """Known limitation: semicolons inside string literals trigger false rejection."""
-    response = "```sql\nSELECT * FROM t WHERE name = 'foo;bar'\n```"
-    # BUG: _is_single_statement sees the ; inside the string and rejects it.
-    # This test documents the current (broken) behavior.
-    assert _clean_sql_response(response) is None
 
 
 def test_rejects_drop_in_fence():

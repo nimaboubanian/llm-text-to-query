@@ -1,24 +1,13 @@
 import os
 
 
-def _env_int(name: str, default: int) -> int:
-    """Read an int from the environment, falling back to default if unset or unparseable."""
+def _env(name: str, default, cast):
+    """Read a value from the environment, falling back to default if unset or unparseable."""
     raw = os.getenv(name)
     if raw is None:
         return default
     try:
-        return int(raw)
-    except ValueError:
-        return default
-
-
-def _env_float(name: str, default: float) -> float:
-    """Read a float from the environment, falling back to default if unset or unparseable."""
-    raw = os.getenv(name)
-    if raw is None:
-        return default
-    try:
-        return float(raw)
+        return cast(raw)
     except ValueError:
         return default
 
@@ -27,23 +16,23 @@ OLLAMA_URL = os.getenv("OLLAMA_URL", "http://ollama:11434")
 
 LOG_LEVEL = os.getenv("LOG_LEVEL", "WARNING")
 
-LLM_TEMPERATURE = _env_float("LLM_TEMPERATURE", 0.1)
-LLM_NUM_CTX = _env_int("LLM_NUM_CTX", 4096)
-LLM_MAX_TOKENS = _env_int("LLM_MAX_TOKENS", 2048)
+LLM_TEMPERATURE = _env("LLM_TEMPERATURE", 0.1, float)
+LLM_NUM_CTX = _env("LLM_NUM_CTX", 4096, int)
+LLM_MAX_TOKENS = _env("LLM_MAX_TOKENS", 2048, int)
 
 # Whole-generation timeout (seconds) for a single non-streaming request. With
 # stream=false the model must finish within this window with no bytes flowing,
 # so it needs to be generous on CPU-only setups where a 7B model is slow.
-LLM_TIMEOUT = _env_int("LLM_TIMEOUT", 600)
+LLM_TIMEOUT = _env("LLM_TIMEOUT", 600, int)
 
 DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "qwen2.5-coder:7b")
 
 PROMPT_TEMPLATE_PATH = os.getenv("PROMPT_TEMPLATE_PATH", "prompts/sql_generation.txt")
 
-SERVER_PORT = _env_int("SERVER_PORT", 8000)
+SERVER_PORT = _env("SERVER_PORT", 8000, int)
 
-BENCHMARK_SCALE_FACTOR = _env_int("BENCHMARK_SCALE_FACTOR", 1)
-BENCHMARK_NUM_SEEDS = _env_int("BENCHMARK_NUM_SEEDS", 1)
+BENCHMARK_SCALE_FACTOR = _env("BENCHMARK_SCALE_FACTOR", 1, int)
+BENCHMARK_NUM_SEEDS = _env("BENCHMARK_NUM_SEEDS", 1, int)
 BENCHMARK_DATA_PATH = os.getenv("BENCHMARK_DATA_PATH")
 
 _models_raw = os.getenv("BENCHMARK_MODELS", "")

@@ -65,9 +65,6 @@ x-config: &config
   LLM_MAX_TOKENS: "2048"                # Max tokens generated per query
   SERVER_PORT: "8000"                   # Internal HTTP port
   PROMPT_TEMPLATE_PATH: "prompts/sql_generation.txt"
-  FEATURE_RETRY: "false"
-  FEATURE_CHAIN_OF_THOUGHT: "false"
-  FEATURE_SELF_CORRECTION: "false"
 
   # --- Benchmark mode ---
   BENCHMARK_MODELS: "llama3.2:3b,qwen2.5-coder:7b"
@@ -90,10 +87,6 @@ The prompt template used to generate SQL is a plain, user-editable file at `prom
 A small loader validates the file at startup — a missing file, an oversized file, or a template missing a required placeholder fails fast with a clear error rather than producing broken prompts at runtime. Substitution is single-pass plain-token replacement, not string formatting, so placeholder-like text inside the schema or a user's question can never be reinterpreted as template syntax.
 
 The real safety boundary for generated SQL stays output-side (see **Safety** below) — prompt validation only guards against operator misconfiguration, not malicious input.
-
-## Feature Flags
-
-Three flags exist as architectural placeholders for prompt-improvement techniques that are not implemented yet: `FEATURE_RETRY`, `FEATURE_CHAIN_OF_THOUGHT`, `FEATURE_SELF_CORRECTION`. All default to `"false"`. They are threaded through the generation pipeline and recorded in the Benchmark session manifest and generation fingerprint (so flipping one invalidates cached results), ready for the corresponding behavior to be added later without further plumbing changes.
 
 ## Mini Database
 
@@ -144,7 +137,7 @@ If you haven't changed `BENCHMARK_MODELS`, the benchmark runs with the default m
 Runs a three-phase TPC-H pipeline: **Setup** (data generation, schema loading) → **Generation** (LLM query generation and execution) → **Analysis** (similarity metrics, reports, archiving). The repo-root `benchmark/` directory holds TPC-H data, generated queries/answers, reports, and archived session results — kept under that name for compatibility with existing caches.
 
 Each archived session under `benchmark/results/<timestamp>/` includes a `session_manifest.json`
-recording the models, seeds, query filter, scale factor, generation parameters, feature flags,
+recording the models, seeds, query filter, scale factor, generation parameters,
 the fingerprint(s) that gate the resume cache, the package version, and the database URL
 (credentials stripped) — so every archived result is self-describing without cross-referencing
 logs or git history.

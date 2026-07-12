@@ -20,7 +20,6 @@ def _fmt_size(nbytes: int) -> str:
 def load_tpch_data(
     data_dir: Path,
     db_url: str,
-    truncate: bool = False,
 ) -> dict[str, int]:
     """Load .tbl files into PostgreSQL using COPY.
 
@@ -44,9 +43,6 @@ def load_tpch_data(
         print(f"  [{i}/{len(TPCH_TABLES)}] {table} ({size})...", end="", flush=True)
 
         with engine.begin() as conn:
-            if truncate:
-                conn.execute(text(f"TRUNCATE TABLE {table} CASCADE"))
-
             raw = conn.connection
             cur = raw.cursor()
             try:

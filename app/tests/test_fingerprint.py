@@ -10,7 +10,6 @@ def _fp(**overrides):
     defaults = dict(
         model="m1", prompt_template="template", schema="schema",
         temperature=0.1, max_tokens=2048, seed=None,
-        flags={"retry": False, "chain_of_thought": False, "self_correction": False},
     )
     defaults.update(overrides)
     return GenerationFingerprint(**defaults)
@@ -45,12 +44,6 @@ def test_hash_changes_with_seed():
     assert _fp(seed=None).hash != _fp(seed=1).hash
 
 
-def test_hash_changes_with_flags():
-    off = _fp(flags={"retry": False, "chain_of_thought": False, "self_correction": False})
-    on = _fp(flags={"retry": True, "chain_of_thought": False, "self_correction": False})
-    assert off.hash != on.hash
-
-
 def test_manifest_round_trip(tmp_path):
     fp = _fp()
     write_manifest(tmp_path, fp.hash, asdict(fp))
@@ -69,7 +62,6 @@ def test_manifest_content_is_complete(tmp_path):
     assert manifest["schema"] == "schema"
     assert manifest["temperature"] == 0.1
     assert manifest["max_tokens"] == 2048
-    assert manifest["flags"] == {"retry": False, "chain_of_thought": False, "self_correction": False}
 
 
 def test_missing_manifest_returns_none(tmp_path):

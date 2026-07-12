@@ -8,11 +8,10 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import pandas as pd
 
 from text2query.core.config import DATABASE_URL, DEFAULT_MODEL, LOG_LEVEL, SERVER_PORT
-from text2query.core.flags import GenerationFlags
 from text2query.database.executor import execute_sql_query
 from text2query.database.schema import create_engine_for_database, get_database_schema_string
+from text2query.llm.ollama import OllamaProvider
 from text2query.llm.prompt_loader import get_prompt_template
-from text2query.llm.provider import get_llm_provider
 
 logger = logging.getLogger(__name__)
 
@@ -103,8 +102,7 @@ class AppContext:
         self.engine = create_engine_for_database(DATABASE_URL)
         self.schema = get_database_schema_string(self.engine)
         get_prompt_template()  # fail fast on a missing/invalid template; caches it
-        self.flags = GenerationFlags.from_env()
-        self.llm = get_llm_provider()
+        self.llm = OllamaProvider()
         self.llm.warmup(DEFAULT_MODEL)
 
 
@@ -155,12 +153,10 @@ def main():
     )
 
     ctx = AppContext()
-    enabled_flags = [name for name, value in ctx.flags.to_dict().items() if value]
     handler_cls = _make_handler(ctx)
     server = ThreadingHTTPServer(("0.0.0.0", SERVER_PORT), handler_cls)
     logger.warning(
-        "text2query server listening on port %s (model=%s, flags=%s)",
-        SERVER_PORT, DEFAULT_MODEL, ", ".join(enabled_flags) or "none",
+        "text2query server listening on port %s (model=%s)", SERVER_PORT, DEFAULT_MODEL,
     )
     server.serve_forever()
 

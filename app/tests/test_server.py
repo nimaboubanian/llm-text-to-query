@@ -9,7 +9,6 @@ from unittest.mock import MagicMock
 import pandas as pd
 import pytest
 
-from text2query.core.flags import GenerationFlags
 from text2query.database.executor import ExecutionResult
 from text2query.llm.provider import GenerationResult
 from text2query.server.main import AppContext, RequestError, _make_handler, handle_query, parse_question
@@ -142,7 +141,6 @@ def test_handler_serves_health_and_query_end_to_end(monkeypatch):
     ctx = AppContext.__new__(AppContext)
     ctx.engine = None
     ctx.schema = "schema"
-    ctx.flags = GenerationFlags()
     ctx.llm = llm
 
     server, port = _serve(ctx)

@@ -2,9 +2,8 @@ from dataclasses import asdict
 from pathlib import Path
 
 from text2query.core.config import LLM_MAX_TOKENS, LLM_TEMPERATURE
-from text2query.core.flags import GenerationFlags
 from text2query.database.schema import create_engine_for_database, get_database_schema_string
-from text2query.llm.provider import get_llm_provider
+from text2query.llm.ollama import OllamaProvider
 from text2query.llm.prompt_loader import get_prompt_template
 from text2query.benchmark.fingerprint import (
     MANIFEST_FILENAME, GenerationFingerprint, read_manifest_fingerprint, write_manifest,
@@ -19,16 +18,14 @@ def run_llm_generation(
     model: str,
     seeds: list[int] | None = None,
     query_ids: list[str] | None = None,
-    flags: GenerationFlags | None = None,
 ) -> list[dict]:
-    flags = flags or GenerationFlags()
     if seeds and len(seeds) > 1:
         all_results = []
         for seed in seeds:
             seed_dir = output_dir / f"seed_{seed}"
             print(f"\n  --- Seed {seed} ---")
             results = _run_single_generation(
-                questions_dir, seed_dir, db_url, model, seed=seed, query_ids=query_ids, flags=flags,
+                questions_dir, seed_dir, db_url, model, seed=seed, query_ids=query_ids,
             )
             all_results.extend(
                 {**r, "seed": seed} for r in results
@@ -37,7 +34,7 @@ def run_llm_generation(
     else:
         seed = seeds[0] if seeds else None
         return _run_single_generation(
-            questions_dir, output_dir, db_url, model, seed=seed, query_ids=query_ids, flags=flags,
+            questions_dir, output_dir, db_url, model, seed=seed, query_ids=query_ids,
         )
 
 
@@ -48,9 +45,7 @@ def _run_single_generation(
     model: str,
     seed: int | None = None,
     query_ids: list[str] | None = None,
-    flags: GenerationFlags | None = None,
 ) -> list[dict]:
-    flags = flags or GenerationFlags()
     question_files = sorted(questions_dir.glob("*.md"))
     if query_ids is not None:
         question_files = [q for q in question_files if q.stem in query_ids]
@@ -68,7 +63,6 @@ def _run_single_generation(
         temperature=LLM_TEMPERATURE,
         max_tokens=LLM_MAX_TOKENS,
         seed=seed,
-        flags=flags.to_dict(),
     )
 
     cached_fingerprint = read_manifest_fingerprint(output_dir)
@@ -91,7 +85,7 @@ def _run_single_generation(
     cache_label = f", {len(existing)} cached" if existing else ""
     print(f"  Generating {len(to_process)} queries{seed_label}{cache_label}...")
 
-    llm = get_llm_provider()
+    llm = OllamaProvider()
 
     print(f"  Warming up {model}...", end="", flush=True)
     print(" ✓" if llm.warmup(model) else " ⚠ (warmup failed, continuing)")
@@ -107,8 +101,6 @@ def _run_single_generation(
 
         print(f"  [{i}/{len(to_process)}] Q{query_id}...", end="", flush=True)
 
-        # Insertion point for flags.retry / flags.self_correction: wrap this
-        # call in a retry-and-inspect loop once those techniques are implemented.
         result = llm.generate_sql(question, schema, model, seed=seed)
         generated_sql = result.sql
         raw_response = result.raw_response

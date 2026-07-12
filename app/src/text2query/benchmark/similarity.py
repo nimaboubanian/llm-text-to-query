@@ -7,7 +7,6 @@ from pathlib import Path
 
 import pandas as pd
 import sqlglot
-from sqlglot import exp
 from sqlglot.diff import Keep, diff
 
 logger = logging.getLogger(__name__)

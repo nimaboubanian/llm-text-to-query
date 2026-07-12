@@ -1,21 +1,17 @@
+import logging
 import os
 import re
 import subprocess
 from pathlib import Path
 
-from sqlalchemy import text
+from sqlalchemy import inspect, text
 
 from text2query.database.schema import create_engine_for_database
 from text2query.database.executor import execute_sql_query
 
-from text2query.benchmark.validation import (
-    check_directory,
-    check_database_ready,
-    check_data_cache,
-    check_answers_completeness,
-)
+from text2query.benchmark.data_loader import TPCH_TABLES, load_tpch_data
 
-from text2query.benchmark.data_loader import load_tpch_data
+logger = logging.getLogger(__name__)
 
 
 def read_business_question(qfile: Path) -> str | None:
@@ -26,10 +22,19 @@ def read_business_question(qfile: Path) -> str | None:
     return match.group(1) if match else None
 
 
+def _check_data_cache(data_dir: Path) -> bool:
+    if not data_dir.exists():
+        return False
+    return all(
+        (data_dir / f"{t}.tbl").exists() and (data_dir / f"{t}.tbl").stat().st_size > 0
+        for t in TPCH_TABLES
+    )
+
+
 def generate_data(scale_factor: int, output_dir: Path) -> Path:
     output_dir = output_dir or Path(f"benchmark/.tpch/data/sf{scale_factor}")
 
-    if check_data_cache(output_dir):
+    if _check_data_cache(output_dir):
         print(f"  ✓ Using cached data: {output_dir}")
         return output_dir
 
@@ -56,24 +61,49 @@ def generate_data(scale_factor: int, output_dir: Path) -> Path:
     return output_dir
 
 
+def _check_directory(directory: Path, extension: str, expected_count: int) -> None:
+    if not directory.exists():
+        raise FileNotFoundError(f"Directory not found: {directory}")
+
+    files = list(directory.glob(f"*.{extension}"))
+    if len(files) != expected_count:
+        raise ValueError(
+            f"Expected {expected_count} .{extension} files in {directory}, "
+            f"found {len(files)}"
+        )
+
+
 def validate_directories(
     questions_dir: Path,
     queries_dir: Path
 ) -> None:
     print("  Validating directories...")
-    check_directory(questions_dir, "md", 22)
+    _check_directory(questions_dir, "md", 22)
     print(f"  ✓ Questions: {questions_dir}")
-    check_directory(queries_dir, "sql", 22)
+    _check_directory(queries_dir, "sql", 22)
     print(f"  ✓ Queries: {queries_dir}")
 
 
 def check_database_readiness(db_url: str) -> bool:
     print("  Checking database readiness...")
-    ready = check_database_ready(db_url)
-    if ready:
-        print("  ✓ Database is ready")
-    else:
-        print("  ✗ Database needs setup")
+    engine = create_engine_for_database(db_url)
+    ready = False
+    try:
+        inspector = inspect(engine)
+        actual = {t.lower() for t in inspector.get_table_names()}
+        expected = {t.lower() for t in TPCH_TABLES}
+
+        if expected.issubset(actual):
+            # Fast non-empty check (avoid COUNT(*) on multi-million row tables)
+            with engine.connect() as conn:
+                ready = all(
+                    conn.execute(text(f"SELECT 1 FROM {table} LIMIT 1")).fetchone() is not None
+                    for table in TPCH_TABLES
+                )
+    except Exception as e:
+        logger.warning("Database readiness check failed: %s", e)
+
+    print("  ✓ Database is ready" if ready else "  ✗ Database needs setup")
     return ready
 
 
@@ -159,7 +189,10 @@ def generate_answers(
 ) -> list[dict]:
     print("  Checking answer files...")
 
-    is_complete, missing_ids = check_answers_completeness(answers_dir, queries_dir)
+    expected = {q.stem for q in queries_dir.glob("*.sql")}
+    actual = {a.stem for a in answers_dir.glob("*.csv")} if answers_dir.exists() else set()
+    missing_ids = expected - actual
+    is_complete = not missing_ids
 
     if is_complete:
         query_count = len(list(queries_dir.glob('*.sql')))

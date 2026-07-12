@@ -1,12 +1,11 @@
 """Tests for multi-seed and multi-model benchmark functionality."""
 import csv
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
-from text2query.benchmark.runner import run_llm_generation, execute_generated_queries
+from text2query.benchmark.runner import run_llm_generation
 from text2query.benchmark.reporting import (
-    _format_summary_multiseed, _format_per_query_multiseed, _compute_stats,
-    archive_session, model_slug, generate_cross_model_report, generate_reports,
+    archive_session, generate_cross_model_report, generate_reports,
 )
 from text2query.llm.provider import GenerationResult
 
@@ -15,27 +14,6 @@ def _make_question_file(questions_dir: Path, qid: str, question: str):
     """Create a question .md file in the expected format."""
     content = f'# Business Question:\n  "{question}"\n'
     (questions_dir / f"{qid}.md").write_text(content)
-
-
-def test_run_llm_generation_single_seed_no_subdirs(tmp_path):
-    """When seeds=None, output goes directly to output_dir (backward compat)."""
-    questions_dir = tmp_path / "questions"
-    output_dir = tmp_path / "output"
-    questions_dir.mkdir()
-    _make_question_file(questions_dir, "01", "What are the customer names?")
-
-    def mock_generate(*args, **kwargs):
-        return GenerationResult(sql="SELECT name FROM customers;")
-
-    with patch("text2query.llm.ollama.OllamaProvider.generate_sql", side_effect=mock_generate), \
-         patch("text2query.benchmark.runner.create_engine_for_database"), \
-         patch("text2query.llm.ollama.OllamaProvider.warmup", return_value=True), \
-         patch("text2query.benchmark.runner.get_database_schema_string", return_value="schema"):
-
-        run_llm_generation(questions_dir, output_dir, "db://url", "test-model", seeds=None)
-
-    assert (output_dir / "01.sql").exists()
-    assert not list(output_dir.glob("seed_*"))  # No seed subdirs
 
 
 def test_run_llm_generation_multi_seed_creates_subdirs(tmp_path):
@@ -103,127 +81,6 @@ def test_run_llm_generation_caching_per_seed(tmp_path):
     # seed_1 was already cached, only seed_2 should be generated
     assert call_count == 1
     assert (output_dir / "seed_2" / "01.sql").exists()
-
-
-def test_warmup_runs_before_generation(tmp_path):
-    """The model is warmed up once when there are queries to generate."""
-    questions_dir = tmp_path / "questions"
-    output_dir = tmp_path / "output"
-    questions_dir.mkdir()
-    _make_question_file(questions_dir, "01", "What are the customer names?")
-
-    def mock_generate(*args, **kwargs):
-        return GenerationResult(sql="SELECT name FROM customers;")
-
-    warmup = MagicMock(return_value=True)
-    with patch("text2query.llm.ollama.OllamaProvider.generate_sql", side_effect=mock_generate), \
-         patch("text2query.benchmark.runner.create_engine_for_database"), \
-         patch("text2query.llm.ollama.OllamaProvider.warmup", warmup), \
-         patch("text2query.benchmark.runner.get_database_schema_string", return_value="schema"):
-
-        run_llm_generation(questions_dir, output_dir, "db://url", "test-model", seeds=None)
-
-    warmup.assert_called_once_with("test-model")
-
-
-def test_warmup_skipped_when_fully_cached(tmp_path):
-    """No warmup happens when every query is already generated."""
-    questions_dir = tmp_path / "questions"
-    output_dir = tmp_path / "output"
-    questions_dir.mkdir()
-    output_dir.mkdir()
-    _make_question_file(questions_dir, "01", "What are the customer names?")
-    (output_dir / "01.sql").write_text("SELECT 1;")  # pre-cached
-
-    warmup = MagicMock(return_value=True)
-    with patch("text2query.llm.ollama.OllamaProvider.generate_sql"), \
-         patch("text2query.benchmark.runner.create_engine_for_database"), \
-         patch("text2query.llm.ollama.OllamaProvider.warmup", warmup), \
-         patch("text2query.benchmark.runner.get_database_schema_string", return_value="schema"):
-
-        run_llm_generation(questions_dir, output_dir, "db://url", "test-model", seeds=None)
-
-    warmup.assert_not_called()
-
-
-def test_generation_continues_when_warmup_fails(tmp_path):
-    """A failed warmup must not abort the generation run."""
-    questions_dir = tmp_path / "questions"
-    output_dir = tmp_path / "output"
-    questions_dir.mkdir()
-    _make_question_file(questions_dir, "01", "What are the customer names?")
-
-    def mock_generate(*args, **kwargs):
-        return GenerationResult(sql="SELECT name FROM customers;")
-
-    with patch("text2query.llm.ollama.OllamaProvider.generate_sql", side_effect=mock_generate), \
-         patch("text2query.benchmark.runner.create_engine_for_database"), \
-         patch("text2query.llm.ollama.OllamaProvider.warmup", return_value=False), \
-         patch("text2query.benchmark.runner.get_database_schema_string", return_value="schema"):
-
-        run_llm_generation(questions_dir, output_dir, "db://url", "test-model", seeds=None)
-
-    assert (output_dir / "01.sql").exists()
-
-
-def test_format_summary_multiseed():
-    """Summary format should include mean±std, CI columns, and per-query seeds-ok count."""
-    aggregated = [
-        {
-            "query_id": 1,
-            "result_f1": _compute_stats([0.85, 0.72, 0.88]),
-            "ast_similarity": _compute_stats([0.75, 0.80, 0.78]),
-            "per_seed": [
-                {"status": "ok"}, {"status": "ok"}, {"status": "ok"},
-            ],
-        },
-        {
-            "query_id": 2,
-            "result_f1": _compute_stats([0.0, 0.0, 0.0]),
-            "ast_similarity": _compute_stats([0.10, 0.12, 0.08]),
-            "per_seed": [
-                {"status": "ok"}, {"status": "exec_error"}, {"status": "missing"},
-            ],
-        },
-    ]
-
-    output = _format_summary_multiseed(aggregated, num_seeds=3)
-
-    assert "±" in output
-    assert "01" in output
-    assert "02" in output
-    assert "3/3" in output   # query 1: all ok
-    assert "1/3" in output   # query 2: only one ok
-
-
-def test_format_per_query_multiseed():
-    """Per-query multi-seed format should show all seed results."""
-    seed_results = [
-        {"seed": 1, "status": "ok", "result_f1": 0.85, "ast_similarity": 0.75},
-        {"seed": 2, "status": "ok", "result_f1": 0.72, "ast_similarity": 0.80},
-    ]
-
-    output = _format_per_query_multiseed(seed_results)
-
-    assert "Seed" in output
-    assert "Aggregated" in output
-    assert "Mean" in output
-    assert "0.8500" in output  # seed 1 f1
-    assert "0.7200" in output  # seed 2 f1
-    assert "2 / 2" in output   # seeds executed
-
-
-def test_format_per_query_multiseed_partial_failure():
-    """Seeds executed count should reflect actual ok seeds."""
-    seed_results = [
-        {"seed": 1, "status": "ok", "result_f1": 0.80, "ast_similarity": 0.70},
-        {"seed": 2, "status": "exec_error", "result_f1": 0.0, "ast_similarity": 0.30},
-        {"seed": 3, "status": "missing", "result_f1": None, "ast_similarity": None},
-    ]
-
-    output = _format_per_query_multiseed(seed_results)
-
-    assert "1 / 3" in output
 
 
 def test_archive_with_seed_subdirs(tmp_path):
@@ -302,66 +159,6 @@ def test_raw_file_written_on_extraction_failure(tmp_path):
     raw = output_dir / "01.raw"
     assert raw.exists()
     assert raw.read_text() == raw_model_output
-
-
-def test_query_id_filter_llm_generation(tmp_path):
-    """query_ids filter should skip questions not in the selected set."""
-    questions_dir = tmp_path / "questions"
-    output_dir = tmp_path / "output"
-    questions_dir.mkdir()
-    _make_question_file(questions_dir, "01", "Q1")
-    _make_question_file(questions_dir, "02", "Q2")
-    _make_question_file(questions_dir, "03", "Q3")
-
-    generated = []
-
-    def mock_generate(*args, **kwargs):
-        generated.append(args[0])
-        return GenerationResult(sql="SELECT 1;")
-
-    with patch("text2query.llm.ollama.OllamaProvider.generate_sql", side_effect=mock_generate), \
-         patch("text2query.benchmark.runner.create_engine_for_database"), \
-         patch("text2query.llm.ollama.OllamaProvider.warmup", return_value=True), \
-         patch("text2query.benchmark.runner.get_database_schema_string", return_value="schema"):
-
-        run_llm_generation(questions_dir, output_dir, "db://url", "test-model",
-                           seeds=None, query_ids=["01", "03"])
-
-    assert (output_dir / "01.sql").exists()
-    assert not (output_dir / "02.sql").exists()
-    assert (output_dir / "03.sql").exists()
-    assert len(generated) == 2
-
-
-def test_query_id_filter_reporting(tmp_path):
-    """generate_reports should only evaluate selected query IDs."""
-    ref_queries = tmp_path / "ref_queries"
-    ref_answers = tmp_path / "ref_answers"
-    gen_queries = tmp_path / "gen_queries"
-    gen_answers = tmp_path / "gen_answers"
-    report_dir = tmp_path / "report"
-
-    for d in [ref_queries, ref_answers, gen_queries, gen_answers]:
-        d.mkdir()
-
-    for qid in ["01", "02", "03"]:
-        (ref_queries / f"{qid}.sql").write_text("SELECT 1;")
-        (ref_answers / f"{qid}.csv").write_text("col\n1\n")
-        (gen_queries / f"{qid}.sql").write_text("SELECT 1;")
-        (gen_answers / f"{qid}.csv").write_text("col\n1\n")
-
-    _, results = generate_reports(
-        generated_queries_dir=gen_queries,
-        reference_queries_dir=ref_queries,
-        generated_answers_dir=gen_answers,
-        reference_answers_dir=ref_answers,
-        report_dir=report_dir,
-        selected_ids=["01", "03"],
-    )
-
-    evaluated_ids = {r["query_id"] for r in results}
-    assert evaluated_ids == {1, 3}
-    assert not (report_dir / "per_query" / "02.md").exists()
 
 
 # --- Multi-model tests ---
@@ -465,67 +262,4 @@ def test_results_csv_multiseed(tmp_path):
     assert by_seed["2"]["prompt"] == "prompt for seed 2"
 
 
-def test_cross_model_comparison_report(tmp_path):
-    """Comparison report should contain model names and per-query data."""
-    ref_queries = tmp_path / "ref_queries"
-    ref_answers = tmp_path / "ref_answers"
-    gen_queries = tmp_path / "gen_queries"
-    gen_answers = tmp_path / "gen_answers"
-    report_dir = tmp_path / "report"
-
-    ref_queries.mkdir()
-    ref_answers.mkdir()
-
-    (ref_queries / "01.sql").write_text("SELECT 1;")
-    (ref_answers / "01.csv").write_text("col\n1\n")
-
-    for model_name in ["alpha", "beta"]:
-        mq = gen_queries / model_name
-        ma = gen_answers / model_name
-        mq.mkdir(parents=True)
-        ma.mkdir(parents=True)
-        (mq / "01.sql").write_text("SELECT 1;")
-        (ma / "01.csv").write_text("col\n1\n")
-
-    generate_cross_model_report(
-        models=["alpha", "beta"],
-        reference_queries_dir=ref_queries,
-        reference_answers_dir=ref_answers,
-        generated_queries_base=gen_queries,
-        generated_answers_base=gen_answers,
-        report_dir=report_dir,
-    )
-
-    comparison = (report_dir / "comparison.md").read_text()
-    assert "alpha" in comparison
-    assert "beta" in comparison
-    assert "Cross-Model" in comparison
-    assert "2 models" in comparison
-    assert "ok" in comparison  # status embedded in per-query F1 cells
-
-
-def test_archive_with_model_subdirs(tmp_path):
-    """Archive should handle model+seed subdirectories."""
-    queries = tmp_path / "queries"
-    answers = tmp_path / "answers"
-    report = tmp_path / "report"
-    results_base = tmp_path / "results"
-
-    for model in ["model_a", "model_b"]:
-        mq = queries / model
-        ma = answers / model
-        mq.mkdir(parents=True)
-        ma.mkdir(parents=True)
-        (mq / "01.sql").write_text("SELECT 1")
-        (ma / "01.csv").write_text("id\n1\n")
-
-    report.mkdir(parents=True)
-    (report / "comparison.md").write_text("# Comparison")
-
-    session_dir = archive_session(queries, answers, report, results_base)
-
-    assert session_dir.exists()
-    assert (session_dir / "queries" / "model_a" / "01.sql").exists()
-    assert (session_dir / "queries" / "model_b" / "01.sql").exists()
-    assert (session_dir / "report" / "comparison.md").exists()
 

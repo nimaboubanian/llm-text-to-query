@@ -23,7 +23,6 @@ from text2query.benchmark.reporting import (
     write_session_manifest,
 )
 from text2query.benchmark.fingerprint import collect_fingerprints
-from text2query.core.flags import GenerationFlags
 
 
 def _run_single_model_benchmark(
@@ -37,7 +36,6 @@ def _run_single_model_benchmark(
     db_url: str,
     seeds: list[int] | None,
     multi_model: bool,
-    flags: GenerationFlags,
     query_ids: list[str] | None = None,
 ) -> tuple[Path, list[dict]]:
     """Run the full benchmark (generate + execute + report) for one model."""
@@ -58,7 +56,7 @@ def _run_single_model_benchmark(
     run_llm_generation(
         questions_dir=questions_dir, output_dir=output_dir,
         db_url=db_url, model=model,
-        seeds=seeds, query_ids=query_ids, flags=flags,
+        seeds=seeds, query_ids=query_ids,
     )
     print()
 
@@ -103,10 +101,6 @@ def main():
         level=getattr(logging, LOG_LEVEL.upper(), logging.WARNING),
         format="%(levelname)s %(name)s: %(message)s",
     )
-
-    flags = GenerationFlags.from_env()
-    enabled_flags = [name for name, value in flags.to_dict().items() if value]
-    print(f"Feature flags: {', '.join(enabled_flags) if enabled_flags else 'none enabled'}")
 
     schema_file = Path("benchmark/.tpch/schema.sql")
     questions_dir = Path("benchmark/.tpch/questions")
@@ -203,7 +197,6 @@ def main():
                 db_url=DATABASE_URL,
                 seeds=seeds,
                 multi_model=multi_model,
-                flags=flags,
                 query_ids=query_ids,
             )
             precomputed[model] = results
@@ -247,7 +240,6 @@ def main():
                 "max_tokens": LLM_MAX_TOKENS,
                 "num_ctx": LLM_NUM_CTX,
             },
-            flags=flags.to_dict(),
             fingerprints=fingerprints,
             database_url=DATABASE_URL,
         )

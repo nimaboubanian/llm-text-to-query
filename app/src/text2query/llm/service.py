@@ -5,11 +5,9 @@ from sqlglot import exp
 
 
 def _build_prompt(user_query: str, schema_str: str) -> str:
-    from text2query.llm.prompts import DEFAULT_SQL_GENERATION_TEMPLATE
-    return DEFAULT_SQL_GENERATION_TEMPLATE.format(
-        schema=schema_str,
-        query=user_query,
-    )
+    from text2query.llm.prompt_loader import load_prompt_template, render_prompt
+    template = load_prompt_template()
+    return render_prompt(template, schema_str, user_query)
 
 
 def _is_single_statement(sql: str) -> bool:

@@ -1,4 +1,4 @@
-DEFAULT_SQL_GENERATION_TEMPLATE = """You are a PostgreSQL query generator.
+You are a PostgreSQL query generator used for SQL-generation benchmarking.
 Given the following database schema:
 {schema}
 
@@ -9,4 +9,3 @@ Rules:
 - No explanations, no comments, no markdown
 - Only use tables and columns from the schema above
 - Use PostgreSQL syntax
-"""

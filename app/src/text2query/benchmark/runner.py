@@ -62,7 +62,7 @@ def _run_single_generation(
     cached_fingerprint = read_manifest_fingerprint(output_dir)
     if cached_fingerprint is not None and cached_fingerprint != fingerprint.hash:
         print(f"  ⚠ Generation config changed since last run — clearing stale cache in {output_dir}")
-        _clear_generated_files(output_dir)
+        _clear(output_dir, ("*.sql", "*.prompt", "*.raw"))
     write_manifest(output_dir, fingerprint.hash, asdict(fingerprint))
 
     # Cache: skip queries whose .sql file already exists. Safe to resume from — the
@@ -171,7 +171,7 @@ def _execute_single(
         and cached_fingerprint != generation_fingerprint
     ):
         print(f"  ⚠ Generated queries changed since last execution — clearing stale answers in {answers_dir}")
-        _clear_answer_files(answers_dir)
+        _clear(answers_dir, ("*.csv", "*.error"))
     if generation_fingerprint is not None:
         write_manifest(answers_dir, generation_fingerprint, {"source": str(queries_dir / MANIFEST_FILENAME)})
 
@@ -187,13 +187,7 @@ def _execute_single(
     return execute_queries_to_csv(to_process, answers_dir, db_url, write_error_file=True)
 
 
-def _clear_generated_files(output_dir: Path) -> None:
-    for pattern in ("*.sql", "*.prompt", "*.raw"):
-        for f in output_dir.glob(pattern):
-            f.unlink()
-
-
-def _clear_answer_files(answers_dir: Path) -> None:
-    for pattern in ("*.csv", "*.error"):
-        for f in answers_dir.glob(pattern):
+def _clear(directory: Path, patterns: tuple[str, ...]) -> None:
+    for pattern in patterns:
+        for f in directory.glob(pattern):
             f.unlink()

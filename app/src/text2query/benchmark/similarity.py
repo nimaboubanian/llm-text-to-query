@@ -1,5 +1,4 @@
 import logging
-import math
 import re
 from collections import Counter
 from itertools import permutations
@@ -133,7 +132,7 @@ def _has_top_level_order_limit(sql: str) -> bool:
 
 
 def _result_set_comparison(
-    gt_csv: Path, llm_csv: Path, ref_sql: str = "", float_epsilon: float = 1e-4,
+    gt_csv: Path, llm_csv: Path, ref_sql: str = "",
 ) -> tuple[str, float | None, float | None, float | None, str | None]:
     error_file = llm_csv.with_suffix(".error")
     if error_file.exists():
@@ -153,10 +152,9 @@ def _result_set_comparison(
 
     llm_df = _align_columns(gt_df, llm_df)
 
-    precision_digits = max(0, int(-math.floor(math.log10(float_epsilon)))) if float_epsilon > 0 else 4
     for df in (gt_df, llm_df):
         for col in df.select_dtypes(include=["float"]).columns:
-            df[col] = df[col].round(precision_digits)
+            df[col] = df[col].round(4)
         df.fillna("NULL", inplace=True)
 
     if _has_top_level_order_limit(ref_sql):

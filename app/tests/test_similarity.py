@@ -194,15 +194,13 @@ class TestResultSetComparison:
         assert status == "ok"
         assert f1 == 1.0
 
-    def test_custom_epsilon(self, tmp_path):
+    def test_float_rounding_to_four_decimal_places(self, tmp_path):
         gt = tmp_path / "gt.csv"
         llm = tmp_path / "llm.csv"
-        gt.write_text("val\n1.1234\n")
-        llm.write_text("val\n1.1256\n")
+        gt.write_text("val\n1.12340001\n")
+        llm.write_text("val\n1.12339999\n")
 
-        # Default epsilon 1e-4 (4 decimal places): 1.1234 != 1.1256
-        status1, _, _, f1_strict, _ = _result_set_comparison(gt, llm)
-        # Loose epsilon 1e-1 (1 decimal place): both round to 1.1
-        status2, _, _, f1_loose, _ = _result_set_comparison(gt, llm, float_epsilon=1e-1)
-        assert f1_strict == 0.0
-        assert f1_loose == 1.0
+        # Within 4 decimal places, both round to 1.1234
+        status, _, _, f1, _ = _result_set_comparison(gt, llm)
+        assert status == "ok"
+        assert f1 == 1.0

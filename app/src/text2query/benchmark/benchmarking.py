@@ -251,8 +251,9 @@ def main():
         else:
             print(f"  - Model:               {models[0]}")
         print(f"  - Seeds per query:     {BENCHMARK_NUM_SEEDS}")
-        total_evals = len(query_ids) * BENCHMARK_NUM_SEEDS if query_ids else total_questions * BENCHMARK_NUM_SEEDS
-        print(f"  - Total evaluations:   {total_evals} ({len(query_ids) if query_ids else total_questions} queries × {BENCHMARK_NUM_SEEDS} seeds × {len(models)} model{'s' if len(models) > 1 else ''})")
+        benchmarked_count = len(query_ids) if query_ids else total_questions
+        total_evals = benchmarked_count * BENCHMARK_NUM_SEEDS
+        print(f"  - Total evaluations:   {total_evals} ({benchmarked_count} queries × {BENCHMARK_NUM_SEEDS} seeds × {len(models)} model{'s' if len(models) > 1 else ''})")
         print(f"  - Session:             {session_dir}")
         print(f"  - Database:            {DATABASE_URL}")
         print()

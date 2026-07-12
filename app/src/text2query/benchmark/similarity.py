@@ -26,11 +26,8 @@ def evaluate_query(
     )
 
     error_category = None
-    error_detail_text = None
     if status == "exec_error" and error_detail:
         error_category = _classify_error(llm_sql_text, error_detail)
-        if error_category == "Unknown":
-            error_detail_text = error_detail
 
     ast_sim = _ast_similarity(gt_sql_text, llm_sql_text)
 
@@ -42,7 +39,6 @@ def evaluate_query(
         "result_f1": _round(f1),
         "ast_similarity": _round(ast_sim),
         "error_category": error_category,
-        "error_detail": error_detail_text,
     }
 
 

@@ -154,7 +154,6 @@ def main():
                 schema_file=schema_file,
                 data_dir=data_dir,
                 db_url=DATABASE_URL,
-                scale_factor=BENCHMARK_SCALE_FACTOR
             )
             print()
         else:

@@ -119,14 +119,8 @@ def _parse_schema_sql(schema_file: Path) -> list[str]:
     return statements
 
 
-def setup_database(
-    schema_file: Path,
-    data_dir: Path,
-    db_url: str,
-    scale_factor: int
-) -> None:
-    print("  Loading database schema...")
-
+def load_schema(schema_file: Path, db_url: str) -> None:
+    """Load the TPC-H schema DDL, terminating other backends holding locks first."""
     statements = _parse_schema_sql(schema_file)
     engine = create_engine_for_database(db_url)
 
@@ -142,38 +136,61 @@ def setup_database(
 
             for statement in statements:
                 conn.execute(text(statement))
-        print("  ✓ Schema loaded")
     except Exception as e:
         raise RuntimeError(f"Failed to load schema: {e}")
 
-    print("  Loading TPC-H data from .tbl files...")
+
+def load_data(data_dir: Path, db_url: str) -> dict[str, int]:
+    """Load TPC-H .tbl files into the database. Returns row counts per table."""
     try:
-        loaded_counts = load_tpch_data(data_dir, db_url)
-
-        total_rows = sum(loaded_counts.values())
-        print(f"  ✓ Loaded {total_rows:,} total rows into 8 tables")
-        for table, count in sorted(loaded_counts.items()):
-            print(f"    - {table}: {count:,} rows")
-
+        return load_tpch_data(data_dir, db_url)
     except (FileNotFoundError, RuntimeError) as e:
         raise RuntimeError(f"Failed to load data: {e}")
 
-    # Build indexes after loading (faster than during COPY)
+
+def build_indexes(schema_file: Path, db_url: str) -> bool:
+    """Build indexes from indexes.sql next to the schema file.
+
+    Returns False (without error) if no indexes.sql exists — index creation
+    is best-effort and non-fatal to the caller.
+    """
+    indexes_file = schema_file.parent / "indexes.sql"
+    if not indexes_file.exists():
+        return False
+
+    engine = create_engine_for_database(db_url)
+    indexes_sql = indexes_file.read_text()
+    statements = [s.strip() for s in indexes_sql.split(";") if s.strip()]
+    with engine.begin() as conn:
+        for stmt in statements:
+            conn.execute(text(stmt))
+    return True
+
+
+def setup_database(
+    schema_file: Path,
+    data_dir: Path,
+    db_url: str,
+) -> None:
+    """Load schema, data, and indexes, narrating each step. Index failures are non-fatal."""
+    print("  Loading database schema...")
+    load_schema(schema_file, db_url)
+    print("  ✓ Schema loaded")
+
+    print("  Loading TPC-H data from .tbl files...")
+    loaded_counts = load_data(data_dir, db_url)
+    total_rows = sum(loaded_counts.values())
+    print(f"  ✓ Loaded {total_rows:,} total rows into 8 tables")
+    for table, count in sorted(loaded_counts.items()):
+        print(f"    - {table}: {count:,} rows")
+
     print("  Building indexes...")
     try:
-        engine = create_engine_for_database(db_url)
-        indexes_file = schema_file.parent / "indexes.sql"
-        if not indexes_file.exists():
-            print("  ⚠ No indexes.sql found, skipping index creation")
-            return
-        indexes_sql = indexes_file.read_text()
-        statements = [s.strip() for s in indexes_sql.split(";") if s.strip()]
-        with engine.begin() as conn:
-            for stmt in statements:
-                conn.execute(text(stmt))
-        print("  ✓ Indexes built")
+        built = build_indexes(schema_file, db_url)
     except Exception as e:
         print(f"  ⚠ Index creation failed (non-fatal): {e}")
+    else:
+        print("  ✓ Indexes built" if built else "  ⚠ No indexes.sql found, skipping index creation")
 
 
 def generate_answers(

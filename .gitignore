@@ -11,3 +11,7 @@ benchmark/queries/*
 benchmark/reports/*
 benchmark/results/*
 compose.yml
+# Added by code-review-graph
+.code-review-graph/
+.mcp.json
+CLAUDE.md

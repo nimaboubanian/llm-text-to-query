@@ -74,6 +74,22 @@ def _run_single_model_benchmark(
     return results
 
 
+def _resolve_query_id_filter(
+    requested: list[str] | None, available: list[str],
+) -> tuple[list[str] | None, list[str]]:
+    """Validate a BENCHMARK_QUERY_IDS-style filter against available query IDs.
+
+    Returns (resolved_ids, skipped_ids). resolved_ids is None when no filter
+    is requested, or an empty list when a filter is requested but nothing in
+    it matches `available`.
+    """
+    if requested is None:
+        return None, []
+    valid = [q for q in requested if q in available]
+    skipped = [q for q in requested if q not in available]
+    return valid, skipped
+
+
 def main():
     from text2query.core.config import (
         DATABASE_URL,
@@ -117,17 +133,14 @@ def main():
         print("\n--- Setup & Validation ---\n")
 
         # Resolve and validate query ID filter against available queries
-        query_ids: list[str] | None = None
-        if BENCHMARK_QUERY_IDS is not None:
-            available = sorted(f.stem for f in queries_dir.glob("*.sql"))
-            valid = [q for q in BENCHMARK_QUERY_IDS if q in available]
-            skipped = [q for q in BENCHMARK_QUERY_IDS if q not in available]
-            if skipped:
-                print(f"  ⚠ Unknown query IDs (skipped): {', '.join(skipped)}")
-            if not valid:
-                print("  ✗ No valid query IDs remain after filtering — aborting")
-                sys.exit(1)
-            query_ids = valid
+        available = sorted(f.stem for f in queries_dir.glob("*.sql"))
+        query_ids, skipped = _resolve_query_id_filter(BENCHMARK_QUERY_IDS, available)
+        if skipped:
+            print(f"  ⚠ Unknown query IDs (skipped): {', '.join(skipped)}")
+        if query_ids is not None and not query_ids:
+            print("  ✗ No valid query IDs remain after filtering — aborting")
+            sys.exit(1)
+        if query_ids:
             print(f"  Query filter active: {len(query_ids)} / {len(available)} queries selected ({', '.join(query_ids)})")
             print()
 

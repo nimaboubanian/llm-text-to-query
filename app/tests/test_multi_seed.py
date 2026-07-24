@@ -3,7 +3,7 @@ import csv
 from pathlib import Path
 from unittest.mock import patch
 
-from text2query.benchmark.runner import run_llm_generation
+from text2query.benchmark.runner import _run_single_generation, run_llm_generation
 from text2query.benchmark.reporting import (
     archive_session, generate_cross_model_report, generate_reports,
 )
@@ -78,6 +78,32 @@ def test_run_llm_generation_caching_per_seed(tmp_path):
     # seed_1 was already cached, only seed_2 should be generated
     assert call_count == 1
     assert (output_dir / "seed_2" / "01.sql").exists()
+
+
+def test_run_single_generation_invokes_item_callbacks(tmp_path):
+    questions_dir = tmp_path / "questions"
+    output_dir = tmp_path / "output"
+    questions_dir.mkdir()
+    _make_question_file(questions_dir, "01", "What are the customer names?")
+
+    starts = []
+    outcomes = []
+
+    with patch(
+        "text2query.llm.ollama.generate_sql",
+        return_value=GenerationResult(sql="SELECT name FROM customers;"),
+    ), patch("text2query.benchmark.runner.create_engine_for_database"), \
+       patch("text2query.llm.ollama.warmup", return_value=True), \
+       patch("text2query.benchmark.runner.get_database_schema_string", return_value="schema"):
+
+        _run_single_generation(
+            questions_dir, output_dir, "db://url", "test-model",
+            on_item_start=lambda i, total, label: starts.append((i, total, label)),
+            on_item_done=lambda outcome: outcomes.append(outcome),
+        )
+
+    assert starts == [(1, 1, "Q01")]
+    assert outcomes == [" ✓"]
 
 
 def test_archive_with_seed_subdirs(tmp_path):

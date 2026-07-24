@@ -9,6 +9,7 @@ from text2query.benchmark.fingerprint import (
     MANIFEST_FILENAME, GenerationFingerprint, read_manifest_fingerprint, write_manifest,
 )
 from text2query.benchmark.pipeline import execute_queries_to_csv, read_business_question
+from text2query.benchmark.progress import print_item_done, print_item_start
 
 
 def run_llm_generation(
@@ -34,6 +35,8 @@ def _run_single_generation(
     model: str,
     seed: int | None = None,
     query_ids: list[str] | None = None,
+    on_item_start=print_item_start,
+    on_item_done=print_item_done,
 ) -> None:
     question_files = sorted(questions_dir.glob("*.md"))
     if query_ids is not None:
@@ -79,15 +82,17 @@ def _run_single_generation(
 
     success = 0
     errors = []
+    process_total = len(to_process)
 
     for i, qfile in enumerate(to_process, 1):
         query_id = qfile.stem
         question = read_business_question(qfile)
         if not question:
-            print(f"  [{i}/{len(to_process)}] Q{query_id}... ⚠ no question found, skipping")
+            on_item_start(i, process_total, f"Q{query_id}")
+            on_item_done(" ⚠ no question found, skipping")
             continue
 
-        print(f"  [{i}/{len(to_process)}] Q{query_id}...", end="", flush=True)
+        on_item_start(i, process_total, f"Q{query_id}")
 
         result = ollama.generate_sql(question, schema, model, seed=seed)
         generated_sql = result.sql
@@ -101,7 +106,7 @@ def _run_single_generation(
         if generated_sql:
             output_file = output_dir / f"{query_id}.sql"
             output_file.write_text(generated_sql)
-            print(" ✓")
+            on_item_done(" ✓")
             success += 1
         else:
             raw_file = output_dir / f"{query_id}.raw"
@@ -109,7 +114,7 @@ def _run_single_generation(
                 raw_file.write_text(f"ERROR: {error}\n")
             elif raw_response:
                 raw_file.write_text(raw_response)
-            print(" ✗")
+            on_item_done(" ✗")
             errors.append((query_id, error or "No SQL extracted"))
 
     print(f"  ✓ Generated {success} queries -> {output_dir}")

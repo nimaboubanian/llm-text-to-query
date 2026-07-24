@@ -94,4 +94,4 @@ def test_format_run_summary_multi_model_filtered_queries():
     )
     assert "Queries benchmarked: 2 / 22 (01, 02)" in summary
     assert "Models:              m1, m2" in summary
-    assert "Total evaluations:   12 (2 queries × 3 seeds × 2 models)" in summary
+    assert "Total evaluations:   6 (2 queries × 3 seeds × 2 models)" in summary

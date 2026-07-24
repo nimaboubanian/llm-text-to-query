@@ -426,7 +426,7 @@ def format_run_summary(
     lines.append(f"  - Seeds per query:     {num_seeds}")
 
     benchmarked_count = len(query_ids) if query_ids else total_questions
-    total_evals = benchmarked_count * num_seeds * len(models)
+    total_evals = benchmarked_count * num_seeds
     lines.append(
         f"  - Total evaluations:   {total_evals} "
         f"({benchmarked_count} queries × {num_seeds} seeds × {len(models)} model{'s' if len(models) > 1 else ''})"

@@ -21,6 +21,7 @@ from text2query.benchmark.reporting import (
     generate_cross_model_report,
     archive_session,
     write_session_manifest,
+    format_run_summary,
 )
 from text2query.benchmark.fingerprint import collect_fingerprints
 
@@ -254,31 +255,15 @@ def main():
         )
         print()
 
-        print("=" * 60)
-        print("  Benchmark Complete")
-        print("=" * 60)
-        print()
-
-        total_questions = len(list(paths.questions_dir.glob("*.md")))
-        total_gt = len(list(paths.queries_dir.glob("*.sql")))
-
-        print("Summary:")
-        if query_ids is not None:
-            print(f"  - Queries benchmarked: {len(query_ids)} / {total_questions} ({', '.join(query_ids)})")
-        else:
-            print(f"  - Queries benchmarked: {total_questions} / {total_questions} (all)")
-        print(f"  - Ground truth:        {total_gt} queries available")
-        if multi_model:
-            print(f"  - Models:              {', '.join(models)}")
-        else:
-            print(f"  - Model:               {models[0]}")
-        print(f"  - Seeds per query:     {BENCHMARK_NUM_SEEDS}")
-        benchmarked_count = len(query_ids) if query_ids else total_questions
-        total_evals = benchmarked_count * BENCHMARK_NUM_SEEDS
-        print(f"  - Total evaluations:   {total_evals} ({benchmarked_count} queries × {BENCHMARK_NUM_SEEDS} seeds × {len(models)} model{'s' if len(models) > 1 else ''})")
-        print(f"  - Session:             {session_dir}")
-        print(f"  - Database:            {DATABASE_URL}")
-        print()
+        print(format_run_summary(
+            total_questions=len(list(paths.questions_dir.glob("*.md"))),
+            total_ground_truth=len(list(paths.queries_dir.glob("*.sql"))),
+            query_ids=query_ids,
+            models=models,
+            num_seeds=BENCHMARK_NUM_SEEDS,
+            session_dir=session_dir,
+            database_url=DATABASE_URL,
+        ))
 
         return 0
 

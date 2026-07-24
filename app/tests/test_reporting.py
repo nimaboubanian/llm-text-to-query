@@ -1,6 +1,7 @@
 import csv
+from pathlib import Path
 
-from text2query.benchmark.reporting import _compute_stats, generate_reports
+from text2query.benchmark.reporting import _compute_stats, generate_reports, format_run_summary
 
 
 def test_compute_stats_basic():
@@ -72,3 +73,25 @@ def test_results_csv_single_seed(tmp_path):
     assert r["prompt"] == "SCHEMA: customers(name)\nQuestion: list names"
     assert r["generated_sql"] == "SELECT name FROM customers;"
     assert r["real_sql"] == "SELECT name FROM customers;"
+
+
+def test_format_run_summary_single_model_all_queries():
+    summary = format_run_summary(
+        total_questions=22, total_ground_truth=22, query_ids=None,
+        models=["m1"], num_seeds=1, session_dir=Path("benchmark/results/x"),
+        database_url="postgresql://u:p@host/db",
+    )
+    assert "Queries benchmarked: 22 / 22 (all)" in summary
+    assert "Model:               m1" in summary
+    assert "Total evaluations:   22 (22 queries × 1 seeds × 1 model)" in summary
+
+
+def test_format_run_summary_multi_model_filtered_queries():
+    summary = format_run_summary(
+        total_questions=22, total_ground_truth=22, query_ids=["01", "02"],
+        models=["m1", "m2"], num_seeds=3, session_dir=Path("benchmark/results/x"),
+        database_url="postgresql://u:p@host/db",
+    )
+    assert "Queries benchmarked: 2 / 22 (01, 02)" in summary
+    assert "Models:              m1, m2" in summary
+    assert "Total evaluations:   12 (2 queries × 3 seeds × 2 models)" in summary

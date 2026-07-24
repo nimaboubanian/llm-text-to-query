@@ -397,3 +397,42 @@ def write_session_manifest(
     print(f"  Session manifest -> {manifest_path}")
     return manifest_path
 
+
+def format_run_summary(
+    *,
+    total_questions: int,
+    total_ground_truth: int,
+    query_ids: list[str] | None,
+    models: list[str],
+    num_seeds: int,
+    session_dir: Path,
+    database_url: str,
+) -> str:
+    """Render the closing 'Benchmark Complete' summary block."""
+    lines = ["=" * 60, "  Benchmark Complete", "=" * 60, "", "Summary:"]
+
+    if query_ids is not None:
+        lines.append(f"  - Queries benchmarked: {len(query_ids)} / {total_questions} ({', '.join(query_ids)})")
+    else:
+        lines.append(f"  - Queries benchmarked: {total_questions} / {total_questions} (all)")
+
+    lines.append(f"  - Ground truth:        {total_ground_truth} queries available")
+
+    if len(models) > 1:
+        lines.append(f"  - Models:              {', '.join(models)}")
+    else:
+        lines.append(f"  - Model:               {models[0]}")
+
+    lines.append(f"  - Seeds per query:     {num_seeds}")
+
+    benchmarked_count = len(query_ids) if query_ids else total_questions
+    total_evals = benchmarked_count * num_seeds * len(models)
+    lines.append(
+        f"  - Total evaluations:   {total_evals} "
+        f"({benchmarked_count} queries × {num_seeds} seeds × {len(models)} model{'s' if len(models) > 1 else ''})"
+    )
+    lines.append(f"  - Session:             {session_dir}")
+    lines.append(f"  - Database:            {database_url}")
+
+    return "\n".join(lines) + "\n"
+

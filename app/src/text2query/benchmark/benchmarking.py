@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+from dataclasses import dataclass
 import logging
 from pathlib import Path
 import sys
@@ -24,29 +25,50 @@ from text2query.benchmark.reporting import (
 from text2query.benchmark.fingerprint import collect_fingerprints
 
 
+@dataclass(frozen=True)
+class BenchmarkPaths:
+    """Filesystem layout for a benchmark run."""
+    schema_file: Path
+    questions_dir: Path
+    queries_dir: Path
+    answers_dir: Path
+    output_dir: Path
+    generated_answers_dir: Path
+    report_dir: Path
+    results_base: Path
+
+    @classmethod
+    def defaults(cls) -> "BenchmarkPaths":
+        return cls(
+            schema_file=Path("benchmark/.tpch/schema.sql"),
+            questions_dir=Path("benchmark/.tpch/questions"),
+            queries_dir=Path("benchmark/.tpch/queries"),
+            answers_dir=Path("benchmark/.tpch/answers"),
+            output_dir=Path("benchmark/queries"),
+            generated_answers_dir=Path("benchmark/answers"),
+            report_dir=Path("benchmark/reports"),
+            results_base=Path("benchmark/results"),
+        )
+
+
 def _run_single_model_benchmark(
     model: str,
-    questions_dir: Path,
-    queries_dir: Path,
-    answers_dir: Path,
-    output_base: Path,
-    generated_answers_base: Path,
-    report_base: Path,
+    paths: BenchmarkPaths,
     db_url: str,
     seeds: list[int] | None,
     query_ids: list[str] | None = None,
 ) -> list[dict]:
     """Run the full benchmark (generate + execute + report) for one model."""
     slug = model.replace(":", "_").replace("/", "_")
-    output_dir = output_base / slug
-    generated_answers_dir = generated_answers_base / slug
-    report_dir = report_base / slug
+    output_dir = paths.output_dir / slug
+    generated_answers_dir = paths.generated_answers_dir / slug
+    report_dir = paths.report_dir / slug
 
     print(f"\n--- LLM SQL Generation (model: {model}, seeds: {len(seeds)}) ---\n")
 
     print("Generate SQL Queries via LLM")
     run_llm_generation(
-        questions_dir=questions_dir, output_dir=output_dir,
+        questions_dir=paths.questions_dir, output_dir=output_dir,
         db_url=db_url, model=model,
         seeds=seeds, query_ids=query_ids,
     )
@@ -61,13 +83,13 @@ def _run_single_model_benchmark(
 
     print("Generate Reports")
     results = generate_reports(
-        generated_queries_dir=output_dir, reference_queries_dir=queries_dir,
-        generated_answers_dir=generated_answers_dir, reference_answers_dir=answers_dir,
+        generated_queries_dir=output_dir, reference_queries_dir=paths.queries_dir,
+        generated_answers_dir=generated_answers_dir, reference_answers_dir=paths.answers_dir,
         report_dir=report_dir,
         seeds=seeds,
         model=model,
         selected_ids=query_ids,
-        questions_dir=questions_dir,
+        questions_dir=paths.questions_dir,
     )
     print()
 
@@ -110,14 +132,7 @@ def main():
         format="%(levelname)s %(name)s: %(message)s",
     )
 
-    schema_file = Path("benchmark/.tpch/schema.sql")
-    questions_dir = Path("benchmark/.tpch/questions")
-    queries_dir = Path("benchmark/.tpch/queries")
-    answers_dir = Path("benchmark/.tpch/answers")
-    output_dir = Path("benchmark/queries")
-    generated_answers_dir = Path("benchmark/answers")
-    report_dir = Path("benchmark/reports")
-    results_base = Path("benchmark/results")
+    paths = BenchmarkPaths.defaults()
     data_dir = Path(BENCHMARK_DATA_PATH) if BENCHMARK_DATA_PATH else Path(f"benchmark/.tpch/data/sf{BENCHMARK_SCALE_FACTOR}")
 
     seeds = list(range(1, BENCHMARK_NUM_SEEDS + 1))
@@ -133,7 +148,7 @@ def main():
         print("\n--- Setup & Validation ---\n")
 
         # Resolve and validate query ID filter against available queries
-        available = sorted(f.stem for f in queries_dir.glob("*.sql"))
+        available = sorted(f.stem for f in paths.queries_dir.glob("*.sql"))
         query_ids, skipped = _resolve_query_id_filter(BENCHMARK_QUERY_IDS, available)
         if skipped:
             print(f"  ⚠ Unknown query IDs (skipped): {', '.join(skipped)}")
@@ -154,7 +169,7 @@ def main():
         print()
 
         print("Validate Questions & Queries")
-        validate_directories(questions_dir, queries_dir)
+        validate_directories(paths.questions_dir, paths.queries_dir)
         print()
 
         print("Check Database Readiness")
@@ -164,7 +179,7 @@ def main():
         if not is_ready:
             print("Setup Database")
             setup_database(
-                schema_file=schema_file,
+                schema_file=paths.schema_file,
                 data_dir=data_dir,
                 db_url=DATABASE_URL,
             )
@@ -174,7 +189,7 @@ def main():
             print()
 
         print("Generate Answer Files")
-        generate_answers(queries_dir=queries_dir, answers_dir=answers_dir, db_url=DATABASE_URL)
+        generate_answers(queries_dir=paths.queries_dir, answers_dir=paths.answers_dir, db_url=DATABASE_URL)
         print()
 
         # === Phase 2+3: Per-model benchmark ===
@@ -192,12 +207,7 @@ def main():
 
             results = _run_single_model_benchmark(
                 model=model,
-                questions_dir=questions_dir,
-                queries_dir=queries_dir,
-                answers_dir=answers_dir,
-                output_base=output_dir,
-                generated_answers_base=generated_answers_dir,
-                report_base=report_dir,
+                paths=paths,
                 db_url=DATABASE_URL,
                 seeds=seeds,
                 query_ids=query_ids,
@@ -209,8 +219,8 @@ def main():
             print("\n--- Cross-Model Comparison ---\n")
             generate_cross_model_report(
                 models=models,
-                reference_queries_dir=queries_dir,
-                report_dir=report_dir,
+                reference_queries_dir=paths.queries_dir,
+                report_dir=paths.report_dir,
                 precomputed=precomputed,
                 seeds=seeds,
                 selected_ids=query_ids,
@@ -220,12 +230,12 @@ def main():
         # === Archive ===
         print("\n--- Archiving ---\n")
 
-        fingerprints = collect_fingerprints(output_dir)
+        fingerprints = collect_fingerprints(paths.output_dir)
 
         print("Archive Session")
         session_dir = archive_session(
-            queries_dir=output_dir, answers_dir=generated_answers_dir,
-            report_dir=report_dir, results_base=results_base,
+            queries_dir=paths.output_dir, answers_dir=paths.generated_answers_dir,
+            report_dir=paths.report_dir, results_base=paths.results_base,
         )
 
         write_session_manifest(
@@ -249,8 +259,8 @@ def main():
         print("=" * 60)
         print()
 
-        total_questions = len(list(questions_dir.glob("*.md")))
-        total_gt = len(list(queries_dir.glob("*.sql")))
+        total_questions = len(list(paths.questions_dir.glob("*.md")))
+        total_gt = len(list(paths.queries_dir.glob("*.sql")))
 
         print("Summary:")
         if query_ids is not None:

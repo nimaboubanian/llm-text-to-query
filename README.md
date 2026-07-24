@@ -87,7 +87,14 @@ docker compose exec ollama pull-models benchmark
 docker compose --profile benchmark up --build benchmark
 ```
 
-Runs the TPC-H pipeline and scores generated SQL (Result F1, AST similarity) across the models/seeds/queries set via `BENCHMARK_MODELS`, `BENCHMARK_NUM_SEEDS`, and `BENCHMARK_QUERY_IDS` above. Results archive to `benchmark/results/<timestamp>/` with a manifest describing the run.
+Runs a six-stage evaluation pipeline against TPC-H, scoring generated SQL (Result F1, AST similarity) across the models/seeds/queries set via `BENCHMARK_MODELS`, `BENCHMARK_NUM_SEEDS`, and `BENCHMARK_QUERY_IDS` above:
+
+1. **Data Generation** — generate (or reuse cached) TPC-H data at the configured scale factor.
+2. **Validation** — confirm the expected question/query files are present.
+3. **Database Setup** — load the schema, data, and indexes if the database isn't already populated.
+4. **Answer Generation** — execute the reference SQL to produce ground-truth answers.
+5. **Per-model Generation, Execution & Scoring** — for each model in `BENCHMARK_MODELS`: generate SQL via the LLM, execute it, and score it against the ground truth.
+6. **Cross-Model Comparison & Archiving** — when multiple models are configured, compare them side by side; archive the run to `benchmark/results/<timestamp>/` with a manifest describing the run.
 
 ## GPU Acceleration
 

@@ -1,3 +1,4 @@
+"""Stage: score aggregation, report rendering, and session archiving."""
 import csv
 import json
 import math

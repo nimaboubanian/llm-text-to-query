@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+"""Benchmark CLI entry point: orchestrates the full evaluation pipeline end to end."""
 
 from dataclasses import dataclass
 import logging

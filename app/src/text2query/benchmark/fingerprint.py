@@ -1,3 +1,4 @@
+"""Cache-invalidation fingerprints for generation/execution artifacts."""
 import hashlib
 import json
 from dataclasses import asdict, dataclass

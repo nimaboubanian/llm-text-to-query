@@ -1,3 +1,4 @@
+"""Stages: data generation, validation, database setup, and query execution."""
 import logging
 import re
 import subprocess

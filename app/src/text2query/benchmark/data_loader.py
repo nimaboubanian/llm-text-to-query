@@ -1,3 +1,4 @@
+"""Stage: generate and load TPC-H data into the database."""
 import os
 import subprocess
 from pathlib import Path

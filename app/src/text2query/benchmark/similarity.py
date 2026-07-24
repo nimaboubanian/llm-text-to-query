@@ -1,3 +1,4 @@
+"""Scoring: result-set and AST similarity metrics between generated and reference SQL."""
 import logging
 import re
 from collections import Counter

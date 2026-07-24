@@ -1,3 +1,4 @@
+"""Stage: LLM SQL generation and generated-query execution, per seed."""
 from dataclasses import asdict
 from pathlib import Path
 

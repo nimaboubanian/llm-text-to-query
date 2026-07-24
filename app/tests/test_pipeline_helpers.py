@@ -24,3 +24,22 @@ class TestExecuteQueriesToCsv:
         assert results[0]["status"] == "error"
         assert not (output_dir / "01.csv").exists()
         assert (output_dir / "01.error").read_text() == "boom"
+
+    def test_invokes_item_callbacks_with_outcome(self, tmp_path, monkeypatch):
+        import pandas as pd
+        self._patch(monkeypatch, ExecutionResult(pd.DataFrame({"a": [1, 2]}), None))
+        query_file = tmp_path / "01.sql"
+        query_file.write_text("SELECT 1")
+        output_dir = tmp_path / "answers"
+
+        starts = []
+        outcomes = []
+
+        execute_queries_to_csv(
+            [query_file], output_dir, "postgresql://fake",
+            on_item_start=lambda i, total, label: starts.append((i, total, label)),
+            on_item_done=lambda outcome: outcomes.append(outcome),
+        )
+
+        assert starts == [(1, 1, "Q01")]
+        assert outcomes == [" ✓ (2 rows)"]

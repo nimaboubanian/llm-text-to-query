@@ -9,6 +9,7 @@ from text2query.database.schema import create_engine_for_database
 from text2query.database.executor import execute_sql_query
 
 from text2query.benchmark.data_loader import TPCH_TABLES, load_tpch_data
+from text2query.benchmark.progress import print_item_done, print_item_start
 
 logger = logging.getLogger(__name__)
 
@@ -221,6 +222,8 @@ def execute_queries_to_csv(
     db_url: str,
     *,
     write_error_file: bool = False,
+    on_item_start=print_item_start,
+    on_item_done=print_item_done,
 ) -> list[dict]:
     """Execute SQL files and save results as CSV.
 
@@ -229,6 +232,8 @@ def execute_queries_to_csv(
         output_dir: directory for .csv results
         db_url: database connection URL
         write_error_file: on failure, write the error message to a sidecar .error file
+        on_item_start: called as (index, total, label) before each query executes
+        on_item_done: called with the outcome text after each query executes
     """
     output_dir.mkdir(parents=True, exist_ok=True)
     engine = create_engine_for_database(db_url)
@@ -236,7 +241,7 @@ def execute_queries_to_csv(
 
     for i, query_file in enumerate(query_files, 1):
         query_id = query_file.stem
-        print(f"  [{i}/{len(query_files)}] Q{query_id}...", end="", flush=True)
+        on_item_start(i, len(query_files), f"Q{query_id}")
 
         try:
             sql = query_file.read_text().strip()
@@ -245,18 +250,18 @@ def execute_queries_to_csv(
             if not result.ok:
                 if write_error_file:
                     (output_dir / f"{query_id}.error").write_text(result.error)
-                print(" ✗ (error)")
+                on_item_done(" ✗ (error)")
                 results.append({"query_id": query_id, "status": "error", "error": result.error})
             else:
                 output_file = output_dir / f"{query_id}.csv"
                 result.data.to_csv(output_file, index=False)
-                print(f" ✓ ({len(result.data)} rows)")
+                on_item_done(f" ✓ ({len(result.data)} rows)")
                 results.append({"query_id": query_id, "status": "success", "rows": len(result.data)})
 
         except Exception as e:
             if write_error_file:
                 (output_dir / f"{query_id}.error").write_text(str(e))
-            print(" ✗ (error)")
+            on_item_done(" ✗ (error)")
             results.append({"query_id": query_id, "status": "error", "error": str(e)})
 
     success = sum(1 for r in results if r["status"] == "success")

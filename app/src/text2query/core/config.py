@@ -1,4 +1,5 @@
 import os
+from dataclasses import dataclass
 
 
 def _env(name: str, default, cast):
@@ -27,8 +28,6 @@ LLM_TIMEOUT = _env("LLM_TIMEOUT", 600, int)
 
 DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "qwen2.5-coder:7b")
 
-PROMPT_TEMPLATE_PATH = os.getenv("PROMPT_TEMPLATE_PATH", "prompts/sql_generation.txt")
-
 SERVER_PORT = _env("SERVER_PORT", 8000, int)
 
 BENCHMARK_SCALE_FACTOR = _env("BENCHMARK_SCALE_FACTOR", 1, int)
@@ -45,3 +44,34 @@ BENCHMARK_QUERY_IDS: list[str] | None = (
 )
 
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://user:password@postgres:5432/testdb")
+
+
+def _bool(raw: str) -> bool:
+    return raw.strip().lower() in ("1", "true", "yes", "on")
+
+
+@dataclass(frozen=True)
+class PromptFlags:
+    """Togglable prompt-engineering features. All-off = experimental baseline."""
+    schema_ddl: bool = False
+    schema_fk: bool = False
+    schema_descriptions: bool = False
+    schema_samples: bool = False
+    xml_structure: bool = False
+    few_shot: int = 0  # 0 = off; clamped to [0, 3] (research: >3 degrades <10B models)
+    planning: bool = False
+    strict_output: bool = False
+    retry_on_error: bool = False
+
+
+PROMPT_FLAGS = PromptFlags(
+    schema_ddl=_env("PROMPT_SCHEMA_DDL", False, _bool),
+    schema_fk=_env("PROMPT_SCHEMA_FK", False, _bool),
+    schema_descriptions=_env("PROMPT_SCHEMA_DESCRIPTIONS", False, _bool),
+    schema_samples=_env("PROMPT_SCHEMA_SAMPLES", False, _bool),
+    xml_structure=_env("PROMPT_XML_STRUCTURE", False, _bool),
+    few_shot=max(0, min(3, _env("PROMPT_FEW_SHOT", 0, int))),
+    planning=_env("PROMPT_PLANNING", False, _bool),
+    strict_output=_env("PROMPT_STRICT_OUTPUT", False, _bool),
+    retry_on_error=_env("RETRY_ON_ERROR", False, _bool),
+)

@@ -43,7 +43,6 @@ x-config: &config
   LLM_NUM_CTX: "4096"
   LLM_MAX_TOKENS: "2048"
   SERVER_PORT: "8000"
-  PROMPT_TEMPLATE_PATH: "prompts/sql_generation.txt"
   BENCHMARK_MODELS: "llama3.2:3b,qwen2.5-coder:7b"
   BENCHMARK_NUM_SEEDS: "1"
   BENCHMARK_QUERY_IDS: "all"
@@ -56,8 +55,6 @@ After changing models:
 docker compose up -d --force-recreate ollama
 docker compose logs -f ollama
 ```
-
-The prompt template is editable at `prompts/sql_generation.txt` — keep the `{schema}` and `{query}` placeholders.
 
 ## Mini Database
 

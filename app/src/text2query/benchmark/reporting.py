@@ -373,6 +373,7 @@ def write_session_manifest(
     query_ids: list[str] | None,
     scale_factor: int,
     generation_parameters: dict,
+    prompt_flags: dict,
     fingerprints: dict[str, str],
     database_url: str,
 ) -> Path:
@@ -390,6 +391,7 @@ def write_session_manifest(
         "query_ids": query_ids,
         "scale_factor": scale_factor,
         "generation_parameters": generation_parameters,
+        "prompt_flags": prompt_flags,
         "fingerprints": fingerprints,
         "database_url": _redact_db_url(database_url),
     }
@@ -408,6 +410,7 @@ def format_run_summary(
     num_seeds: int,
     session_dir: Path,
     database_url: str,
+    prompt_flags: dict,
 ) -> str:
     """Render the closing 'Benchmark Complete' summary block."""
     lines = ["=" * 60, "  Benchmark Complete", "=" * 60, "", "Summary:"]
@@ -425,6 +428,13 @@ def format_run_summary(
         lines.append(f"  - Model:               {models[0]}")
 
     lines.append(f"  - Seeds per query:     {num_seeds}")
+
+    enabled = [
+        (f"{k}={v}" if not isinstance(v, bool) else k)
+        for k, v in prompt_flags.items()
+        if v
+    ]
+    lines.append(f"  - Prompt features:     {', '.join(enabled) if enabled else 'none (baseline)'}")
 
     benchmarked_count = len(query_ids) if query_ids else total_questions
     total_evals = benchmarked_count * num_seeds

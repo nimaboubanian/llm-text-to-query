@@ -10,7 +10,7 @@ def test_session_manifest_strips_credentials(tmp_path):
     manifest_path = write_session_manifest(
         session_dir,
         models=["m1"], seeds=None, query_ids=None, scale_factor=1,
-        generation_parameters={}, fingerprints={},
+        generation_parameters={}, prompt_flags={"schema_ddl": True}, fingerprints={},
         database_url="postgresql://user:password@postgres:5432/testdb",
     )
 
@@ -18,6 +18,7 @@ def test_session_manifest_strips_credentials(tmp_path):
     assert "user" not in manifest["database_url"]
     assert "password" not in manifest["database_url"]
     assert manifest["database_url"] == "postgresql://***:***@postgres:5432/testdb"
+    assert manifest["prompt_flags"] == {"schema_ddl": True}
 
 
 def test_redact_db_url_handles_url_without_credentials():

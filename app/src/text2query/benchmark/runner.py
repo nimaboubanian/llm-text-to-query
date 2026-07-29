@@ -2,10 +2,10 @@
 from dataclasses import asdict
 from pathlib import Path
 
-from text2query.core.config import LLM_MAX_TOKENS, LLM_TEMPERATURE
+from text2query.core.config import LLM_MAX_TOKENS, LLM_TEMPERATURE, PROMPT_FLAGS
 from text2query.database.schema import create_engine_for_database, get_database_schema_string
 from text2query.llm import ollama
-from text2query.llm.prompt_loader import get_prompt_template
+from text2query.llm.prompt_builder import build_prompt
 from text2query.benchmark.fingerprint import (
     MANIFEST_FILENAME, GenerationFingerprint, read_manifest_fingerprint, write_manifest,
 )
@@ -51,7 +51,7 @@ def _run_single_generation(
 
     fingerprint = GenerationFingerprint(
         model=model,
-        prompt_template=get_prompt_template(),
+        prompt_template=build_prompt(PROMPT_FLAGS, "{schema}", "{query}"),
         schema=schema,
         temperature=LLM_TEMPERATURE,
         max_tokens=LLM_MAX_TOKENS,

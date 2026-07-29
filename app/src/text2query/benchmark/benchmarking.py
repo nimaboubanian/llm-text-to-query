@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Benchmark CLI entry point: orchestrates the full evaluation pipeline end to end."""
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 import logging
 from pathlib import Path
 import sys
@@ -127,6 +127,7 @@ def main():
         LLM_MAX_TOKENS,
         LLM_NUM_CTX,
         LOG_LEVEL,
+        PROMPT_FLAGS,
     )
 
     logging.basicConfig(
@@ -251,6 +252,7 @@ def main():
                 "max_tokens": LLM_MAX_TOKENS,
                 "num_ctx": LLM_NUM_CTX,
             },
+            prompt_flags=asdict(PROMPT_FLAGS),
             fingerprints=fingerprints,
             database_url=DATABASE_URL,
         )
@@ -264,6 +266,7 @@ def main():
             num_seeds=BENCHMARK_NUM_SEEDS,
             session_dir=session_dir,
             database_url=DATABASE_URL,
+            prompt_flags=asdict(PROMPT_FLAGS),
         ))
 
         return 0

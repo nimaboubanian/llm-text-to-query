@@ -6,8 +6,9 @@ from dataclasses import dataclass
 
 from text2query.core.config import (
     DEFAULT_MODEL, LLM_MAX_TOKENS, LLM_NUM_CTX, LLM_TEMPERATURE, LLM_TIMEOUT, OLLAMA_URL,
+    PROMPT_FLAGS,
 )
-from text2query.llm.prompt_loader import get_prompt_template, render_prompt
+from text2query.llm.prompt_builder import build_prompt
 from text2query.llm.service import _clean_sql_response
 
 logger = logging.getLogger(__name__)
@@ -64,9 +65,10 @@ def generate_sql(
     schema_str: str,
     model: str | None = None,
     seed: int | None = None,
+    flags=None,
 ) -> GenerationResult:
     selected_model = model or DEFAULT_MODEL
-    prompt = render_prompt(get_prompt_template(), schema_str, user_query)
+    prompt = build_prompt(flags or PROMPT_FLAGS, schema_str, user_query)
 
     options = {
         "temperature": LLM_TEMPERATURE,

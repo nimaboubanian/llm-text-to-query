@@ -1,4 +1,4 @@
-from text2query.llm.service import _clean_sql_response
+from text2query.llm.ollama import _clean_sql_response
 
 
 def test_extracts_sql_from_fenced_block():

@@ -83,8 +83,7 @@ def _format_per_query(seed_results: list[dict]) -> str:
     lines.append("|---|---|---|---|")
 
     for label, metric in [("Result F1", "result_f1"), ("AST Similarity", "ast_similarity")]:
-        vals = [r.get(metric) for r in seed_results if r.get(metric) is not None]
-        stats = _compute_stats(vals)
+        stats = _compute_stats([r.get(metric) for r in seed_results])
         if stats["mean"] is not None:
             ci = f"[{stats['ci_lower']:.4f}, {stats['ci_upper']:.4f}]"
             lines.append(
@@ -170,8 +169,7 @@ def generate_reports(
         # Aggregate statistics across seeds
         query_agg = {"query_id": int(qid)}
         for metric in metrics_to_aggregate:
-            vals = [r.get(metric) for r in seed_results if r.get(metric) is not None]
-            query_agg[metric] = _compute_stats(vals)
+            query_agg[metric] = _compute_stats([r.get(metric) for r in seed_results])
 
         query_agg["per_seed"] = seed_results
         aggregated.append(query_agg)
@@ -271,8 +269,7 @@ def generate_cross_model_report(
 
             agg = {}
             for metric in metrics_to_aggregate:
-                vals = [r.get(metric) for r in seed_results if r.get(metric) is not None]
-                agg[metric] = _compute_stats(vals)
+                agg[metric] = _compute_stats([r.get(metric) for r in seed_results])
             ok_count = sum(1 for r in seed_results if r["status"] == "ok")
             n = len(seed_results)
             if n == 1:

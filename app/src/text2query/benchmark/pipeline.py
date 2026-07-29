@@ -33,8 +33,6 @@ def _check_data_cache(data_dir: Path) -> bool:
 
 
 def generate_data(scale_factor: int, output_dir: Path) -> Path:
-    output_dir = output_dir or Path(f"benchmark/.tpch/data/sf{scale_factor}")
-
     if _check_data_cache(output_dir):
         print(f"  ✓ Using cached data: {output_dir}")
         return output_dir
@@ -208,8 +206,7 @@ def generate_answers(
     is_complete = not missing_ids
 
     if is_complete:
-        query_count = len(list(queries_dir.glob('*.sql')))
-        print(f"  ✓ All {query_count} answer files exist")
+        print(f"  ✓ All {len(expected)} answer files exist")
         return
 
     print(f"  Generating {len(missing_ids)} missing answer files...")

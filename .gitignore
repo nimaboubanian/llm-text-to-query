@@ -13,4 +13,5 @@ benchmark/results/*
 compose.yml
 CLAUDE.md
 tmp/
+docs/
 

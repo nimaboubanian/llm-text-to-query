@@ -96,7 +96,7 @@ Remove the `postgres` service dependency in `compose.yml`. For a host database, 
 
 ```bash
 docker compose exec ollama pull-models benchmark
-docker compose --profile benchmark up --build benchmark
+docker compose --profile benchmark up --build --no-log-prefix --attach benchmark benchmark
 ```
 
 Runs a six-stage evaluation pipeline against TPC-H, scoring generated SQL (Result F1, AST similarity) across the models/seeds/queries set via `BENCHMARK_MODELS`, `BENCHMARK_NUM_SEEDS`, and `BENCHMARK_QUERY_IDS` above:

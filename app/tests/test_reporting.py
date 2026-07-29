@@ -4,7 +4,7 @@ from pathlib import Path
 from text2query.benchmark.reporting import (
     _compute_stats, generate_reports, format_run_summary,
     METRICS, METRIC_LABELS, _field, format_session_header,
-    _aggregate_model_results, _format_elapsed,
+    _aggregate_model_results,
 )
 
 
@@ -107,11 +107,6 @@ def test_aggregate_model_results_exact_match_requires_perfect_mean_across_seeds(
     assert agg["exact_matches"] == 0  # mean F1 across the two seeds is 0.9, not 1.0
     assert agg["total_queries"] == 1
     assert agg["num_seeds"] == 2
-
-
-def test_format_elapsed():
-    assert _format_elapsed(252) == "4m 12s"
-    assert _format_elapsed(5) == "0m 5s"
 
 
 def test_format_run_summary_single_model():

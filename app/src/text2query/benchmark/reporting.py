@@ -487,11 +487,6 @@ def _aggregate_model_results(rows: list[dict]) -> dict:
     }
 
 
-def _format_elapsed(seconds: float) -> str:
-    minutes, secs = divmod(int(seconds), 60)
-    return f"{minutes}m {secs}s"
-
-
 def format_run_summary(
     precomputed: dict[str, list[dict]],
     models: list[str],
@@ -500,7 +495,8 @@ def format_run_summary(
 ) -> str:
     """Render the closing 'Benchmark Complete' block: aggregate scores, not restated config."""
     rule = "═" * 60
-    lines = [rule, f"  Benchmark Complete  ·  elapsed {_format_elapsed(elapsed)}", rule]
+    elapsed_str = f"{int(elapsed) // 60}m {int(elapsed) % 60}s"
+    lines = [rule, f"  Benchmark Complete  ·  elapsed {elapsed_str}", rule]
 
     aggregates = {model: _aggregate_model_results(precomputed[model]) for model in models}
 

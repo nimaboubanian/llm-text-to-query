@@ -18,6 +18,7 @@ x-config: &config
   PROMPT_SCHEMA_DDL: "false"                 # Schema as CREATE TABLE DDL instead of prose
   PROMPT_SCHEMA_FK: "false"                  # Explicit FK annotations (REFERENCES in DDL, FK() notation in prose)
   PROMPT_STRICT_OUTPUT: "false"              # Emphatic "Return ONLY the SQL query" rules block
+  PROMPT_SCHEMA_DESCRIPTIONS: "false"         # NL column descriptions from curated TPC-H metadata
 
   # --- Benchmark mode -----------------------------------------------------
   # Used by `docker compose --profile benchmark up benchmark`.

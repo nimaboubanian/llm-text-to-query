@@ -37,3 +37,16 @@ def test_fk_flag_controls_prose_fk_notation():
 def test_fk_flag_adds_references_in_ddl():
     out = render_schema(_engine(), PromptFlags(schema_ddl=True, schema_fk=True))
     assert "l_orderkey INTEGER REFERENCES orders(o_orderkey)" in out
+
+
+def test_descriptions_flag_appends_comment_from_metadata():
+    meta = {"orders": {"o_status": {"desc": "order status flag"}}}
+    out = render_schema(_engine(), PromptFlags(schema_descriptions=True), metadata=meta)
+    assert "o_status (CHAR(1)) [order status flag]" in out
+    out_off = render_schema(_engine(), PromptFlags(), metadata=meta)
+    assert "order status flag" not in out_off
+
+
+def test_unknown_columns_degrade_gracefully():
+    out = render_schema(_engine(), PromptFlags(schema_descriptions=True), metadata={})
+    assert "[" not in out  # no enrichment markers at all

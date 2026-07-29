@@ -1,6 +1,16 @@
+import json
+from functools import lru_cache
+from pathlib import Path
+
 from sqlalchemy import create_engine, inspect
 
 from text2query.core.config import PromptFlags
+
+
+@lru_cache(maxsize=1)
+def load_tpch_metadata() -> dict:
+    """Curated TPC-H column descriptions/samples, packaged with the app."""
+    return json.loads(Path(__file__).with_name("tpch_metadata.json").read_text(encoding="utf-8"))
 
 
 def render_schema(engine, flags: PromptFlags, metadata: dict | None = None) -> str:

@@ -1,0 +1,79 @@
+{
+  "region": {
+    "r_regionkey": {"desc": "unique region identifier"},
+    "r_name": {"desc": "region name", "samples": ["'AFRICA'", "'AMERICA'", "'ASIA'"]},
+    "r_comment": {"desc": "free-text comment"}
+  },
+  "nation": {
+    "n_nationkey": {"desc": "unique nation identifier"},
+    "n_name": {"desc": "nation name", "samples": ["'FRANCE'", "'GERMANY'", "'CHINA'"]},
+    "n_regionkey": {"desc": "region this nation belongs to (joins region)"},
+    "n_comment": {"desc": "free-text comment"}
+  },
+  "supplier": {
+    "s_suppkey": {"desc": "unique supplier identifier"},
+    "s_name": {"desc": "supplier name"},
+    "s_address": {"desc": "supplier street address"},
+    "s_nationkey": {"desc": "supplier's nation (joins nation)"},
+    "s_phone": {"desc": "supplier phone number"},
+    "s_acctbal": {"desc": "supplier account balance"},
+    "s_comment": {"desc": "free-text comment"}
+  },
+  "customer": {
+    "c_custkey": {"desc": "unique customer identifier"},
+    "c_name": {"desc": "customer name"},
+    "c_address": {"desc": "customer street address"},
+    "c_nationkey": {"desc": "customer's nation (joins nation)"},
+    "c_phone": {"desc": "customer phone number"},
+    "c_acctbal": {"desc": "customer account balance"},
+    "c_mktsegment": {"desc": "market segment", "samples": ["'BUILDING'", "'AUTOMOBILE'", "'MACHINERY'"]},
+    "c_comment": {"desc": "free-text comment"}
+  },
+  "part": {
+    "p_partkey": {"desc": "unique part identifier"},
+    "p_name": {"desc": "part name (color/material words)"},
+    "p_mfgr": {"desc": "manufacturer", "samples": ["'Manufacturer#1'", "'Manufacturer#5'"]},
+    "p_brand": {"desc": "brand", "samples": ["'Brand#13'", "'Brand#42'"]},
+    "p_type": {"desc": "part type string", "samples": ["'ECONOMY ANODIZED STEEL'", "'STANDARD POLISHED COPPER'"]},
+    "p_size": {"desc": "part size (integer)"},
+    "p_container": {"desc": "container type", "samples": ["'SM CASE'", "'JUMBO PKG'", "'MED BOX'"]},
+    "p_retailprice": {"desc": "suggested retail price"},
+    "p_comment": {"desc": "free-text comment"}
+  },
+  "partsupp": {
+    "ps_partkey": {"desc": "part identifier (joins part)"},
+    "ps_suppkey": {"desc": "supplier identifier (joins supplier)"},
+    "ps_availqty": {"desc": "available quantity at this supplier"},
+    "ps_supplycost": {"desc": "cost to supply this part"},
+    "ps_comment": {"desc": "free-text comment"}
+  },
+  "orders": {
+    "o_orderkey": {"desc": "unique order identifier"},
+    "o_custkey": {"desc": "ordering customer (joins customer)"},
+    "o_orderstatus": {"desc": "order status flag", "samples": ["'O' (open)", "'F' (fulfilled)", "'P' (partial)"]},
+    "o_totalprice": {"desc": "total order price"},
+    "o_orderdate": {"desc": "date the order was placed"},
+    "o_orderpriority": {"desc": "order priority", "samples": ["'1-URGENT'", "'3-MEDIUM'", "'5-LOW'"]},
+    "o_clerk": {"desc": "clerk who processed the order"},
+    "o_shippriority": {"desc": "shipping priority (integer)"},
+    "o_comment": {"desc": "free-text comment"}
+  },
+  "lineitem": {
+    "l_orderkey": {"desc": "owning order (joins orders)"},
+    "l_partkey": {"desc": "part ordered (joins part/partsupp)"},
+    "l_suppkey": {"desc": "supplier of this line (joins supplier/partsupp)"},
+    "l_linenumber": {"desc": "line number within the order"},
+    "l_quantity": {"desc": "quantity ordered"},
+    "l_extendedprice": {"desc": "extended price (quantity * part price)"},
+    "l_discount": {"desc": "discount fraction", "samples": ["0.00", "0.05", "0.10"]},
+    "l_tax": {"desc": "tax fraction"},
+    "l_returnflag": {"desc": "return flag", "samples": ["'R' (returned)", "'A' (accepted)", "'N' (none)"]},
+    "l_linestatus": {"desc": "line status flag", "samples": ["'O' (open)", "'F' (fulfilled)"]},
+    "l_shipdate": {"desc": "date the line shipped"},
+    "l_commitdate": {"desc": "committed delivery date"},
+    "l_receiptdate": {"desc": "date the customer received the line"},
+    "l_shipinstruct": {"desc": "shipping instructions", "samples": ["'DELIVER IN PERSON'", "'COLLECT COD'", "'NONE'"]},
+    "l_shipmode": {"desc": "shipping mode", "samples": ["'AIR'", "'RAIL'", "'TRUCK'"]},
+    "l_comment": {"desc": "free-text comment"}
+  }
+}

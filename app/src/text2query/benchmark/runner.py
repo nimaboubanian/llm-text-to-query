@@ -3,7 +3,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 from text2query.core.config import LLM_MAX_TOKENS, LLM_TEMPERATURE, PROMPT_FLAGS
-from text2query.database.schema import create_engine_for_database, render_schema
+from text2query.database.schema import create_engine_for_database, load_tpch_metadata, render_schema
 from text2query.llm import ollama
 from text2query.llm.prompt_builder import build_prompt
 from text2query.benchmark.fingerprint import (
@@ -47,7 +47,7 @@ def _run_single_generation(
     output_dir.mkdir(parents=True, exist_ok=True)
 
     engine = create_engine_for_database(db_url)
-    schema = render_schema(engine, PROMPT_FLAGS)
+    schema = render_schema(engine, PROMPT_FLAGS, metadata=load_tpch_metadata())
 
     fingerprint = GenerationFingerprint(
         model=model,

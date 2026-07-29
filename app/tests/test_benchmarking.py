@@ -27,7 +27,7 @@ def test_filter_with_no_matches_returns_empty_list():
 
 
 def test_benchmark_paths_defaults():
-    paths = BenchmarkPaths.defaults()
+    paths = BenchmarkPaths()
     assert paths.schema_file == Path("benchmark/.tpch/schema.sql")
     assert paths.output_dir == Path("benchmark/queries")
     assert paths.results_base == Path("benchmark/results")

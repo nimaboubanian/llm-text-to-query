@@ -23,7 +23,6 @@ class GenerationResult:
     prompt: str | None = None
     error: str | None = None
     retried: bool = False
-    retry_reason: str | None = None
 
 
 def _post_json(url: str, payload: dict, timeout: int) -> tuple[int, dict]:
@@ -157,5 +156,4 @@ def generate_sql_with_retry(
     )
     retried = _generate(retry_prompt, model or DEFAULT_MODEL, seed)
     retried.retried = True
-    retried.retry_reason = reason
     return retried

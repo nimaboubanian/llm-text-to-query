@@ -11,7 +11,7 @@ import pytest
 
 from text2query.database.executor import ExecutionResult
 from text2query.llm.ollama import GenerationResult
-from text2query.server.main import AppContext, RequestError, _make_handler, handle_query, parse_question
+from text2query.server.main import RequestError, _make_handler, handle_query, parse_question
 
 
 def test_parse_question_rejects_invalid_json():
@@ -122,8 +122,8 @@ def test_handle_query_serializes_decimal_date_and_nan(monkeypatch):
     assert payload["rows"][1] == ["Bob", None, "2024-02-01", None]
 
 
-def _serve(ctx):
-    server = ThreadingHTTPServer(("127.0.0.1", 0), _make_handler(ctx))
+def _serve(engine, schema, llm):
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _make_handler(engine, schema, llm))
     threading.Thread(target=server.serve_forever, daemon=True).start()
     return server, server.server_address[1]
 
@@ -138,12 +138,7 @@ def test_handler_serves_health_and_query_end_to_end(monkeypatch):
         lambda engine, sql: ExecutionResult(df, None),
     )
 
-    ctx = AppContext.__new__(AppContext)
-    ctx.engine = None
-    ctx.schema = "schema"
-    ctx.llm = llm
-
-    server, port = _serve(ctx)
+    server, port = _serve(engine=None, schema="schema", llm=llm)
     try:
         with urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=5) as resp:
             assert resp.status == 200

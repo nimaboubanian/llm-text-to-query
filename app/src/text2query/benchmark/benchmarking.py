@@ -30,27 +30,14 @@ from text2query.benchmark.fingerprint import collect_fingerprints
 @dataclass(frozen=True)
 class BenchmarkPaths:
     """Filesystem layout for a benchmark run."""
-    schema_file: Path
-    questions_dir: Path
-    queries_dir: Path
-    answers_dir: Path
-    output_dir: Path
-    generated_answers_dir: Path
-    report_dir: Path
-    results_base: Path
-
-    @classmethod
-    def defaults(cls) -> "BenchmarkPaths":
-        return cls(
-            schema_file=Path("benchmark/.tpch/schema.sql"),
-            questions_dir=Path("benchmark/.tpch/questions"),
-            queries_dir=Path("benchmark/.tpch/queries"),
-            answers_dir=Path("benchmark/.tpch/answers"),
-            output_dir=Path("benchmark/queries"),
-            generated_answers_dir=Path("benchmark/answers"),
-            report_dir=Path("benchmark/reports"),
-            results_base=Path("benchmark/results"),
-        )
+    schema_file: Path = Path("benchmark/.tpch/schema.sql")
+    questions_dir: Path = Path("benchmark/.tpch/questions")
+    queries_dir: Path = Path("benchmark/.tpch/queries")
+    answers_dir: Path = Path("benchmark/.tpch/answers")
+    output_dir: Path = Path("benchmark/queries")
+    generated_answers_dir: Path = Path("benchmark/answers")
+    report_dir: Path = Path("benchmark/reports")
+    results_base: Path = Path("benchmark/results")
 
 
 def _run_single_model_benchmark(
@@ -135,7 +122,7 @@ def main():
         format="%(levelname)s %(name)s: %(message)s",
     )
 
-    paths = BenchmarkPaths.defaults()
+    paths = BenchmarkPaths()
     data_dir = Path(BENCHMARK_DATA_PATH) if BENCHMARK_DATA_PATH else Path(f"benchmark/.tpch/data/sf{BENCHMARK_SCALE_FACTOR}")
 
     seeds = list(range(1, BENCHMARK_NUM_SEEDS + 1))

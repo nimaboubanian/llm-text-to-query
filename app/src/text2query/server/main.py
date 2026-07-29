@@ -96,17 +96,7 @@ def handle_query(llm, engine, schema: str, model: str, question: str) -> dict:
     }
 
 
-class AppContext:
-    """Process-wide state constructed once at server startup."""
-
-    def __init__(self):
-        self.engine = create_engine_for_database(DATABASE_URL)
-        self.schema = render_schema(self.engine, PROMPT_FLAGS, metadata=load_tpch_metadata())
-        self.llm = ollama
-        self.llm.warmup(DEFAULT_MODEL)
-
-
-def _make_handler(ctx: AppContext) -> type[BaseHTTPRequestHandler]:
+def _make_handler(engine, schema: str, llm=ollama) -> type[BaseHTTPRequestHandler]:
     class Handler(BaseHTTPRequestHandler):
         def _write_json(self, status: int, payload: dict) -> None:
             body = json.dumps(payload).encode("utf-8")
@@ -132,7 +122,7 @@ def _make_handler(ctx: AppContext) -> type[BaseHTTPRequestHandler]:
 
             try:
                 question = parse_question(raw)
-                payload = handle_query(ctx.llm, ctx.engine, ctx.schema, DEFAULT_MODEL, question)
+                payload = handle_query(llm, engine, schema, DEFAULT_MODEL, question)
                 self._write_json(200, payload)
             except RequestError as e:
                 self._write_json(e.status, {"error": e.message})
@@ -152,8 +142,10 @@ def main():
         format="%(levelname)s %(name)s: %(message)s",
     )
 
-    ctx = AppContext()
-    handler_cls = _make_handler(ctx)
+    engine = create_engine_for_database(DATABASE_URL)
+    schema = render_schema(engine, PROMPT_FLAGS, metadata=load_tpch_metadata())
+    ollama.warmup(DEFAULT_MODEL)
+    handler_cls = _make_handler(engine, schema)
     server = ThreadingHTTPServer(("0.0.0.0", SERVER_PORT), handler_cls)
     logger.warning(
         "text2query server listening on port %s (model=%s)", SERVER_PORT, DEFAULT_MODEL,

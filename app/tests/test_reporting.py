@@ -4,6 +4,7 @@ from pathlib import Path
 from text2query.benchmark.reporting import (
     _compute_stats, generate_reports, format_run_summary,
     METRICS, METRIC_LABELS, _field, format_session_header,
+    _aggregate_model_results, _format_elapsed,
 )
 
 
@@ -84,30 +85,62 @@ def test_results_csv_single_seed(tmp_path):
     assert r["real_sql"] == "SELECT name FROM customers;"
 
 
-def test_format_run_summary_single_model_all_queries():
-    summary = format_run_summary(
-        total_questions=22, total_ground_truth=22, query_ids=None,
-        models=["m1"], num_seeds=1, session_dir=Path("benchmark/results/x"),
-        database_url="postgresql://u:p@host/db",
-        prompt_flags={},
-    )
-    assert "Queries benchmarked: 22 / 22 (all)" in summary
-    assert "Model:               m1" in summary
-    assert "Total evaluations:   22 (22 queries × 1 seeds × 1 model)" in summary
-    assert "Prompt features:     none (baseline)" in summary
+def test_aggregate_model_results_counts_exact_matches_and_failures():
+    rows = [
+        {"query_id": 1, "seed": 1, "status": "ok", "result_f1": 1.0, "ast_similarity": 0.9},
+        {"query_id": 2, "seed": 1, "status": "ok", "result_f1": 0.5, "ast_similarity": 0.7},
+        {"query_id": 3, "seed": 1, "status": "exec_error", "result_f1": 0.0, "ast_similarity": 0.0},
+    ]
+    agg = _aggregate_model_results(rows)
+    assert agg["exact_matches"] == 1
+    assert agg["total_queries"] == 3
+    assert agg["failures"] == 1
+    assert agg["num_seeds"] == 1
 
 
-def test_format_run_summary_multi_model_filtered_queries():
-    summary = format_run_summary(
-        total_questions=22, total_ground_truth=22, query_ids=["01", "02"],
-        models=["m1", "m2"], num_seeds=3, session_dir=Path("benchmark/results/x"),
-        database_url="postgresql://u:p@host/db",
-        prompt_flags={"schema_ddl": True, "few_shot": 2},
-    )
-    assert "Queries benchmarked: 2 / 22 (01, 02)" in summary
-    assert "Models:              m1, m2" in summary
-    assert "Total evaluations:   6 (2 queries × 3 seeds × 2 models)" in summary
-    assert "Prompt features:     schema_ddl, few_shot=2" in summary
+def test_aggregate_model_results_exact_match_requires_perfect_mean_across_seeds():
+    rows = [
+        {"query_id": 1, "seed": 1, "status": "ok", "result_f1": 1.0, "ast_similarity": 0.9},
+        {"query_id": 1, "seed": 2, "status": "ok", "result_f1": 0.8, "ast_similarity": 0.9},
+    ]
+    agg = _aggregate_model_results(rows)
+    assert agg["exact_matches"] == 0  # mean F1 across the two seeds is 0.9, not 1.0
+    assert agg["total_queries"] == 1
+    assert agg["num_seeds"] == 2
+
+
+def test_format_elapsed():
+    assert _format_elapsed(252) == "4m 12s"
+    assert _format_elapsed(5) == "0m 5s"
+
+
+def test_format_run_summary_single_model():
+    precomputed = {
+        "m1": [
+            {"query_id": 1, "seed": 1, "status": "ok", "result_f1": 1.0, "ast_similarity": 0.9},
+            {"query_id": 2, "seed": 1, "status": "ok", "result_f1": 0.5, "ast_similarity": 0.7},
+            {"query_id": 3, "seed": 1, "status": "exec_error", "result_f1": 0.0, "ast_similarity": 0.0},
+        ]
+    }
+    summary = format_run_summary(precomputed, ["m1"], Path("benchmark/results/x"), elapsed=252.0)
+    assert "elapsed 4m 12s" in summary
+    assert _field("Exact matches", "1 / 3") in summary
+    assert _field("Failures", "1") in summary
+    assert _field("Session", "benchmark/results/x") in summary
+    assert "password" not in summary
+    assert "postgresql" not in summary
+
+
+def test_format_run_summary_multi_model_shows_per_model_row():
+    precomputed = {
+        "m1": [{"query_id": 1, "seed": 1, "status": "ok", "result_f1": 1.0, "ast_similarity": 0.9}],
+        "m2": [{"query_id": 1, "seed": 1, "status": "ok", "result_f1": 0.5, "ast_similarity": 0.7}],
+    }
+    summary = format_run_summary(precomputed, ["m1", "m2"], Path("benchmark/results/x"), elapsed=5.0)
+    assert "m1" in summary
+    assert "m2" in summary
+    assert "0.5000" in summary
+    assert _field("Session", "benchmark/results/x") in summary
 
 
 def test_field_pads_label_and_wraps_long_values():

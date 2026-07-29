@@ -468,49 +468,80 @@ def write_session_manifest(
     return manifest_path
 
 
+def _aggregate_model_results(rows: list[dict]) -> dict:
+    """Aggregate one model's flat per-(query, seed) results into summary stats."""
+    by_query: dict[int, list[dict]] = {}
+    for r in rows:
+        by_query.setdefault(r["query_id"], []).append(r)
+
+    metrics = {metric: _compute_stats([r.get(metric) for r in rows]) for metric in METRICS}
+
+    exact_matches = 0
+    for qid_rows in by_query.values():
+        qid_f1 = _compute_stats([r.get("result_f1") for r in qid_rows])
+        if qid_f1["mean"] == 1.0:
+            exact_matches += 1
+
+    failures = sum(1 for r in rows if r["status"] != "ok")
+
+    return {
+        "metrics": metrics,
+        "exact_matches": exact_matches,
+        "total_queries": len(by_query),
+        "failures": failures,
+        "num_seeds": len(rows) // len(by_query) if by_query else 0,
+    }
+
+
+def _format_elapsed(seconds: float) -> str:
+    minutes, secs = divmod(int(seconds), 60)
+    return f"{minutes}m {secs}s"
+
+
 def format_run_summary(
-    *,
-    total_questions: int,
-    total_ground_truth: int,
-    query_ids: list[str] | None,
+    precomputed: dict[str, list[dict]],
     models: list[str],
-    num_seeds: int,
     session_dir: Path,
-    database_url: str,
-    prompt_flags: dict,
+    elapsed: float,
 ) -> str:
-    """Render the closing 'Benchmark Complete' summary block."""
-    lines = ["=" * 60, "  Benchmark Complete", "=" * 60, "", "Summary:"]
+    """Render the closing 'Benchmark Complete' block: aggregate scores, not restated config."""
+    rule = "═" * 60
+    lines = [rule, f"  Benchmark Complete  ·  elapsed {_format_elapsed(elapsed)}", rule]
 
-    if query_ids is not None:
-        lines.append(f"  - Queries benchmarked: {len(query_ids)} / {total_questions} ({', '.join(query_ids)})")
+    aggregates = {model: _aggregate_model_results(precomputed[model]) for model in models}
+
+    if len(models) == 1:
+        agg = aggregates[models[0]]
+        for i, metric in enumerate(METRICS):
+            stats = agg["metrics"][metric]
+            value = f"{stats['mean']:.4f}" if stats["mean"] is not None else "—"
+            if i == 0:
+                value += (
+                    f"   (mean over {agg['total_queries']} "
+                    f"{_plural(agg['total_queries'], 'query', 'queries')} × "
+                    f"{agg['num_seeds']} {_plural(agg['num_seeds'], 'seed')})"
+                )
+            lines.append(_field(METRIC_LABELS[metric], value))
+        lines.append(_field("Exact matches", f"{agg['exact_matches']} / {agg['total_queries']}"))
+        lines.append(_field("Failures", str(agg["failures"])))
     else:
-        lines.append(f"  - Queries benchmarked: {total_questions} / {total_questions} (all)")
+        name_width = max(len("Model"), max(len(m) for m in models))
+        lines.append(
+            f"  {'Model':<{name_width}}   {'Result F1':>9}   {'AST sim':>7}   {'Exact':>7}   {'Fail':>4}"
+        )
+        for model in models:
+            agg = aggregates[model]
+            f1 = agg["metrics"]["result_f1"]["mean"]
+            ast = agg["metrics"]["ast_similarity"]["mean"]
+            f1_str = f"{f1:.4f}" if f1 is not None else "—"
+            ast_str = f"{ast:.4f}" if ast is not None else "—"
+            exact_str = f"{agg['exact_matches']} / {agg['total_queries']}"
+            lines.append(
+                f"  {model:<{name_width}}   {f1_str:>9}   {ast_str:>7}   {exact_str:>7}   {agg['failures']:>4}"
+            )
 
-    lines.append(f"  - Ground truth:        {total_ground_truth} queries available")
-
-    if len(models) > 1:
-        lines.append(f"  - Models:              {', '.join(models)}")
-    else:
-        lines.append(f"  - Model:               {models[0]}")
-
-    lines.append(f"  - Seeds per query:     {num_seeds}")
-
-    enabled = [
-        (f"{k}={v}" if not isinstance(v, bool) else k)
-        for k, v in prompt_flags.items()
-        if v
-    ]
-    lines.append(f"  - Prompt features:     {', '.join(enabled) if enabled else 'none (baseline)'}")
-
-    benchmarked_count = len(query_ids) if query_ids else total_questions
-    total_evals = benchmarked_count * num_seeds
-    lines.append(
-        f"  - Total evaluations:   {total_evals} "
-        f"({benchmarked_count} queries × {num_seeds} seeds × {len(models)} model{'s' if len(models) > 1 else ''})"
-    )
-    lines.append(f"  - Session:             {session_dir}")
-    lines.append(f"  - Database:            {database_url}")
-
+    lines.append("")
+    lines.append(_field("Session", str(session_dir)))
+    lines.append(rule)
     return "\n".join(lines) + "\n"
 

@@ -9,7 +9,6 @@ description = "Text to SQL using local LLMs"
 requires-python = ">=3.12"
 dependencies = [
     "pandas>=2.2.0",
-    "requests>=2.32.0",
     "sqlalchemy>=2.0.0",
     "psycopg2-binary>=2.9.0",
     "sqlglot>=26.0.0",
@@ -20,7 +19,8 @@ dev = ["pytest>=8.0"]
 
 [project.scripts]
 benchmark = "text2query.benchmark.benchmarking:main"
-text2query = "text2query.cli.repl:main"
+text2query = "text2query.server.cli:main"
+text2query-server = "text2query.server.main:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -31,3 +31,6 @@ package-dir = {"" = "src"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+text2query = ["database/*.json"]

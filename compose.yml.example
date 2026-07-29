@@ -1,0 +1,129 @@
+# ─── User Configuration ────────────────────────────────────────
+# Edit these values to customize your setup, then `docker compose up -d`.
+
+x-config: &config
+  # --- App mode ---------------------------------------------------------
+  # Used by `docker compose exec app text2query '...'` and the HTTP
+  # server it talks to (POSTed to over the Docker network).
+  DEFAULT_MODEL: "qwen2.5-coder:7b"         # Model used for SQL generation
+  OLLAMA_URL: "http://ollama:11434"         # LLM backend endpoint
+  LOG_LEVEL: "WARNING"                      # DEBUG/INFO/WARNING/ERROR
+  LLM_TEMPERATURE: "0.1"                    # Sampling temperature
+  LLM_NUM_CTX: "4096"                       # Context window (tokens)
+  LLM_MAX_TOKENS: "2048"                    # Max tokens generated per query
+  LLM_TIMEOUT: "600"                        # Whole-generation timeout (s) — raise on slow CPU-only setups
+  SERVER_PORT: "8000"                       # Internal HTTP port (Docker network only, not host-exposed)
+
+  # --- Prompt features (all default "false"/"0" = research baseline) --------
+  PROMPT_SCHEMA_DDL: "false"                # Schema as CREATE TABLE DDL instead of prose
+  PROMPT_SCHEMA_FK: "false"                 # Explicit FK annotations (REFERENCES in DDL, FK() notation in prose)
+  PROMPT_STRICT_OUTPUT: "false"             # Emphatic "Return ONLY the SQL query" rules block
+  PROMPT_SCHEMA_DESCRIPTIONS: "false"       # NL column descriptions from curated TPC-H metadata
+  PROMPT_SCHEMA_SAMPLES: "false"            # Inline sample values for categorical columns
+  PROMPT_XML_STRUCTURE: "false"             # Wrap prompt sections in XML tags (<schema>, <rules>, ...)
+  PROMPT_FEW_SHOT: "0"                      # Static few-shot examples: 0=off, max 3 (values above 3 clamp)
+  PROMPT_PLANNING: "false"                  # Ask model to plan tables/joins as SQL comments before the query (avoid combining with PROMPT_STRICT_OUTPUT)
+  RETRY_ON_ERROR: "false"                   # One retry with the Postgres error fed back (EXPLAIN probe)
+
+  # --- Benchmark mode -----------------------------------------------------
+  # Used by `docker compose --profile benchmark up benchmark`.
+  # Inherits the LLM sampling parameters above (temperature, num_ctx, max_tokens).
+  BENCHMARK_MODELS: "qwen2.5-coder:7b,a-kore/Arctic-Text2SQL-R1-7B"  # Comma-separated models to compare
+  BENCHMARK_NUM_SEEDS: "2"                  # Repetitions per query, for statistical robustness
+  BENCHMARK_QUERY_IDS: "1,3,7"              # Comma-separated query IDs to run, or "all"
+  BENCHMARK_SCALE_FACTOR: "1"                # TPC-H data scale factor
+  # BENCHMARK_DATA_PATH: ""                  # Optional: reuse existing generated TPC-H data instead of regenerating
+
+# Default database — used by both App and Benchmark modes.
+x-db: &db-credentials
+  POSTGRES_USER: "user"
+  POSTGRES_PASSWORD: "password"
+  POSTGRES_DB: "testdb"
+
+# ───────────────────────────────────────────────────────────────
+
+services:
+  ollama:
+    image: ollama/ollama:0.5.7
+    container_name: text2query-ollama
+    volumes:
+      - ollama_data:/root/.ollama
+      - ./app/pull-models.sh:/usr/local/bin/pull-models:ro,Z
+    environment:
+      <<: *config
+    restart: always
+    healthcheck:
+      test: [ "CMD", "ollama", "list" ]
+      start_period: 5s
+      interval: 3s
+      timeout: 5s
+      retries: 10
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: text2query-postgres
+    environment:
+      <<: *db-credentials
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d:ro,Z
+    restart: always
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U user -d testdb" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # The single App-mode interface: an HTTP server (image default command).
+  # `docker compose exec app text2query '<question>'` talks to it over
+  # localhost inside this container; other containers on the Docker network
+  # can POST to it directly at http://app:8000/query. Not exposed to the
+  # host by default — uncomment the `ports:` line below to opt in.
+  app:
+    build: ./app
+    container_name: text2query-app
+    depends_on:
+      ollama:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    environment:
+      <<: *config
+      DATABASE_URL: "postgresql://user:password@postgres:5432/testdb"
+    # ports:
+    #   - "8000:8000"
+    restart: unless-stopped
+    healthcheck:
+      # Keep the port here in sync with SERVER_PORT above if you change it.
+      test: [ "CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3)\"" ]
+      # The server warms up the model before it starts listening, so a cold
+      # model load must fit inside start_period or the container reads unhealthy.
+      start_period: 300s
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  benchmark:
+    build: ./app
+    container_name: text2query-benchmark
+    depends_on:
+      ollama:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    environment:
+      <<: *config
+      DATABASE_URL: "postgresql://user:password@postgres:5432/testdb"
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      - ./benchmark:/app/benchmark:Z
+    restart: "no"
+    profiles:
+      - benchmark
+    command: [ "benchmark" ]
+
+volumes:
+  ollama_data:
+    name: text2query_ollama_data
+  pg_data:
+    name: text2query_pg_data

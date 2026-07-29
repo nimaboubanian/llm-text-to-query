@@ -1,62 +1,88 @@
 # LLM Text-to-Query
 
-Convert natural language to SQL queries using local LLMs. Using TPC-H benchmark to evaluate the models.
+Natural language → SQL using local LLMs, via Docker. All config lives in `compose.yml`.
 
 ## Quick Start
 
 ```bash
-# Start services
 docker compose up -d
-
-# Pull models (first run only)
 docker compose exec ollama pull-models chat
-
-# Enter interactive mode
-docker compose exec app text2query
+docker compose exec app text2query 'What are the customers'"'"' names?'
 ```
+
+Prints the generated SQL, a result table, and the row count.
+
+## App Mode
+
+```bash
+docker compose exec app text2query '<question>'
+```
+
+Or POST from any container on the Docker network:
+
+```bash
+curl -X POST http://app:8000/query \
+  -H 'Content-Type: application/json' \
+  -d '{"question": "How many customers are there?"}'
+```
+
+Returns `{"sql", "columns", "rows", "row_count", "error"}`. Error statuses: `400` bad input, `422` unsafe/ungenerated SQL, `502` database rejected the query.
+
+Uncomment `ports:` under the `app` service to expose port 8000 to the host. Restart `app` after changing the database schema.
 
 ## Configuration
 
-All user-configurable settings are at the top of `compose.yml` in the `x-config` block:
+Edit the `x-config` block in `compose.yml`:
 
 ```yaml
 x-config: &config
-  DEFAULT_MODEL:        "qwen2.5-coder:7b"     # SQL generation model
-  FRONTDESK_MODEL:      "qwen2.5:3b"           # Intent routing model
-  BENCHMARK_MODELS:     "llama3.2:3b,qwen2.5-coder:7b"
-  BENCHMARK_NUM_SEEDS:  "1"   # Repetitions per query for statistical robustness
-  BENCHMARK_QUERY_IDS:  "all" # Comma-separated IDs to run, e.g. "1,3,7" — "all" runs everything
+  DEFAULT_MODEL: "qwen2.5-coder:7b"
+  OLLAMA_URL: "http://ollama:11434"
+  LOG_LEVEL: "WARNING"
+  LLM_TEMPERATURE: "0.1"
+  LLM_NUM_CTX: "4096"
+  LLM_MAX_TOKENS: "2048"
+  SERVER_PORT: "8000"
+  BENCHMARK_MODELS: "llama3.2:3b,qwen2.5-coder:7b"
+  BENCHMARK_NUM_SEEDS: "1"
+  BENCHMARK_QUERY_IDS: "all"
+  BENCHMARK_SCALE_FACTOR: "1"
 ```
 
-After changing models, recreate the Ollama container to pull them:
+After changing models:
 
 ```bash
 docker compose up -d --force-recreate ollama
-docker compose logs -f ollama   # watch download progress
+docker compose logs -f ollama
 ```
+
+### Prompt features
+
+All default off — the all-off state is the experimental baseline. Enable any
+combination in `compose.yml`'s `x-config` block to benchmark their effect:
+
+- `PROMPT_SCHEMA_DDL` — render the schema as `CREATE TABLE` DDL instead of prose
+- `PROMPT_SCHEMA_FK` — explicit foreign-key annotations in the schema
+- `PROMPT_SCHEMA_DESCRIPTIONS` — curated natural-language column descriptions
+- `PROMPT_SCHEMA_SAMPLES` — inline sample values for categorical columns
+- `PROMPT_XML_STRUCTURE` — wrap prompt sections in XML tags
+- `PROMPT_FEW_SHOT` — number of static few-shot examples (0-3)
+- `PROMPT_PLANNING` — ask the model to plan tables/joins as SQL comments before the query
+- `PROMPT_STRICT_OUTPUT` — emphatic "return only the SQL" output rules
+- `RETRY_ON_ERROR` — one retry with the Postgres error fed back on failure
 
 ## Mini Database
 
-A simple e-commerce database (customers, products, orders) loads automatically for testing.
+An e-commerce dataset (customers, products, orders) loads automatically. Try: *"Top 3 best-selling products"*. Reset with `docker compose --profile benchmark down -v`.
 
-**Example queries:** "What are the customers' names?", "Top 3 best-selling products", "Show customers who spent more than $500 total"
+## Safety
 
-Reset with `docker compose --profile benchmark down -v`.
-
-## REPL Commands
-
-| Command | Description |
-|---|---|
-| `/help` | Show available commands |
-| `/schema` | Display the database schema |
-| `/sql` | Display the SQL query |
-| `/model` | List available models and the active one |
-| `/model <name>` | Switch to a different model |
-| `/quit` | Exit |
+- Single-statement, SELECT-only SQL — DDL/DML rejected
+- Runs inside a read-only database transaction
+- 30s statement timeout, 10,000-row result cap
+- Questions capped at 2000 characters
 
 ## External Database
-
-Edit `DATABASE_URL` in the `app` service in `compose.yml` and remove the `postgres` dependency:
 
 ```yaml
 environment:
@@ -64,81 +90,27 @@ environment:
   DATABASE_URL: postgresql://user:pass@192.168.1.10:5432/mydb
 ```
 
-For databases on the Docker host, add `extra_hosts: ["host.docker.internal:host-gateway"]` to the `app` service.
+Remove the `postgres` service dependency in `compose.yml`. For a host database, add `extra_hosts: ["host.docker.internal:host-gateway"]` to `app`.
 
-## Benchmark
-
-Edit `BENCHMARK_MODELS` in the `x-config` block of `compose.yml` to choose which models to compare (comma-separated, up to 3). Then pull them and run:
+## Benchmark Mode
 
 ```bash
 docker compose exec ollama pull-models benchmark
 docker compose --profile benchmark up --build benchmark
 ```
 
-If you haven't changed `BENCHMARK_MODELS`, the benchmark runs with the default model — just make sure you've already run `pull-models chat`.
+Runs a six-stage evaluation pipeline against TPC-H, scoring generated SQL (Result F1, AST similarity) across the models/seeds/queries set via `BENCHMARK_MODELS`, `BENCHMARK_NUM_SEEDS`, and `BENCHMARK_QUERY_IDS` above:
 
-Runs a three-phase TPC-H pipeline: **Setup** (data generation, schema loading) → **Generation** (LLM query generation and execution) → **Analysis** (similarity metrics, reports, archiving).
-
-### Evaluation Metrics
-
-| Metric | Purpose |
-|---|---|
-| **Result F1** | Primary correctness — did the query produce the right data? |
-| **AST Similarity** | Structural closeness of SQL to reference |
-
-### Multi-Seed Mode
-
-Set `BENCHMARK_NUM_SEEDS` in `x-config` to run each query multiple times with different random seeds for statistical robustness (mean, std, 95% CI).
-
-### Query Selection
-
-By default all 22 TPC-H queries are benchmarked. Set `BENCHMARK_QUERY_IDS` to a comma-separated list of query numbers to run only a subset:
-
-```yaml
-BENCHMARK_QUERY_IDS: "1,3,7,22"   # run queries 01, 03, 07, 22 only
-BENCHMARK_QUERY_IDS: "all"         # run all 22 queries (default)
-```
-
-Unknown IDs are warned and skipped; if no valid IDs remain the pipeline aborts. Ground-truth answer generation always runs for all queries regardless of this setting.
-
-### Multi-Model Mode
-
-Set `BENCHMARK_MODELS` in `x-config` to compare up to 3 models side-by-side. Output includes per-model reports plus `comparison.md` and `results.csv`.
+1. **Data Generation** — generate (or reuse cached) TPC-H data at the configured scale factor.
+2. **Validation** — confirm the expected question/query files are present.
+3. **Database Setup** — load the schema, data, and indexes if the database isn't already populated.
+4. **Answer Generation** — execute the reference SQL to produce ground-truth answers.
+5. **Per-model Generation, Execution & Scoring** — for each model in `BENCHMARK_MODELS`: generate SQL via the LLM, execute it, and score it against the ground truth.
+6. **Cross-Model Comparison & Archiving** — when multiple models are configured, compare them side by side; archive the run to `benchmark/results/<timestamp>/` with a manifest describing the run.
 
 ## GPU Acceleration
 
-Pass a compose override — all settings from `compose.yml` are preserved.
-
-**NVIDIA** ([Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html) required):
-
 ```bash
-docker compose -f compose.yml -f compose.nvidia.yml up -d
-```
-
-**AMD** ([ROCm drivers](https://rocm.docs.amd.com/projects/install-on-linux/en/latest/) required):
-
-```bash
-docker compose -f compose.yml -f compose.amd.yml up -d
-```
-
-## Development
-
-```bash
-cd app && uv sync --extra dev
-uv run pytest -v            # run all 99 tests
-```
-
-### Project Structure
-
-```
-app/src/text2query/
-  core/config.py          # Centralized configuration (env vars)
-  llm/service.py          # Ollama streaming + SQL extraction
-  llm/prompts.py          # Prompt templates
-  database/executor.py    # SQL execution → DataFrame
-  database/schema.py      # Schema introspection
-  cli/repl.py             # Interactive REPL
-  cli/frontdesk.py        # Intent classification + summarization
-  cli/style.py            # Nord-themed TUI
-  benchmark/              # TPC-H benchmark pipeline
+docker compose -f compose.yml -f compose.nvidia.yml up -d   # NVIDIA
+docker compose -f compose.yml -f compose.amd.yml up -d      # AMD (ROCm)
 ```

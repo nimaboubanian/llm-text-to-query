@@ -23,9 +23,6 @@ The schema includes foreign key relationships: NATION→REGION, SUPPLIER/CUSTOME
 # Install uv (if needed)
 curl -Ls https://astral.sh/uv/install.sh | sh
 
-# Create environment and install deps
-uv venv && uv pip install -r pyproject.toml
-
 # Create data directory
 mkdir -p ./data
 ```
@@ -34,10 +31,10 @@ mkdir -p ./data
 
 ```bash
 # Scale factor 1 (~1 GB)
-uv run tpchgen-cli -s 1 --output-dir data/sf1
+uvx tpchgen-cli -s 1 --output-dir data/sf1
 
 # Scale factor 10 (~10 GB)
-uv run tpchgen-cli -s 10 --output-dir data/sf10
+uvx tpchgen-cli -s 10 --output-dir data/sf10
 ```
 
 ## Scale Factors

@@ -1,9 +1,17 @@
-import re
+"""Stage: LLM SQL generation and generated-query execution, per seed."""
+from dataclasses import asdict
 from pathlib import Path
 
-from text2query.database.schema import create_engine_for_database, get_database_schema_string
-from text2query.llm.service import get_sql_from_llm_streaming
-from text2query.benchmark.pipeline import execute_queries_to_csv
+from text2query.core.config import LLM_MAX_TOKENS, LLM_TEMPERATURE, PROMPT_FLAGS
+from text2query.database.executor import explain_error
+from text2query.database.schema import create_engine_for_database, load_tpch_metadata, render_schema
+from text2query.llm import ollama
+from text2query.llm.prompt_builder import build_prompt
+from text2query.benchmark.fingerprint import (
+    MANIFEST_FILENAME, GenerationFingerprint, read_manifest_fingerprint, write_manifest,
+)
+from text2query.benchmark.pipeline import execute_queries_to_csv, read_business_question
+from text2query.benchmark.progress import print_item_done, print_item_start
 
 
 def run_llm_generation(
@@ -13,23 +21,12 @@ def run_llm_generation(
     model: str,
     seeds: list[int] | None = None,
     query_ids: list[str] | None = None,
-) -> list[dict]:
-    if seeds and len(seeds) > 1:
-        all_results = []
-        for seed in seeds:
-            seed_dir = output_dir / f"seed_{seed}"
-            print(f"\n  --- Seed {seed} ---")
-            results = _run_single_generation(
-                questions_dir, seed_dir, db_url, model, seed=seed, query_ids=query_ids,
-            )
-            all_results.extend(
-                {**r, "seed": seed} for r in results
-            )
-        return all_results
-    else:
-        seed = seeds[0] if seeds else None
-        return _run_single_generation(
-            questions_dir, output_dir, db_url, model, seed=seed, query_ids=query_ids,
+) -> None:
+    for seed in seeds or [1]:
+        seed_dir = output_dir / f"seed_{seed}"
+        print(f"\n  --- Seed {seed} ---")
+        _run_single_generation(
+            questions_dir, seed_dir, db_url, model, seed=seed, query_ids=query_ids,
         )
 
 
@@ -40,7 +37,9 @@ def _run_single_generation(
     model: str,
     seed: int | None = None,
     query_ids: list[str] | None = None,
-) -> list[dict]:
+    on_item_start=print_item_start,
+    on_item_done=print_item_done,
+) -> None:
     question_files = sorted(questions_dir.glob("*.md"))
     if query_ids is not None:
         question_files = [q for q in question_files if q.stem in query_ids]
@@ -48,74 +47,92 @@ def _run_single_generation(
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Cache: skip queries whose .sql file already exists. Assumes model/prompt/schema
-    # haven't changed since the file was generated — safe for resuming interrupted runs.
+    engine = create_engine_for_database(db_url)
+    schema = render_schema(engine, PROMPT_FLAGS, metadata=load_tpch_metadata())
+
+    fingerprint = GenerationFingerprint(
+        model=model,
+        prompt_template=build_prompt(PROMPT_FLAGS, "{schema}", "{query}"),
+        schema=schema,
+        temperature=LLM_TEMPERATURE,
+        max_tokens=LLM_MAX_TOKENS,
+        seed=seed,
+        retry_on_error=PROMPT_FLAGS.retry_on_error,
+    )
+
+    cached_fingerprint = read_manifest_fingerprint(output_dir)
+    if cached_fingerprint is not None and cached_fingerprint != fingerprint.hash:
+        print(f"  ⚠ Generation config changed since last run — clearing stale cache in {output_dir}")
+        _clear(output_dir, ("*.sql", "*.prompt", "*.raw"))
+    write_manifest(output_dir, fingerprint.hash, asdict(fingerprint))
+
+    # Cache: skip queries whose .sql file already exists. Safe to resume from — the
+    # fingerprint check above guarantees the cache reflects the current model, prompt,
+    # schema, temperature, and seed; a mismatch clears it before we get here.
     existing = {f.stem for f in output_dir.glob("*.sql")}
     to_process = [q for q in question_files if q.stem not in existing]
 
     if not to_process:
         print(f"  ✓ All {total} queries already generated in {output_dir}")
-        return []
+        return
 
     seed_label = f" (seed={seed})" if seed is not None else ""
     cache_label = f", {len(existing)} cached" if existing else ""
     print(f"  Generating {len(to_process)} queries{seed_label}{cache_label}...")
 
-    engine = create_engine_for_database(db_url)
-    schema = get_database_schema_string(engine)
+    print(f"  Warming up {model}...", end="", flush=True)
+    print(" ✓" if ollama.warmup(model) else " ⚠ (warmup failed, continuing)")
 
-    results = []
+    success = 0
+    retries = 0
+    errors = []
+    process_total = len(to_process)
 
     for i, qfile in enumerate(to_process, 1):
         query_id = qfile.stem
-        content = qfile.read_text()
-
-        match = re.search(r'# Business Question:\s*\n\s*"([^"]+)"', content)
-        if not match:
-            print(f"  [{i}/{len(to_process)}] Q{query_id}... ⚠ no question found, skipping")
+        question = read_business_question(qfile)
+        if not question:
+            on_item_start(i, process_total, f"Q{query_id}")
+            on_item_done(" ⚠ no question found, skipping")
             continue
 
-        question = match.group(1)
+        on_item_start(i, process_total, f"Q{query_id}")
 
-        print(f"  [{i}/{len(to_process)}] Q{query_id}...", end="", flush=True)
+        result = ollama.generate_sql_with_retry(
+            question, schema, model, seed=seed,
+            validate=lambda sql: explain_error(engine, sql),
+        )
+        generated_sql = result.sql
+        raw_response = result.raw_response
+        prompt = result.prompt
+        error = result.error
+        if result.retried:
+            retries += 1
 
-        generated_sql = None
-        raw_response = None
-        error = None
-
-        for chunk in get_sql_from_llm_streaming(question, schema, model, seed=seed):
-            if chunk["type"] == "done":
-                generated_sql = chunk.get("sql")
-                raw_response = chunk.get("full_response")
-                break
-            elif chunk["type"] == "error":
-                error = chunk.get("message")
-                break
+        if prompt is not None:
+            (output_dir / f"{query_id}.prompt").write_text(prompt)
 
         if generated_sql:
             output_file = output_dir / f"{query_id}.sql"
             output_file.write_text(generated_sql)
-            print(" ✓")
-            results.append({"query_id": query_id, "status": "success"})
+            on_item_done(" ✓")
+            success += 1
         else:
             raw_file = output_dir / f"{query_id}.raw"
             if error:
                 raw_file.write_text(f"ERROR: {error}\n")
             elif raw_response:
                 raw_file.write_text(raw_response)
-            print(" ✗")
-            results.append({"query_id": query_id, "status": "error", "error": error or "No SQL extracted"})
+            on_item_done(" ✗")
+            errors.append((query_id, error or "No SQL extracted"))
 
-    success = sum(1 for r in results if r["status"] == "success")
-    errors = sum(1 for r in results if r["status"] == "error")
     print(f"  ✓ Generated {success} queries -> {output_dir}")
-    if errors > 0:
-        print(f"  ⚠ {errors} failed:")
-        for r in results:
-            if r["status"] == "error":
-                print(f"    - Q{r['query_id']}: {r.get('error', 'Unknown')[:60]}")
-
-    return results
+    if retries:
+        print(f"  ↻ {retries} queries needed a retry")
+    if errors:
+        print(f"  ⚠ {len(errors)} failed:")
+        for query_id, error in errors:
+            print(f"    - Q{query_id}: {error[:60]}")
 
 
 def execute_generated_queries(
@@ -124,20 +141,12 @@ def execute_generated_queries(
     db_url: str,
     seeds: list[int] | None = None,
     query_ids: list[str] | None = None,
-) -> list[dict]:
-    if seeds and len(seeds) > 1:
-        all_results = []
-        for seed in seeds:
-            seed_queries = queries_dir / f"seed_{seed}"
-            seed_answers = answers_dir / f"seed_{seed}"
-            print(f"\n  --- Seed {seed} ---")
-            results = _execute_single(seed_queries, seed_answers, db_url, query_ids=query_ids)
-            all_results.extend(
-                {**r, "seed": seed} for r in results
-            )
-        return all_results
-    else:
-        return _execute_single(queries_dir, answers_dir, db_url, query_ids=query_ids)
+) -> None:
+    for seed in seeds or [1]:
+        seed_queries = queries_dir / f"seed_{seed}"
+        seed_answers = answers_dir / f"seed_{seed}"
+        print(f"\n  --- Seed {seed} ---")
+        _execute_single(seed_queries, seed_answers, db_url, query_ids=query_ids)
 
 
 def _execute_single(
@@ -145,7 +154,7 @@ def _execute_single(
     answers_dir: Path,
     db_url: str,
     query_ids: list[str] | None = None,
-) -> list[dict]:
+) -> None:
     query_files = sorted(queries_dir.glob("*.sql"))
     if query_ids is not None:
         query_files = [q for q in query_files if q.stem in query_ids]
@@ -153,13 +162,34 @@ def _execute_single(
 
     answers_dir.mkdir(parents=True, exist_ok=True)
 
-    existing = {f.stem for f in answers_dir.glob("*.csv")}
+    # The generated queries carry a fingerprint from run_llm_generation. If it no longer
+    # matches what these answers were last executed against, the queries were regenerated
+    # since — clear the stale answers so they can't be paired with the new queries.
+    generation_fingerprint = read_manifest_fingerprint(queries_dir)
+    cached_fingerprint = read_manifest_fingerprint(answers_dir)
+    if (
+        generation_fingerprint is not None
+        and cached_fingerprint is not None
+        and cached_fingerprint != generation_fingerprint
+    ):
+        print(f"  ⚠ Generated queries changed since last execution — clearing stale answers in {answers_dir}")
+        _clear(answers_dir, ("*.csv", "*.error"))
+    if generation_fingerprint is not None:
+        write_manifest(answers_dir, generation_fingerprint, {"source": str(queries_dir / MANIFEST_FILENAME)})
+
+    existing = {f.stem for f in answers_dir.glob("*.csv")} | {f.stem for f in answers_dir.glob("*.error")}
     to_process = [q for q in query_files if q.stem not in existing]
 
     if not to_process:
         print(f"  ✓ All {total} answer files already exist in {answers_dir}")
-        return []
+        return
 
     cache_label = f", {len(existing)} cached" if existing else ""
     print(f"  Executing {len(to_process)} queries{cache_label}...")
-    return execute_queries_to_csv(to_process, answers_dir, db_url, write_error_csv=True)
+    execute_queries_to_csv(to_process, answers_dir, db_url, write_error_file=True)
+
+
+def _clear(directory: Path, patterns: tuple[str, ...]) -> None:
+    for pattern in patterns:
+        for f in directory.glob(pattern):
+            f.unlink()

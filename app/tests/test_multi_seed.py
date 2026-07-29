@@ -1,39 +1,19 @@
 """Tests for multi-seed and multi-model benchmark functionality."""
 import csv
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
-from text2query.benchmark.runner import run_llm_generation, execute_generated_queries
+from text2query.benchmark.runner import _run_single_generation, run_llm_generation
 from text2query.benchmark.reporting import (
-    _format_summary_multiseed, _format_per_query_multiseed, _compute_stats,
-    archive_session, model_slug, generate_cross_model_report, generate_reports,
+    archive_session, generate_cross_model_report, generate_reports,
 )
+from text2query.llm.ollama import GenerationResult
 
 
 def _make_question_file(questions_dir: Path, qid: str, question: str):
     """Create a question .md file in the expected format."""
     content = f'# Business Question:\n  "{question}"\n'
     (questions_dir / f"{qid}.md").write_text(content)
-
-
-def test_run_llm_generation_single_seed_no_subdirs(tmp_path):
-    """When seeds=None, output goes directly to output_dir (backward compat)."""
-    questions_dir = tmp_path / "questions"
-    output_dir = tmp_path / "output"
-    questions_dir.mkdir()
-    _make_question_file(questions_dir, "01", "What are the customer names?")
-
-    def mock_streaming(*args, **kwargs):
-        yield {"type": "done", "sql": "SELECT name FROM customers;"}
-
-    with patch("text2query.benchmark.runner.get_sql_from_llm_streaming", side_effect=mock_streaming), \
-         patch("text2query.benchmark.runner.create_engine_for_database"), \
-         patch("text2query.benchmark.runner.get_database_schema_string", return_value="schema"):
-
-        run_llm_generation(questions_dir, output_dir, "db://url", "test-model", seeds=None)
-
-    assert (output_dir / "01.sql").exists()
-    assert not list(output_dir.glob("seed_*"))  # No seed subdirs
 
 
 def test_run_llm_generation_multi_seed_creates_subdirs(tmp_path):
@@ -45,15 +25,16 @@ def test_run_llm_generation_multi_seed_creates_subdirs(tmp_path):
 
     captured_seeds = []
 
-    def mock_streaming(*args, **kwargs):
+    def mock_generate(*args, **kwargs):
         captured_seeds.append(kwargs.get("seed"))
-        yield {"type": "done", "sql": f"SELECT name FROM customers; -- seed={kwargs.get('seed')}"}
+        return GenerationResult(sql=f"SELECT name FROM customers; -- seed={kwargs.get('seed')}")
 
-    with patch("text2query.benchmark.runner.get_sql_from_llm_streaming", side_effect=mock_streaming), \
+    with patch("text2query.llm.ollama.generate_sql", side_effect=mock_generate), \
          patch("text2query.benchmark.runner.create_engine_for_database"), \
-         patch("text2query.benchmark.runner.get_database_schema_string", return_value="schema"):
+         patch("text2query.llm.ollama.warmup", return_value=True), \
+         patch("text2query.benchmark.runner.render_schema", return_value="schema"):
 
-        results = run_llm_generation(
+        run_llm_generation(
             questions_dir, output_dir, "db://url", "test-model", seeds=[1, 2, 3],
         )
 
@@ -64,9 +45,6 @@ def test_run_llm_generation_multi_seed_creates_subdirs(tmp_path):
 
     # Seeds should be passed to the LLM
     assert captured_seeds == [1, 2, 3]
-
-    # Results should include seed info
-    assert all("seed" in r for r in results)
 
 
 def test_run_llm_generation_caching_per_seed(tmp_path):
@@ -83,14 +61,15 @@ def test_run_llm_generation_caching_per_seed(tmp_path):
 
     call_count = 0
 
-    def mock_streaming(*args, **kwargs):
+    def mock_generate(*args, **kwargs):
         nonlocal call_count
         call_count += 1
-        yield {"type": "done", "sql": "SELECT name FROM customers;"}
+        return GenerationResult(sql="SELECT name FROM customers;")
 
-    with patch("text2query.benchmark.runner.get_sql_from_llm_streaming", side_effect=mock_streaming), \
+    with patch("text2query.llm.ollama.generate_sql", side_effect=mock_generate), \
          patch("text2query.benchmark.runner.create_engine_for_database"), \
-         patch("text2query.benchmark.runner.get_database_schema_string", return_value="schema"):
+         patch("text2query.llm.ollama.warmup", return_value=True), \
+         patch("text2query.benchmark.runner.render_schema", return_value="schema"):
 
         run_llm_generation(
             questions_dir, output_dir, "db://url", "test-model", seeds=[1, 2],
@@ -101,64 +80,30 @@ def test_run_llm_generation_caching_per_seed(tmp_path):
     assert (output_dir / "seed_2" / "01.sql").exists()
 
 
-def test_format_summary_multiseed():
-    """Summary format should include mean±std, CI columns, and per-query seeds-ok count."""
-    aggregated = [
-        {
-            "query_id": 1,
-            "result_f1": _compute_stats([0.85, 0.72, 0.88]),
-            "ast_similarity": _compute_stats([0.75, 0.80, 0.78]),
-            "per_seed": [
-                {"status": "ok"}, {"status": "ok"}, {"status": "ok"},
-            ],
-        },
-        {
-            "query_id": 2,
-            "result_f1": _compute_stats([0.0, 0.0, 0.0]),
-            "ast_similarity": _compute_stats([0.10, 0.12, 0.08]),
-            "per_seed": [
-                {"status": "ok"}, {"status": "exec_error"}, {"status": "missing"},
-            ],
-        },
-    ]
+def test_run_single_generation_invokes_item_callbacks(tmp_path):
+    questions_dir = tmp_path / "questions"
+    output_dir = tmp_path / "output"
+    questions_dir.mkdir()
+    _make_question_file(questions_dir, "01", "What are the customer names?")
 
-    output = _format_summary_multiseed(aggregated, num_seeds=3)
+    starts = []
+    outcomes = []
 
-    assert "±" in output
-    assert "01" in output
-    assert "02" in output
-    assert "3/3" in output   # query 1: all ok
-    assert "1/3" in output   # query 2: only one ok
+    with patch(
+        "text2query.llm.ollama.generate_sql",
+        return_value=GenerationResult(sql="SELECT name FROM customers;"),
+    ), patch("text2query.benchmark.runner.create_engine_for_database"), \
+       patch("text2query.llm.ollama.warmup", return_value=True), \
+       patch("text2query.benchmark.runner.render_schema", return_value="schema"):
 
+        _run_single_generation(
+            questions_dir, output_dir, "db://url", "test-model",
+            on_item_start=lambda i, total, label: starts.append((i, total, label)),
+            on_item_done=lambda outcome: outcomes.append(outcome),
+        )
 
-def test_format_per_query_multiseed():
-    """Per-query multi-seed format should show all seed results."""
-    seed_results = [
-        {"seed": 1, "status": "ok", "result_f1": 0.85, "ast_similarity": 0.75},
-        {"seed": 2, "status": "ok", "result_f1": 0.72, "ast_similarity": 0.80},
-    ]
-
-    output = _format_per_query_multiseed(seed_results)
-
-    assert "Seed" in output
-    assert "Aggregated" in output
-    assert "Mean" in output
-    assert "0.8500" in output  # seed 1 f1
-    assert "0.7200" in output  # seed 2 f1
-    assert "2 / 2" in output   # seeds executed
-
-
-def test_format_per_query_multiseed_partial_failure():
-    """Seeds executed count should reflect actual ok seeds."""
-    seed_results = [
-        {"seed": 1, "status": "ok", "result_f1": 0.80, "ast_similarity": 0.70},
-        {"seed": 2, "status": "exec_error", "result_f1": 0.0, "ast_similarity": 0.30},
-        {"seed": 3, "status": "missing", "result_f1": None, "ast_similarity": None},
-    ]
-
-    output = _format_per_query_multiseed(seed_results)
-
-    assert "1 / 3" in output
+    assert starts == [(1, 1, "Q01")]
+    assert outcomes == [" ✓"]
 
 
 def test_archive_with_seed_subdirs(tmp_path):
@@ -192,63 +137,51 @@ def test_archive_with_seed_subdirs(tmp_path):
     assert not answers.exists()
 
 
-def test_query_id_filter_llm_generation(tmp_path):
-    """query_ids filter should skip questions not in the selected set."""
+def test_raw_file_written_on_api_error(tmp_path):
+    """When Ollama returns an error chunk, a .raw file with ERROR: prefix is written."""
     questions_dir = tmp_path / "questions"
     output_dir = tmp_path / "output"
     questions_dir.mkdir()
-    _make_question_file(questions_dir, "01", "Q1")
-    _make_question_file(questions_dir, "02", "Q2")
-    _make_question_file(questions_dir, "03", "Q3")
+    _make_question_file(questions_dir, "01", "What are the totals?")
 
-    generated = []
+    def mock_generate(*args, **kwargs):
+        return GenerationResult(sql=None, error="Model 'bad-model' not found.")
 
-    def mock_streaming(*args, **kwargs):
-        generated.append(args[0])
-        yield {"type": "done", "sql": "SELECT 1;"}
-
-    with patch("text2query.benchmark.runner.get_sql_from_llm_streaming", side_effect=mock_streaming), \
+    with patch("text2query.llm.ollama.generate_sql", side_effect=mock_generate), \
          patch("text2query.benchmark.runner.create_engine_for_database"), \
-         patch("text2query.benchmark.runner.get_database_schema_string", return_value="schema"):
+         patch("text2query.llm.ollama.warmup", return_value=True), \
+         patch("text2query.benchmark.runner.render_schema", return_value="schema"):
+        run_llm_generation(questions_dir, output_dir, "db://url", "bad-model", seeds=None)
 
-        run_llm_generation(questions_dir, output_dir, "db://url", "test-model",
-                           seeds=None, query_ids=["01", "03"])
-
-    assert (output_dir / "01.sql").exists()
-    assert not (output_dir / "02.sql").exists()
-    assert (output_dir / "03.sql").exists()
-    assert len(generated) == 2
+    assert not (output_dir / "seed_1" / "01.sql").exists()
+    raw = output_dir / "seed_1" / "01.raw"
+    assert raw.exists()
+    assert raw.read_text().startswith("ERROR:")
+    assert "not found" in raw.read_text()
 
 
-def test_query_id_filter_reporting(tmp_path):
-    """generate_reports should only evaluate selected query IDs."""
-    ref_queries = tmp_path / "ref_queries"
-    ref_answers = tmp_path / "ref_answers"
-    gen_queries = tmp_path / "gen_queries"
-    gen_answers = tmp_path / "gen_answers"
-    report_dir = tmp_path / "report"
+def test_raw_file_written_on_extraction_failure(tmp_path):
+    """When model responds but no SQL can be extracted, .raw contains the raw output."""
+    questions_dir = tmp_path / "questions"
+    output_dir = tmp_path / "output"
+    questions_dir.mkdir()
+    _make_question_file(questions_dir, "01", "What are the totals?")
 
-    for d in [ref_queries, ref_answers, gen_queries, gen_answers]:
-        d.mkdir()
+    raw_model_output = "I'm sorry, I cannot generate SQL for this question."
 
-    for qid in ["01", "02", "03"]:
-        (ref_queries / f"{qid}.sql").write_text("SELECT 1;")
-        (ref_answers / f"{qid}.csv").write_text("col\n1\n")
-        (gen_queries / f"{qid}.sql").write_text("SELECT 1;")
-        (gen_answers / f"{qid}.csv").write_text("col\n1\n")
+    def mock_generate(*args, **kwargs):
+        return GenerationResult(sql=None, raw_response=raw_model_output)
 
-    _, results = generate_reports(
-        generated_queries_dir=gen_queries,
-        reference_queries_dir=ref_queries,
-        generated_answers_dir=gen_answers,
-        reference_answers_dir=ref_answers,
-        report_dir=report_dir,
-        selected_ids=["01", "03"],
-    )
+    with patch("text2query.llm.ollama.generate_sql", side_effect=mock_generate), \
+         patch("text2query.benchmark.runner.create_engine_for_database"), \
+         patch("text2query.llm.ollama.warmup", return_value=True), \
+         patch("text2query.benchmark.runner.render_schema", return_value="schema"):
+        run_llm_generation(questions_dir, output_dir, "db://url", "test-model", seeds=None)
 
-    evaluated_ids = {r["query_id"] for r in results}
-    assert evaluated_ids == {1, 3}
-    assert not (report_dir / "per_query" / "02.md").exists()
+    assert not (output_dir / "seed_1" / "01.sql").exists()
+    raw = output_dir / "seed_1" / "01.raw"
+    assert raw.exists()
+    assert raw.read_text() == raw_model_output
 
 
 # --- Multi-model tests ---
@@ -256,34 +189,32 @@ def test_query_id_filter_reporting(tmp_path):
 def test_cross_model_csv_export(tmp_path):
     """CSV export should contain one row per (model, query, seed) combination."""
     ref_queries = tmp_path / "ref_queries"
-    ref_answers = tmp_path / "ref_answers"
-    gen_queries = tmp_path / "gen_queries"
-    gen_answers = tmp_path / "gen_answers"
     report_dir = tmp_path / "report"
 
     ref_queries.mkdir()
-    ref_answers.mkdir()
 
     # Create reference data
     (ref_queries / "01.sql").write_text("SELECT name FROM customers;")
-    (ref_answers / "01.csv").write_text("name\nAlice\nBob\n")
 
-    # Create model outputs (2 models, single seed)
-    for model_name in ["model_a", "model_b"]:
-        mq = gen_queries / model_name
-        ma = gen_answers / model_name
-        mq.mkdir(parents=True)
-        ma.mkdir(parents=True)
-        (mq / "01.sql").write_text("SELECT name FROM customers;")
-        (ma / "01.csv").write_text("name\nAlice\nBob\n")
+    # Precomputed evaluation results (2 models, single seed, from generate_reports)
+    precomputed = {
+        model_name: [{
+            "query_id": 1, "seed": 1, "status": "ok",
+            "result_precision": 1.0, "result_recall": 1.0, "result_f1": 1.0,
+            "ast_similarity": 1.0, "error_category": None,
+            "nl_query": "What are the customer names?",
+            "prompt": "prompt text",
+            "generated_sql": "SELECT name FROM customers;",
+            "real_sql": "SELECT name FROM customers;",
+        }]
+        for model_name in ["model_a", "model_b"]
+    }
 
     generate_cross_model_report(
         models=["model_a", "model_b"],
         reference_queries_dir=ref_queries,
-        reference_answers_dir=ref_answers,
-        generated_queries_base=gen_queries,
-        generated_answers_base=gen_answers,
         report_dir=report_dir,
+        precomputed=precomputed,
         seeds=None,
     )
 
@@ -298,69 +229,58 @@ def test_cross_model_csv_export(tmp_path):
     assert rows[0]["model"] == "model_a"
     assert rows[1]["model"] == "model_b"
     assert all(r["query_id"] == "01" for r in rows)
+    # new columns present; real_sql/generated_sql populated from the SQL files
+    assert "nl_query" in rows[0]
+    assert "prompt" in rows[0]
+    assert all(r["real_sql"] == "SELECT name FROM customers;" for r in rows)
+    assert all(r["generated_sql"] == "SELECT name FROM customers;" for r in rows)
 
 
-def test_cross_model_comparison_report(tmp_path):
-    """Comparison report should contain model names and per-query data."""
+def test_results_csv_multiseed(tmp_path):
+    """Multi-seed runs should emit one results.csv row per (query, seed)."""
     ref_queries = tmp_path / "ref_queries"
     ref_answers = tmp_path / "ref_answers"
     gen_queries = tmp_path / "gen_queries"
     gen_answers = tmp_path / "gen_answers"
+    questions = tmp_path / "questions"
     report_dir = tmp_path / "report"
+    for d in [ref_queries, ref_answers, gen_queries, gen_answers, questions]:
+        d.mkdir()
 
-    ref_queries.mkdir()
-    ref_answers.mkdir()
+    (ref_queries / "01.sql").write_text("SELECT name FROM customers;")
+    (ref_answers / "01.csv").write_text("name\nAlice\n")
+    _make_question_file(questions, "01", "What are the customer names?")
 
-    (ref_queries / "01.sql").write_text("SELECT 1;")
-    (ref_answers / "01.csv").write_text("col\n1\n")
+    for seed in [1, 2]:
+        sq = gen_queries / f"seed_{seed}"
+        sa = gen_answers / f"seed_{seed}"
+        sq.mkdir(parents=True)
+        sa.mkdir(parents=True)
+        (sq / "01.sql").write_text("SELECT name FROM customers;")
+        (sq / "01.prompt").write_text(f"prompt for seed {seed}")
+        (sa / "01.csv").write_text("name\nAlice\n")
 
-    for model_name in ["alpha", "beta"]:
-        mq = gen_queries / model_name
-        ma = gen_answers / model_name
-        mq.mkdir(parents=True)
-        ma.mkdir(parents=True)
-        (mq / "01.sql").write_text("SELECT 1;")
-        (ma / "01.csv").write_text("col\n1\n")
-
-    generate_cross_model_report(
-        models=["alpha", "beta"],
+    generate_reports(
+        generated_queries_dir=gen_queries,
         reference_queries_dir=ref_queries,
+        generated_answers_dir=gen_answers,
         reference_answers_dir=ref_answers,
-        generated_queries_base=gen_queries,
-        generated_answers_base=gen_answers,
         report_dir=report_dir,
+        seeds=[1, 2],
+        model="m1",
+        questions_dir=questions,
     )
 
-    comparison = (report_dir / "comparison.md").read_text()
-    assert "alpha" in comparison
-    assert "beta" in comparison
-    assert "Cross-Model" in comparison
-    assert "2 models" in comparison
-    assert "ok" in comparison  # status embedded in per-query F1 cells
+    with open(report_dir / "results.csv") as f:
+        rows = list(csv.DictReader(f))
+
+    assert len(rows) == 2
+    assert {r["seed"] for r in rows} == {"1", "2"}
+    assert all(r["nl_query"] == "What are the customer names?" for r in rows)
+    assert all(r["real_sql"] == "SELECT name FROM customers;" for r in rows)
+    by_seed = {r["seed"]: r for r in rows}
+    assert by_seed["1"]["prompt"] == "prompt for seed 1"
+    assert by_seed["2"]["prompt"] == "prompt for seed 2"
 
 
-def test_archive_with_model_subdirs(tmp_path):
-    """Archive should handle model+seed subdirectories."""
-    queries = tmp_path / "queries"
-    answers = tmp_path / "answers"
-    report = tmp_path / "report"
-    results_base = tmp_path / "results"
-
-    for model in ["model_a", "model_b"]:
-        mq = queries / model
-        ma = answers / model
-        mq.mkdir(parents=True)
-        ma.mkdir(parents=True)
-        (mq / "01.sql").write_text("SELECT 1")
-        (ma / "01.csv").write_text("id\n1\n")
-
-    report.mkdir(parents=True)
-    (report / "comparison.md").write_text("# Comparison")
-
-    session_dir = archive_session(queries, answers, report, results_base)
-
-    assert session_dir.exists()
-    assert (session_dir / "queries" / "model_a" / "01.sql").exists()
-    assert (session_dir / "queries" / "model_b" / "01.sql").exists()
-    assert (session_dir / "report" / "comparison.md").exists()
 

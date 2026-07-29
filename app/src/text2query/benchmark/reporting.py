@@ -1,24 +1,43 @@
+"""Stage: score aggregation, report rendering, and session archiving."""
 import csv
+import json
 import math
+import re
 import shutil
 import statistics
 from datetime import datetime
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
 
 from text2query.benchmark.similarity import evaluate_query
+from text2query.benchmark.pipeline import read_business_question
 
 
-def model_slug(model_name: str) -> str:
-    """Convert model name to a filesystem-safe slug."""
-    return model_name.replace(":", "_").replace("/", "_")
+CSV_FIELDNAMES = [
+    "seed", "model", "query_id", "nl_query", "prompt",
+    "generated_sql", "real_sql", "status",
+    "result_precision", "result_recall", "result_f1",
+    "ast_similarity", "error_category",
+]
 
 
-def _v(val: float | bool | None) -> str:
+def _write_results_csv(results: list[dict], csv_path: Path) -> None:
+    """Write enriched evaluation results to CSV with the fixed column schema."""
+    csv_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(csv_path, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=CSV_FIELDNAMES, extrasaction="ignore")
+        writer.writeheader()
+        for r in results:
+            row = {field: v if (v := r.get(field)) is not None else "" for field in CSV_FIELDNAMES}
+            row["query_id"] = f"{int(r['query_id']):02d}"
+            writer.writerow(row)
+    print(f"  CSV export -> {csv_path} ({len(results)} rows)")
+
+
+def _v(val: float | None) -> str:
     if val is None:
         return "—"
-    if isinstance(val, bool):
-        return "Yes" if val else "No"
     return f"{val:.4f}"
 
 
@@ -39,27 +58,8 @@ def _compute_stats(values: list[float]) -> dict:
     }
 
 
-def _format_per_query_similarity(result: dict) -> str:
-    lines = [
-        "## Similarity Analysis\n",
-        "| Metric | Value |",
-        "|---|---|",
-        f"| Result F1 | {_v(result['result_f1'])} |",
-        f"| Precision | {_v(result['result_precision'])} |",
-        f"| Recall | {_v(result['result_recall'])} |",
-        f"| AST Similarity | {_v(result['ast_similarity'])} |",
-    ]
-
-    if result.get("error_category"):
-        lines.append(f"| Error Category | {result['error_category']} |")
-    if result.get("error_detail"):
-        lines.append(f"| Error Detail | `{result['error_detail']}` |")
-
-    return "\n".join(lines) + "\n"
-
-
-def _format_per_query_multiseed(seed_results: list[dict]) -> str:
-    """Format per-query report for multi-seed runs showing all seeds + aggregated stats."""
+def _format_per_query(seed_results: list[dict]) -> str:
+    """Format a per-query report showing all seeds + aggregated stats."""
     lines = [
         "## Per-Seed Results\n",
         "| Seed | Status | Result F1 | AST Sim |",
@@ -79,44 +79,24 @@ def _format_per_query_multiseed(seed_results: list[dict]) -> str:
     lines.append("## Aggregated Statistics\n")
     lines.append(f"*Seeds executed successfully: {ok_count} / {n}*\n")
 
-    metrics = ["result_f1", "ast_similarity"]
-    metric_labels = {
-        "result_f1": "Result F1",
-        "ast_similarity": "AST Similarity",
-    }
-
     lines.append("| Metric | Mean | Std | 95% CI |")
     lines.append("|---|---|---|---|")
 
-    for metric in metrics:
+    for label, metric in [("Result F1", "result_f1"), ("AST Similarity", "ast_similarity")]:
         vals = [r.get(metric) for r in seed_results if r.get(metric) is not None]
         stats = _compute_stats(vals)
         if stats["mean"] is not None:
             ci = f"[{stats['ci_lower']:.4f}, {stats['ci_upper']:.4f}]"
             lines.append(
-                f"| {metric_labels[metric]} | {stats['mean']:.4f} "
+                f"| {label} | {stats['mean']:.4f} "
                 f"| {stats['std']:.4f} | {ci} |"
             )
 
     return "\n".join(lines) + "\n"
 
 
-def _format_summary_similarity(all_results: list[dict]) -> str:
-    lines = [
-        "| Query | Status | Result F1 | AST Sim |",
-        "|---|---|---|---|",
-    ]
-    for r in all_results:
-        qid = f"{r['query_id']:02d}"
-        lines.append(
-            f"| {qid} | {r['status']} | {_v(r['result_f1'])} "
-            f"| {_v(r['ast_similarity'])} |"
-        )
-    return "\n".join(lines) + "\n"
-
-
-def _format_summary_multiseed(aggregated: list[dict], num_seeds: int) -> str:
-    """Format per-query table for multi-seed runs with mean±std columns."""
+def _format_summary(aggregated: list[dict], num_seeds: int) -> str:
+    """Format per-query summary table with mean±std columns."""
     lines = [
         "| Query | Seeds ok | F1 (mean±std) | AST (mean±std) | F1 95% CI |",
         "|---|---|---|---|---|",
@@ -146,119 +126,10 @@ def generate_reports(
     seeds: list[int] | None = None,
     model: str | None = None,
     selected_ids: list[str] | None = None,
-) -> tuple[Path, list[dict]]:
-    if seeds and len(seeds) > 1:
-        return _generate_multiseed_reports(
-            generated_queries_dir, reference_queries_dir,
-            generated_answers_dir, reference_answers_dir,
-            report_dir, seeds, model=model, selected_ids=selected_ids,
-        )
-    else:
-        return _generate_single_reports(
-            generated_queries_dir, reference_queries_dir,
-            generated_answers_dir, reference_answers_dir,
-            report_dir, model=model, selected_ids=selected_ids,
-        )
-
-
-def _generate_single_reports(
-    generated_queries_dir: Path,
-    reference_queries_dir: Path,
-    generated_answers_dir: Path,
-    reference_answers_dir: Path,
-    report_dir: Path,
-    model: str | None = None,
-    selected_ids: list[str] | None = None,
-) -> tuple[Path, list[dict]]:
-    """Single-seed report generation."""
-    per_query_dir = report_dir / "per_query"
-    per_query_dir.mkdir(parents=True, exist_ok=True)
-
-    all_ids = sorted(f.stem for f in reference_queries_dir.glob("*.sql"))
-    query_ids = [q for q in all_ids if q in selected_ids] if selected_ids is not None else all_ids
-
-    all_results = []
-
-    for qid in query_ids:
-        sim_result = evaluate_query(
-            query_id=int(qid),
-            gt_csv=reference_answers_dir / f"{qid}.csv",
-            llm_csv=generated_answers_dir / f"{qid}.csv",
-            gt_sql=reference_queries_dir / f"{qid}.sql",
-            llm_sql=generated_queries_dir / f"{qid}.sql",
-        )
-        sim_result["seed"] = None
-        all_results.append(sim_result)
-
-        ref_sql = (reference_queries_dir / f"{qid}.sql").read_text().strip()
-        llm_sql_path = generated_queries_dir / f"{qid}.sql"
-        raw_path = generated_queries_dir / f"{qid}.raw"
-        llm_sql = llm_sql_path.read_text().strip() if llm_sql_path.exists() else None
-
-        if llm_sql:
-            llm_section = f"```sql\n{llm_sql}\n```\n\n"
-        elif raw_path.exists():
-            raw_content = raw_path.read_text().strip()
-            if raw_content.startswith("ERROR:"):
-                llm_section = f"*(generation failed — {raw_content})*\n\n"
-            else:
-                snippet = raw_content[:800] + ("\n\n*[truncated]*" if len(raw_content) > 800 else "")
-                llm_section = f"*(SQL extraction failed — model output:)*\n\n```\n{snippet}\n```\n\n"
-        else:
-            llm_section = "*(not generated)*\n\n"
-
-        status = sim_result["status"]
-        meta = f"- **Model:** {model}\n" if model else ""
-        report = (
-            f"# Query {qid} — Report\n\n"
-            f"{meta}"
-            f"- **Benchmark:** TPC-H\n"
-            f"- **Status:** {status}\n\n"
-            f"## Reference SQL\n\n```sql\n{ref_sql}\n```\n\n"
-            f"## LLM-Generated SQL\n\n"
-            + llm_section
-            + _format_per_query_similarity(sim_result)
-        )
-        (per_query_dir / f"{qid}.md").write_text(report)
-        print(f"  [{qid}] {status}")
-
-    total = len(all_results)
-    executed = sum(1 for r in all_results if r["status"] == "ok")
-    errors = sum(1 for r in all_results if r["status"] == "exec_error")
-    not_generated = sum(1 for r in all_results if r["status"] == "missing")
-    exact_matches = sum(1 for r in all_results if r.get("result_f1") == 1.0)
-
-    model_line = f"| Model | {model} |\n" if model else ""
-    summary = (
-        f"# Benchmark Summary\n\n"
-        f"| Metric | Count |\n"
-        f"|---|---|\n"
-        f"{model_line}"
-        f"| Benchmark | TPC-H |\n"
-        f"| Total queries | {total} |\n"
-        f"| Executed successfully | {executed} |\n"
-        f"| Exact matches (F1 = 1.0) | {exact_matches} |\n"
-        f"| Execution errors | {errors} |\n"
-        f"| Not generated | {not_generated} |\n\n"
-        + _format_summary_similarity(all_results)
-    )
-    (report_dir / "summary.md").write_text(summary)
-
-    print(f"  Reports generated -> {report_dir}")
-    return report_dir, all_results
-
-
-def _generate_multiseed_reports(
-    generated_queries_dir: Path,
-    reference_queries_dir: Path,
-    generated_answers_dir: Path,
-    reference_answers_dir: Path,
-    report_dir: Path,
-    seeds: list[int],
-    model: str | None = None,
-    selected_ids: list[str] | None = None,
-) -> tuple[Path, list[dict]]:
-    """Generate reports aggregating multiple seed runs with statistical analysis."""
+    questions_dir: Path | None = None,
+) -> list[dict]:
+    """Generate per-query and summary reports, aggregating stats across seeds."""
+    seeds = seeds or [1]
     per_query_dir = report_dir / "per_query"
     per_query_dir.mkdir(parents=True, exist_ok=True)
 
@@ -267,13 +138,12 @@ def _generate_multiseed_reports(
 
     aggregated = []
     all_flat_results = []
-    metrics_to_aggregate = [
-        "result_f1", "result_precision", "result_recall",
-        "ast_similarity",
-    ]
+    metrics_to_aggregate = ["result_f1", "ast_similarity"]
 
     for qid in query_ids:
         seed_results = []
+        ref_sql = (reference_queries_dir / f"{qid}.sql").read_text().strip()
+        nl_query = read_business_question(questions_dir / f"{qid}.md") if questions_dir else None
 
         for seed in seeds:
             seed_queries = generated_queries_dir / f"seed_{seed}"
@@ -287,6 +157,13 @@ def _generate_multiseed_reports(
                 llm_sql=seed_queries / f"{qid}.sql",
             )
             sim_result["seed"] = seed
+            sim_result["model"] = model
+            sim_result["nl_query"] = nl_query
+            prompt_path = seed_queries / f"{qid}.prompt"
+            sim_result["prompt"] = prompt_path.read_text() if prompt_path.exists() else None
+            gen_sql_path = seed_queries / f"{qid}.sql"
+            sim_result["generated_sql"] = gen_sql_path.read_text().strip() if gen_sql_path.exists() else None
+            sim_result["real_sql"] = ref_sql
             seed_results.append(sim_result)
         all_flat_results.extend(seed_results)
 
@@ -298,8 +175,6 @@ def _generate_multiseed_reports(
 
         query_agg["per_seed"] = seed_results
         aggregated.append(query_agg)
-
-        ref_sql = (reference_queries_dir / f"{qid}.sql").read_text().strip()
 
         seed_sql_sections = "\n## LLM-Generated SQL by Seed\n\n"
         for seed in seeds:
@@ -319,15 +194,15 @@ def _generate_multiseed_reports(
 
         meta = f"- **Model:** {model}\n" if model else ""
         report = (
-            f"# Query {qid} — Multi-Seed Report ({len(seeds)} seeds)\n\n"
+            f"# Query {qid} — Report ({len(seeds)} seed{'s' if len(seeds) > 1 else ''})\n\n"
             f"{meta}"
             f"- **Benchmark:** TPC-H\n\n"
             f"## Reference SQL\n\n```sql\n{ref_sql}\n```\n\n"
-            + _format_per_query_multiseed(seed_results)
+            + _format_per_query(seed_results)
             + seed_sql_sections
         )
         (per_query_dir / f"{qid}.md").write_text(report)
-        print(f"  [{qid}] evaluated across {len(seeds)} seeds")
+        print(f"  [{qid}] evaluated across {len(seeds)} seed{'s' if len(seeds) > 1 else ''}")
 
     total = len(query_ids)
     exact_matches = sum(
@@ -337,7 +212,7 @@ def _generate_multiseed_reports(
 
     model_line = f"| Model | {model} |\n" if model else ""
     summary = (
-        f"# Benchmark Summary (Multi-Seed)\n\n"
+        f"# Benchmark Summary\n\n"
         f"| Metric | Value |\n"
         f"|---|---|\n"
         f"{model_line}"
@@ -346,30 +221,27 @@ def _generate_multiseed_reports(
         f"| Seeds per query | {len(seeds)} |\n"
         f"| Total evaluations | {total * len(seeds)} |\n"
         f"| Exact matches (F1 = 1.0 mean) | {exact_matches} |\n\n"
-        + _format_summary_multiseed(aggregated, len(seeds))
+        + _format_summary(aggregated, len(seeds))
     )
     (report_dir / "summary.md").write_text(summary)
+    _write_results_csv(all_flat_results, report_dir / "results.csv")
 
     print(f"  Reports generated -> {report_dir}")
-    return report_dir, all_flat_results
+    return all_flat_results
 
 
 def generate_cross_model_report(
     models: list[str],
     reference_queries_dir: Path,
-    reference_answers_dir: Path,
-    generated_queries_base: Path,
-    generated_answers_base: Path,
     report_dir: Path,
+    precomputed: dict[str, list[dict]],
     seeds: list[int] | None = None,
-    precomputed: dict[str, list[dict]] | None = None,
     selected_ids: list[str] | None = None,
-) -> Path:
-    """Generate cross-model comparison report and CSV export."""
+) -> None:
+    """Generate cross-model comparison report and CSV export from already-evaluated results."""
     all_ids = sorted(f.stem for f in reference_queries_dir.glob("*.sql"))
     query_ids = [q for q in all_ids if q in selected_ids] if selected_ids is not None else all_ids
-    seeds_list = seeds or [None]
-    multi_seed = seeds is not None and len(seeds) > 1
+    seeds_list = seeds or [1]
 
     # Collect all raw results
     all_rows = []
@@ -381,53 +253,21 @@ def generate_cross_model_report(
     ]
 
     for model in models:
-        slug = model_slug(model)
-        model_queries = generated_queries_base / slug
-        model_answers = generated_answers_base / slug
         model_aggregated[model] = {}
 
         # Build (query_id_int, seed) → sim lookup from precomputed results
-        precomputed_lookup: dict[tuple, dict] = {}
-        if precomputed and model in precomputed:
-            for r in precomputed[model]:
-                precomputed_lookup[(r["query_id"], r.get("seed"))] = r
+        precomputed_lookup: dict[tuple, dict] = {
+            (r["query_id"], r.get("seed")): r for r in precomputed[model]
+        }
 
         for qid in query_ids:
             seed_results = []
 
             for seed in seeds_list:
-                key = (int(qid), seed)
-                if key in precomputed_lookup:
-                    sim = precomputed_lookup[key]
-                else:
-                    if multi_seed:
-                        q_dir = model_queries / f"seed_{seed}"
-                        a_dir = model_answers / f"seed_{seed}"
-                    else:
-                        q_dir = model_queries
-                        a_dir = model_answers
-
-                    sim = evaluate_query(
-                        query_id=int(qid),
-                        gt_csv=reference_answers_dir / f"{qid}.csv",
-                        llm_csv=a_dir / f"{qid}.csv",
-                        gt_sql=reference_queries_dir / f"{qid}.sql",
-                        llm_sql=q_dir / f"{qid}.sql",
-                    )
-                    sim["seed"] = seed
+                sim = precomputed_lookup[(int(qid), seed)]
+                sim["model"] = model
                 seed_results.append(sim)
-
-                all_rows.append({
-                    "model": model,
-                    "query_id": qid,
-                    "seed": seed if seed is not None else "",
-                    "status": sim["status"],
-                    "result_f1": sim.get("result_f1", ""),
-                    "result_precision": sim.get("result_precision", ""),
-                    "result_recall": sim.get("result_recall", ""),
-                    "ast_similarity": sim.get("ast_similarity", ""),
-                    "error_category": sim.get("error_category", ""),
-                })
+                all_rows.append(sim)
 
             agg = {}
             for metric in metrics_to_aggregate:
@@ -442,18 +282,7 @@ def generate_cross_model_report(
             model_aggregated[model][qid] = agg
 
     # Write CSV
-    csv_path = report_dir / "results.csv"
-    csv_path.parent.mkdir(parents=True, exist_ok=True)
-    fieldnames = [
-        "model", "query_id", "seed", "status",
-        "result_f1", "result_precision", "result_recall",
-        "ast_similarity", "error_category",
-    ]
-    with open(csv_path, "w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
-        writer.writeheader()
-        writer.writerows(all_rows)
-    print(f"  CSV export -> {csv_path} ({len(all_rows)} rows)")
+    _write_results_csv(all_rows, report_dir / "results.csv")
 
     # Write comparison.md
     num_seeds = len(seeds) if seeds else 1
@@ -462,57 +291,30 @@ def generate_cross_model_report(
         f"# Cross-Model Comparison ({len(models)} models, {num_seeds} seed{'s' if num_seeds > 1 else ''})\n",
     ]
 
-    # Per-query comparison table (F1)
-    lines += [
-        "",
-        "## F1\n",
-    ]
     header = "| Query | " + " | ".join(m for m in models) + " |"
     sep = "|---|" + "|".join("---" for _ in models) + "|"
-    lines += [header, sep]
 
-    for qid in query_ids:
-        row = f"| {qid} "
-        for model in models:
-            agg = model_aggregated[model][qid]
-            f1 = agg["result_f1"]
-            status = agg.get("status_summary", "")
-            if f1["mean"] is None:
-                row += f"| {status} "
-            elif num_seeds > 1:
-                row += f"| {status} · {f1['mean']:.4f} ± {f1['std']:.4f} "
-            else:
-                row += f"| {status} · {f1['mean']:.4f} "
-        row += "|"
-        lines.append(row)
-
-    # Per-query comparison table (AST Similarity)
-    lines += [
-        "",
-        "## AST Similarity\n",
-    ]
-    lines += [header, sep]
-
-    for qid in query_ids:
-        row = f"| {qid} "
-        for model in models:
-            agg = model_aggregated[model][qid]
-            ast = agg["ast_similarity"]
-            status = agg.get("status_summary", "")
-            if ast["mean"] is None:
-                row += f"| {status} "
-            elif num_seeds > 1:
-                row += f"| {ast['mean']:.4f} ± {ast['std']:.4f} "
-            else:
-                row += f"| {ast['mean']:.4f} "
-        row += "|"
-        lines.append(row)
+    for title, metric, show_status in [("F1", "result_f1", True), ("AST Similarity", "ast_similarity", False)]:
+        lines += ["", f"## {title}\n", header, sep]
+        for qid in query_ids:
+            row = f"| {qid} "
+            for model in models:
+                agg = model_aggregated[model][qid]
+                stats = agg[metric]
+                status = agg.get("status_summary", "") if show_status else ""
+                prefix = f"{status} · " if status else ""
+                if stats["mean"] is None:
+                    row += f"| {status} "
+                elif num_seeds > 1:
+                    row += f"| {prefix}{stats['mean']:.4f} ± {stats['std']:.4f} "
+                else:
+                    row += f"| {prefix}{stats['mean']:.4f} "
+            row += "|"
+            lines.append(row)
 
     comparison_path = report_dir / "comparison.md"
     comparison_path.write_text("\n".join(lines) + "\n")
     print(f"  Comparison report -> {comparison_path}")
-
-    return report_dir
 
 
 def archive_session(
@@ -531,15 +333,11 @@ def archive_session(
     session_queries.mkdir(parents=True, exist_ok=True)
     session_answers.mkdir(parents=True, exist_ok=True)
 
-    # Move queries — handle both flat files and seed subdirectories
     _move_contents(queries_dir, session_queries, "queries")
-
-    # Move answers — handle both flat files and seed subdirectories
     _move_contents(answers_dir, session_answers, "answers")
 
     if report_dir.exists():
-        shutil.copytree(str(report_dir), str(session_report), dirs_exist_ok=True)
-        shutil.rmtree(str(report_dir))
+        shutil.move(str(report_dir), str(session_report))
         print(f"  Moved reports -> {session_report}")
 
     for d in [queries_dir, answers_dir]:
@@ -551,22 +349,101 @@ def archive_session(
 
 
 def _move_contents(src_dir: Path, dst_dir: Path, label: str) -> None:
-    """Move files and subdirectories from src to dst."""
+    """Move a directory's subdirectories (model dirs, seed dirs, or nested layouts) to dst."""
     if not src_dir.exists():
         return
 
-    # Move subdirectories (model dirs, seed dirs, or any nested structure)
     subdirs = sorted(d for d in src_dir.iterdir() if d.is_dir())
+    for sd in subdirs:
+        shutil.move(str(sd), str(dst_dir))
     if subdirs:
-        for sd in subdirs:
-            target = dst_dir / sd.name
-            shutil.copytree(str(sd), str(target), dirs_exist_ok=True)
         print(f"  Moved {len(subdirs)} dirs of {label} -> {dst_dir}")
 
-    # Move flat files (single-seed, single-model / backward compat)
-    files = list(src_dir.glob("*.sql")) + list(src_dir.glob("*.csv")) + list(src_dir.glob("*.raw"))
-    for f in files:
-        shutil.move(str(f), str(dst_dir / f.name))
-    if files:
-        print(f"  Moved {len(files)} {label} -> {dst_dir}")
+
+def _redact_db_url(db_url: str) -> str:
+    """Strip user:password from a database URL before persisting it in a provenance record."""
+    return re.sub(r"//[^@/]*@", "//***:***@", db_url)
+
+
+def write_session_manifest(
+    session_dir: Path,
+    *,
+    models: list[str],
+    seeds: list[int] | None,
+    query_ids: list[str] | None,
+    scale_factor: int,
+    generation_parameters: dict,
+    prompt_flags: dict,
+    fingerprints: dict[str, str],
+    database_url: str,
+) -> Path:
+    """Write a self-describing provenance manifest for an archived benchmark session."""
+    try:
+        package_version = version("text2query")
+    except PackageNotFoundError:
+        package_version = None
+
+    manifest = {
+        "timestamp": datetime.now().isoformat(),
+        "package_version": package_version,
+        "models": models,
+        "seeds": seeds,
+        "query_ids": query_ids,
+        "scale_factor": scale_factor,
+        "generation_parameters": generation_parameters,
+        "prompt_flags": prompt_flags,
+        "fingerprints": fingerprints,
+        "database_url": _redact_db_url(database_url),
+    }
+    manifest_path = session_dir / "session_manifest.json"
+    manifest_path.write_text(json.dumps(manifest, indent=2, default=str))
+    print(f"  Session manifest -> {manifest_path}")
+    return manifest_path
+
+
+def format_run_summary(
+    *,
+    total_questions: int,
+    total_ground_truth: int,
+    query_ids: list[str] | None,
+    models: list[str],
+    num_seeds: int,
+    session_dir: Path,
+    database_url: str,
+    prompt_flags: dict,
+) -> str:
+    """Render the closing 'Benchmark Complete' summary block."""
+    lines = ["=" * 60, "  Benchmark Complete", "=" * 60, "", "Summary:"]
+
+    if query_ids is not None:
+        lines.append(f"  - Queries benchmarked: {len(query_ids)} / {total_questions} ({', '.join(query_ids)})")
+    else:
+        lines.append(f"  - Queries benchmarked: {total_questions} / {total_questions} (all)")
+
+    lines.append(f"  - Ground truth:        {total_ground_truth} queries available")
+
+    if len(models) > 1:
+        lines.append(f"  - Models:              {', '.join(models)}")
+    else:
+        lines.append(f"  - Model:               {models[0]}")
+
+    lines.append(f"  - Seeds per query:     {num_seeds}")
+
+    enabled = [
+        (f"{k}={v}" if not isinstance(v, bool) else k)
+        for k, v in prompt_flags.items()
+        if v
+    ]
+    lines.append(f"  - Prompt features:     {', '.join(enabled) if enabled else 'none (baseline)'}")
+
+    benchmarked_count = len(query_ids) if query_ids else total_questions
+    total_evals = benchmarked_count * num_seeds
+    lines.append(
+        f"  - Total evaluations:   {total_evals} "
+        f"({benchmarked_count} queries × {num_seeds} seeds × {len(models)} model{'s' if len(models) > 1 else ''})"
+    )
+    lines.append(f"  - Session:             {session_dir}")
+    lines.append(f"  - Database:            {database_url}")
+
+    return "\n".join(lines) + "\n"
 

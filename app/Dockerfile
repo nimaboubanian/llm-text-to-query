@@ -31,4 +31,4 @@ ENV PATH="/app/.venv/bin:$PATH"
 RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
 USER appuser
 
-CMD ["benchmark", "--help"]
+CMD ["text2query-server"]

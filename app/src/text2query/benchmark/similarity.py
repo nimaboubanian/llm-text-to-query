@@ -1,4 +1,5 @@
-import math
+"""Scoring: result-set and AST similarity metrics between generated and reference SQL."""
+import logging
 import re
 from collections import Counter
 from itertools import permutations
@@ -6,8 +7,9 @@ from pathlib import Path
 
 import pandas as pd
 import sqlglot
-from sqlglot import exp
 from sqlglot.diff import Keep, diff
+
+logger = logging.getLogger(__name__)
 
 
 def evaluate_query(
@@ -25,11 +27,8 @@ def evaluate_query(
     )
 
     error_category = None
-    error_detail_text = None
     if status == "exec_error" and error_detail:
         error_category = _classify_error(llm_sql_text, error_detail)
-        if error_category == "Unknown":
-            error_detail_text = error_detail
 
     ast_sim = _ast_similarity(gt_sql_text, llm_sql_text)
 
@@ -41,7 +40,6 @@ def evaluate_query(
         "result_f1": _round(f1),
         "ast_similarity": _round(ast_sim),
         "error_category": error_category,
-        "error_detail": error_detail_text,
     }
 
 
@@ -58,8 +56,8 @@ def _classify_error(sql: str, error_text: str) -> str:
         sqlglot.parse_one(sql, dialect="postgres", error_level=sqlglot.ErrorLevel.RAISE)
     except sqlglot.errors.ParseError:
         return "SyntaxError"
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("Unexpected error classifying SQL error: %s", e)
 
     # sqlglot is more lenient than PostgreSQL; check the actual error text too
     if any(re.search(p, error_lower) for p in (
@@ -125,21 +123,20 @@ def _has_top_level_order_limit(sql: str) -> bool:
     try:
         tree = sqlglot.parse_one(sql, dialect="postgres")
         return tree.args.get("order") is not None and tree.args.get("limit") is not None
-    except Exception:
+    except Exception as e:
+        logger.debug("Failed to parse SQL for order/limit check, falling back to keyword search: %s", e)
         return "ORDER BY" in sql.upper() and "LIMIT" in sql.upper()
 
 
 def _result_set_comparison(
-    gt_csv: Path, llm_csv: Path, ref_sql: str = "", float_epsilon: float = 1e-4,
+    gt_csv: Path, llm_csv: Path, ref_sql: str = "",
 ) -> tuple[str, float | None, float | None, float | None, str | None]:
+    error_file = llm_csv.with_suffix(".error")
+    if error_file.exists():
+        return "exec_error", 0.0, 0.0, 0.0, error_file.read_text().strip()
+
     if not llm_csv.exists():
         return "missing", None, None, None, None
-
-    content = llm_csv.read_text()
-    first_line = content.split("\n", 1)[0].strip()
-    if first_line == "ERROR":
-        error_detail = content.split("\n", 1)[1].strip() if "\n" in content else ""
-        return "exec_error", 0.0, 0.0, 0.0, error_detail
 
     gt_df = pd.read_csv(gt_csv)
     llm_df = pd.read_csv(llm_csv)
@@ -152,10 +149,9 @@ def _result_set_comparison(
 
     llm_df = _align_columns(gt_df, llm_df)
 
-    precision_digits = max(0, int(-math.floor(math.log10(float_epsilon)))) if float_epsilon > 0 else 4
     for df in (gt_df, llm_df):
         for col in df.select_dtypes(include=["float"]).columns:
-            df[col] = df[col].round(precision_digits)
+            df[col] = df[col].round(4)
         df.fillna("NULL", inplace=True)
 
     if _has_top_level_order_limit(ref_sql):
@@ -185,12 +181,14 @@ def _ast_similarity(gt_sql: str, llm_sql: str) -> float | None:
         llm_tree = sqlglot.parse(llm_sql, dialect="postgres")[0]
         if gt_tree is None or llm_tree is None:
             return None
-    except Exception:
+    except Exception as e:
+        logger.debug("Failed to parse SQL for AST similarity: %s", e)
         return None
 
     try:
         changes = diff(gt_tree, llm_tree)
-    except Exception:
+    except Exception as e:
+        logger.debug("Failed to diff SQL ASTs: %s", e)
         return None
 
     kept = sum(1 for c in changes if isinstance(c, Keep))

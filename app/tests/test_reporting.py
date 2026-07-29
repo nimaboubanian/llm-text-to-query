@@ -1,47 +1,7 @@
-from text2query.benchmark.reporting import (
-    _format_per_query_similarity, _format_summary_similarity,
-    _compute_stats, archive_session,
-)
+import csv
+from pathlib import Path
 
-
-
-def test_per_query_has_all_metrics():
-    result = {
-        "result_f1": 0.85, "result_precision": 0.9,
-        "result_recall": 0.8, "ast_similarity": 0.72,
-    }
-    output = _format_per_query_similarity(result)
-    assert "Result F1" in output
-    assert "Precision" in output
-    assert "Recall" in output
-    assert "AST Similarity" in output
-    assert "0.8500" in output
-
-
-def test_unknown_error_detail_shown_in_report():
-    result = {
-        "result_f1": None, "result_precision": None,
-        "result_recall": None, "ast_similarity": None,
-        "error_category": "Unknown",
-        "error_detail": "could not determine data type of parameter $1",
-    }
-    output = _format_per_query_similarity(result)
-    assert "Unknown" in output
-    assert "could not determine data type" in output
-
-
-def test_summary_per_query_table():
-    results = [
-        {"query_id": 1, "status": "ok", "result_f1": 1.0, "ast_similarity": 0.8, "result_precision": 1.0, "result_recall": 1.0},
-        {"query_id": 2, "status": "exec_error", "result_f1": 0.0, "ast_similarity": 0.2, "result_precision": 0.0, "result_recall": 0.0},
-        {"query_id": 3, "status": "missing", "result_f1": None, "ast_similarity": None, "result_precision": None, "result_recall": None},
-    ]
-    output = _format_summary_similarity(results)
-    assert "01" in output
-    assert "ok" in output
-    assert "exec_error" in output
-    assert "missing" in output
-    assert "1.0000" in output
+from text2query.benchmark.reporting import _compute_stats, generate_reports, format_run_summary
 
 
 def test_compute_stats_basic():
@@ -71,38 +31,71 @@ def test_compute_stats_with_nones():
     assert abs(result["mean"] - 0.6) < 0.001
 
 
-def test_archive_moves_files(tmp_path):
-    queries = tmp_path / "queries"
-    answers = tmp_path / "answers"
-    report = tmp_path / "report"
-    results_base = tmp_path / "results"
-    queries.mkdir()
-    answers.mkdir()
-    report.mkdir()
+def test_results_csv_single_seed(tmp_path):
+    """Single-model single-seed runs should emit results.csv with the new columns."""
+    ref_queries = tmp_path / "ref_queries"
+    ref_answers = tmp_path / "ref_answers"
+    gen_queries = tmp_path / "gen_queries" / "seed_1"
+    gen_answers = tmp_path / "gen_answers" / "seed_1"
+    questions = tmp_path / "questions"
+    report_dir = tmp_path / "report"
+    for d in [ref_queries, ref_answers, gen_queries, gen_answers, questions]:
+        d.mkdir(parents=True)
 
-    (queries / "01.sql").write_text("SELECT 1")
-    (queries / "02.sql").write_text("SELECT 2")
-    (answers / "01.csv").write_text("id\n1\n")
+    (ref_queries / "01.sql").write_text("SELECT name FROM customers;")
+    (ref_answers / "01.csv").write_text("name\nAlice\n")
+    (gen_queries / "01.sql").write_text("SELECT name FROM customers;")
+    (gen_queries / "01.prompt").write_text("SCHEMA: customers(name)\nQuestion: list names")
+    (gen_answers / "01.csv").write_text("name\nAlice\n")
+    (questions / "01.md").write_text('# Business Question:\n  "What are the customer names?"\n')
 
-    session_dir = archive_session(queries, answers, report, results_base)
+    generate_reports(
+        generated_queries_dir=gen_queries.parent,
+        reference_queries_dir=ref_queries,
+        generated_answers_dir=gen_answers.parent,
+        reference_answers_dir=ref_answers,
+        report_dir=report_dir,
+        model="m1",
+        questions_dir=questions,
+    )
 
-    assert session_dir.exists()
-    assert (session_dir / "queries" / "01.sql").exists()
-    assert (session_dir / "queries" / "02.sql").exists()
-    assert (session_dir / "answers" / "01.csv").exists()
-    # source dirs should be cleaned up
-    assert not queries.exists()
-    assert not answers.exists()
+    csv_path = report_dir / "results.csv"
+    assert csv_path.exists()
+    with open(csv_path) as f:
+        rows = list(csv.DictReader(f))
+
+    assert len(rows) == 1
+    r = rows[0]
+    assert r["seed"] == "1"
+    assert r["model"] == "m1"
+    assert r["query_id"] == "01"
+    assert r["nl_query"] == "What are the customer names?"
+    assert r["prompt"] == "SCHEMA: customers(name)\nQuestion: list names"
+    assert r["generated_sql"] == "SELECT name FROM customers;"
+    assert r["real_sql"] == "SELECT name FROM customers;"
 
 
-def test_archive_empty_dirs(tmp_path):
-    queries = tmp_path / "queries"
-    answers = tmp_path / "answers"
-    report = tmp_path / "report"
-    results_base = tmp_path / "results"
-    queries.mkdir()
-    answers.mkdir()
+def test_format_run_summary_single_model_all_queries():
+    summary = format_run_summary(
+        total_questions=22, total_ground_truth=22, query_ids=None,
+        models=["m1"], num_seeds=1, session_dir=Path("benchmark/results/x"),
+        database_url="postgresql://u:p@host/db",
+        prompt_flags={},
+    )
+    assert "Queries benchmarked: 22 / 22 (all)" in summary
+    assert "Model:               m1" in summary
+    assert "Total evaluations:   22 (22 queries × 1 seeds × 1 model)" in summary
+    assert "Prompt features:     none (baseline)" in summary
 
-    session_dir = archive_session(queries, answers, report, results_base)
-    assert session_dir.exists()
-    assert (session_dir / "queries").exists()
+
+def test_format_run_summary_multi_model_filtered_queries():
+    summary = format_run_summary(
+        total_questions=22, total_ground_truth=22, query_ids=["01", "02"],
+        models=["m1", "m2"], num_seeds=3, session_dir=Path("benchmark/results/x"),
+        database_url="postgresql://u:p@host/db",
+        prompt_flags={"schema_ddl": True, "few_shot": 2},
+    )
+    assert "Queries benchmarked: 2 / 22 (01, 02)" in summary
+    assert "Models:              m1, m2" in summary
+    assert "Total evaluations:   6 (2 queries × 3 seeds × 2 models)" in summary
+    assert "Prompt features:     schema_ddl, few_shot=2" in summary

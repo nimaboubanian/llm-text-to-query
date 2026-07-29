@@ -10,3 +10,7 @@ benchmark/answers/*
 benchmark/queries/*
 benchmark/reports/*
 benchmark/results/*
+compose.yml
+CLAUDE.md
+tmp/
+

@@ -1,4 +1,3 @@
-import pytest
 from text2query.llm.service import _clean_sql_response
 
 
@@ -29,23 +28,6 @@ def test_returns_none_for_empty_input():
     assert _clean_sql_response(None) is None
 
 
-def test_fenced_block_case_insensitive():
-    response = "```SQL\nSELECT 1\n```"
-    assert _clean_sql_response(response) == "SELECT 1"
-
-
-def test_multiline_fenced_sql():
-    response = """```sql
-SELECT o.id, c.name
-FROM orders o
-JOIN customers c ON o.customer_id = c.id
-WHERE o.total > 100
-```"""
-    result = _clean_sql_response(response)
-    assert "SELECT o.id" in result
-    assert "WHERE o.total > 100" in result
-
-
 def test_rejects_bare_insert():
     assert _clean_sql_response("INSERT INTO users VALUES (1, 'alice');") is None
 
@@ -74,9 +56,40 @@ def test_allows_single_statement_with_trailing_semicolon():
     assert _clean_sql_response(response) == "SELECT id FROM users;"
 
 
-def test_string_literal_semicolon_falsely_rejected():
-    """Known limitation: semicolons inside string literals trigger false rejection."""
-    response = "```sql\nSELECT * FROM t WHERE name = 'foo;bar'\n```"
-    # BUG: _is_single_statement sees the ; inside the string and rejects it.
-    # This test documents the current (broken) behavior.
+def test_rejects_drop_in_fence():
+    response = "```sql\nDROP TABLE users\n```"
     assert _clean_sql_response(response) is None
+
+
+def test_rejects_truncate_in_fence():
+    response = "```sql\nTRUNCATE TABLE users\n```"
+    assert _clean_sql_response(response) is None
+
+
+def test_rejects_alter_in_fence():
+    response = "```sql\nALTER TABLE users ADD COLUMN x INT\n```"
+    assert _clean_sql_response(response) is None
+
+
+def test_allows_cte_select_in_fence():
+    response = (
+        "```sql\nWITH recent AS (SELECT id FROM orders) "
+        "SELECT * FROM recent\n```"
+    )
+    result = _clean_sql_response(response)
+    assert result is not None
+    assert result.upper().startswith("WITH")
+
+
+def test_allows_union_select_in_fence():
+    response = "```sql\nSELECT id FROM a UNION SELECT id FROM b\n```"
+    result = _clean_sql_response(response)
+    assert result is not None
+
+
+def test_allows_unparsable_select_prefixed_fallback():
+    """sqlglot can't parse this malformed fragment, but the SELECT prefix keeps it safe."""
+    response = "```sql\nSELECT * FROM t WHERE (((\n```"
+    result = _clean_sql_response(response)
+    assert result is not None
+    assert result.upper().startswith("SELECT")

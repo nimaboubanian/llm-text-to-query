@@ -1,33 +1,45 @@
-from pathlib import Path
-
-from text2query.benchmark.pipeline import _parse_schema_sql
-
-import pytest
+from text2query.benchmark.pipeline import execute_queries_to_csv
+from text2query.database.executor import ExecutionResult
 
 
-class TestParseSchemaSQL:
-    def test_splits_statements(self, tmp_path):
-        schema = tmp_path / "schema.sql"
-        schema.write_text("CREATE TABLE a (id INT);\nCREATE TABLE b (id INT);")
-        stmts = _parse_schema_sql(schema)
-        assert len(stmts) == 2
-        assert stmts[0].startswith("CREATE TABLE a")
+class TestExecuteQueriesToCsv:
+    def _patch(self, monkeypatch, result: ExecutionResult):
+        monkeypatch.setattr(
+            "text2query.benchmark.pipeline.create_engine_for_database", lambda url: None
+        )
+        monkeypatch.setattr(
+            "text2query.benchmark.pipeline.execute_sql_query", lambda engine, sql: result
+        )
 
-    def test_strips_comments(self, tmp_path):
-        schema = tmp_path / "schema.sql"
-        schema.write_text("-- header comment\nCREATE TABLE t (x INT);")
-        stmts = _parse_schema_sql(schema)
-        assert len(stmts) == 1
-        assert "--" not in stmts[0]
+    def test_writes_error_file_on_failure_when_enabled(self, tmp_path, monkeypatch):
+        self._patch(monkeypatch, ExecutionResult(None, "boom"))
+        query_file = tmp_path / "01.sql"
+        query_file.write_text("SELECT 1")
+        output_dir = tmp_path / "answers"
 
-    def test_missing_file_raises(self):
-        with pytest.raises(FileNotFoundError):
-            _parse_schema_sql(Path("/no/such/file.sql"))
+        results = execute_queries_to_csv(
+            [query_file], output_dir, "postgresql://fake", write_error_file=True
+        )
 
-    def test_skips_blank_statements(self, tmp_path):
-        schema = tmp_path / "schema.sql"
-        schema.write_text("CREATE TABLE x (id INT);\n\n;\n\n")
-        stmts = _parse_schema_sql(schema)
-        assert len(stmts) == 1
+        assert results[0]["status"] == "error"
+        assert not (output_dir / "01.csv").exists()
+        assert (output_dir / "01.error").read_text() == "boom"
 
+    def test_invokes_item_callbacks_with_outcome(self, tmp_path, monkeypatch):
+        import pandas as pd
+        self._patch(monkeypatch, ExecutionResult(pd.DataFrame({"a": [1, 2]}), None))
+        query_file = tmp_path / "01.sql"
+        query_file.write_text("SELECT 1")
+        output_dir = tmp_path / "answers"
 
+        starts = []
+        outcomes = []
+
+        execute_queries_to_csv(
+            [query_file], output_dir, "postgresql://fake",
+            on_item_start=lambda i, total, label: starts.append((i, total, label)),
+            on_item_done=lambda outcome: outcomes.append(outcome),
+        )
+
+        assert starts == [(1, 1, "Q01")]
+        assert outcomes == [" ✓ (2 rows)"]

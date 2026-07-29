@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
+"""Benchmark CLI entry point: orchestrates the full evaluation pipeline end to end."""
 
+from dataclasses import asdict, dataclass
+import logging
 from pathlib import Path
 import sys
 
@@ -18,42 +21,56 @@ from text2query.benchmark.reporting import (
     generate_reports,
     generate_cross_model_report,
     archive_session,
-    model_slug,
+    write_session_manifest,
+    format_run_summary,
 )
+from text2query.benchmark.fingerprint import collect_fingerprints
 
 
+@dataclass(frozen=True)
+class BenchmarkPaths:
+    """Filesystem layout for a benchmark run."""
+    schema_file: Path
+    questions_dir: Path
+    queries_dir: Path
+    answers_dir: Path
+    output_dir: Path
+    generated_answers_dir: Path
+    report_dir: Path
+    results_base: Path
+
+    @classmethod
+    def defaults(cls) -> "BenchmarkPaths":
+        return cls(
+            schema_file=Path("benchmark/.tpch/schema.sql"),
+            questions_dir=Path("benchmark/.tpch/questions"),
+            queries_dir=Path("benchmark/.tpch/queries"),
+            answers_dir=Path("benchmark/.tpch/answers"),
+            output_dir=Path("benchmark/queries"),
+            generated_answers_dir=Path("benchmark/answers"),
+            report_dir=Path("benchmark/reports"),
+            results_base=Path("benchmark/results"),
+        )
 
 
 def _run_single_model_benchmark(
     model: str,
-    questions_dir: Path,
-    queries_dir: Path,
-    answers_dir: Path,
-    output_base: Path,
-    generated_answers_base: Path,
-    report_base: Path,
+    paths: BenchmarkPaths,
     db_url: str,
     seeds: list[int] | None,
-    multi_model: bool,
     query_ids: list[str] | None = None,
-) -> tuple[Path, list[dict]]:
+) -> list[dict]:
     """Run the full benchmark (generate + execute + report) for one model."""
-    if multi_model:
-        slug = model_slug(model)
-        output_dir = output_base / slug
-        generated_answers_dir = generated_answers_base / slug
-        report_dir = report_base / slug
-    else:
-        output_dir = output_base
-        generated_answers_dir = generated_answers_base
-        report_dir = report_base
+    slug = model.replace(":", "_").replace("/", "_")
+    output_dir = paths.output_dir / slug
+    generated_answers_dir = paths.generated_answers_dir / slug
+    report_dir = paths.report_dir / slug
 
-    seed_info = f", seeds: {len(seeds)}" if seeds else ""
-    print(f"\n--- LLM SQL Generation (model: {model}{seed_info}) ---\n")
+    print(f"\n--- LLM SQL Generation (model: {model}, seeds: {len(seeds)}) ---\n")
 
     print("Generate SQL Queries via LLM")
     run_llm_generation(
-        questions_dir=questions_dir, output_dir=output_dir,
+        questions_dir=paths.questions_dir, output_dir=output_dir,
         db_url=db_url, model=model,
         seeds=seeds, query_ids=query_ids,
     )
@@ -67,17 +84,34 @@ def _run_single_model_benchmark(
     print()
 
     print("Generate Reports")
-    _, results = generate_reports(
-        generated_queries_dir=output_dir, reference_queries_dir=queries_dir,
-        generated_answers_dir=generated_answers_dir, reference_answers_dir=answers_dir,
+    results = generate_reports(
+        generated_queries_dir=output_dir, reference_queries_dir=paths.queries_dir,
+        generated_answers_dir=generated_answers_dir, reference_answers_dir=paths.answers_dir,
         report_dir=report_dir,
         seeds=seeds,
         model=model,
         selected_ids=query_ids,
+        questions_dir=paths.questions_dir,
     )
     print()
 
-    return report_dir, results
+    return results
+
+
+def _resolve_query_id_filter(
+    requested: list[str] | None, available: list[str],
+) -> tuple[list[str] | None, list[str]]:
+    """Validate a BENCHMARK_QUERY_IDS-style filter against available query IDs.
+
+    Returns (resolved_ids, skipped_ids). resolved_ids is None when no filter
+    is requested, or an empty list when a filter is requested but nothing in
+    it matches `available`.
+    """
+    if requested is None:
+        return None, []
+    valid = [q for q in requested if q in available]
+    skipped = [q for q in requested if q not in available]
+    return valid, skipped
 
 
 def main():
@@ -89,20 +123,27 @@ def main():
         BENCHMARK_NUM_SEEDS,
         BENCHMARK_MODELS,
         BENCHMARK_QUERY_IDS,
+        LLM_TEMPERATURE,
+        LLM_MAX_TOKENS,
+        LLM_NUM_CTX,
+        LOG_LEVEL,
+        PROMPT_FLAGS,
     )
 
-    schema_file = Path("benchmark/.tpch/schema.sql")
-    questions_dir = Path("benchmark/.tpch/questions")
-    queries_dir = Path("benchmark/.tpch/queries")
-    answers_dir = Path("benchmark/.tpch/answers")
-    output_dir = Path("benchmark/queries")
-    generated_answers_dir = Path("benchmark/answers")
-    report_dir = Path("benchmark/reports")
-    results_base = Path("benchmark/results")
+    logging.basicConfig(
+        level=getattr(logging, LOG_LEVEL.upper(), logging.WARNING),
+        format="%(levelname)s %(name)s: %(message)s",
+    )
+
+    paths = BenchmarkPaths.defaults()
     data_dir = Path(BENCHMARK_DATA_PATH) if BENCHMARK_DATA_PATH else Path(f"benchmark/.tpch/data/sf{BENCHMARK_SCALE_FACTOR}")
 
-    seeds = list(range(1, BENCHMARK_NUM_SEEDS + 1)) if BENCHMARK_NUM_SEEDS > 1 else None
-    models = BENCHMARK_MODELS if BENCHMARK_MODELS else [DEFAULT_MODEL]
+    seeds = list(range(1, BENCHMARK_NUM_SEEDS + 1))
+    if BENCHMARK_MODELS:
+        models = BENCHMARK_MODELS
+    else:
+        models = [DEFAULT_MODEL]
+        print(f"BENCHMARK_MODELS is empty — falling back to DEFAULT_MODEL ({DEFAULT_MODEL}).")
     multi_model = len(models) > 1
 
     try:
@@ -110,17 +151,14 @@ def main():
         print("\n--- Setup & Validation ---\n")
 
         # Resolve and validate query ID filter against available queries
-        query_ids: list[str] | None = None
-        if BENCHMARK_QUERY_IDS is not None:
-            available = sorted(f.stem for f in queries_dir.glob("*.sql"))
-            valid = [q for q in BENCHMARK_QUERY_IDS if q in available]
-            skipped = [q for q in BENCHMARK_QUERY_IDS if q not in available]
-            if skipped:
-                print(f"  ⚠ Unknown query IDs (skipped): {', '.join(skipped)}")
-            if not valid:
-                print("  ✗ No valid query IDs remain after filtering — aborting")
-                sys.exit(1)
-            query_ids = valid
+        available = sorted(f.stem for f in paths.queries_dir.glob("*.sql"))
+        query_ids, skipped = _resolve_query_id_filter(BENCHMARK_QUERY_IDS, available)
+        if skipped:
+            print(f"  ⚠ Unknown query IDs (skipped): {', '.join(skipped)}")
+        if query_ids is not None and not query_ids:
+            print("  ✗ No valid query IDs remain after filtering — aborting")
+            sys.exit(1)
+        if query_ids:
             print(f"  Query filter active: {len(query_ids)} / {len(available)} queries selected ({', '.join(query_ids)})")
             print()
 
@@ -134,7 +172,7 @@ def main():
         print()
 
         print("Validate Questions & Queries")
-        validate_directories(questions_dir, queries_dir)
+        validate_directories(paths.questions_dir, paths.queries_dir)
         print()
 
         print("Check Database Readiness")
@@ -144,10 +182,9 @@ def main():
         if not is_ready:
             print("Setup Database")
             setup_database(
-                schema_file=schema_file,
+                schema_file=paths.schema_file,
                 data_dir=data_dir,
                 db_url=DATABASE_URL,
-                scale_factor=BENCHMARK_SCALE_FACTOR
             )
             print()
         else:
@@ -155,7 +192,7 @@ def main():
             print()
 
         print("Generate Answer Files")
-        generate_answers(queries_dir=queries_dir, answers_dir=answers_dir, db_url=DATABASE_URL)
+        generate_answers(queries_dir=paths.queries_dir, answers_dir=paths.answers_dir, db_url=DATABASE_URL)
         print()
 
         # === Phase 2+3: Per-model benchmark ===
@@ -171,17 +208,11 @@ def main():
                 print(f"  Model {i}/{len(models)}: {model}")
                 print(f"{'=' * 60}")
 
-            _, results = _run_single_model_benchmark(
+            results = _run_single_model_benchmark(
                 model=model,
-                questions_dir=questions_dir,
-                queries_dir=queries_dir,
-                answers_dir=answers_dir,
-                output_base=output_dir,
-                generated_answers_base=generated_answers_dir,
-                report_base=report_dir,
+                paths=paths,
                 db_url=DATABASE_URL,
                 seeds=seeds,
-                multi_model=multi_model,
                 query_ids=query_ids,
             )
             precomputed[model] = results
@@ -191,13 +222,10 @@ def main():
             print("\n--- Cross-Model Comparison ---\n")
             generate_cross_model_report(
                 models=models,
-                reference_queries_dir=queries_dir,
-                reference_answers_dir=answers_dir,
-                generated_queries_base=output_dir,
-                generated_answers_base=generated_answers_dir,
-                report_dir=report_dir,
-                seeds=seeds,
+                reference_queries_dir=paths.queries_dir,
+                report_dir=paths.report_dir,
                 precomputed=precomputed,
+                seeds=seeds,
                 selected_ids=query_ids,
             )
             print()
@@ -205,38 +233,41 @@ def main():
         # === Archive ===
         print("\n--- Archiving ---\n")
 
+        fingerprints = collect_fingerprints(paths.output_dir)
+
         print("Archive Session")
         session_dir = archive_session(
-            queries_dir=output_dir, answers_dir=generated_answers_dir,
-            report_dir=report_dir, results_base=results_base,
+            queries_dir=paths.output_dir, answers_dir=paths.generated_answers_dir,
+            report_dir=paths.report_dir, results_base=paths.results_base,
+        )
+
+        write_session_manifest(
+            session_dir,
+            models=models,
+            seeds=seeds,
+            query_ids=query_ids,
+            scale_factor=BENCHMARK_SCALE_FACTOR,
+            generation_parameters={
+                "temperature": LLM_TEMPERATURE,
+                "max_tokens": LLM_MAX_TOKENS,
+                "num_ctx": LLM_NUM_CTX,
+            },
+            prompt_flags=asdict(PROMPT_FLAGS),
+            fingerprints=fingerprints,
+            database_url=DATABASE_URL,
         )
         print()
 
-        print("=" * 60)
-        print("  Benchmark Complete")
-        print("=" * 60)
-        print()
-
-        total_questions = len(list(questions_dir.glob("*.md")))
-        total_gt = len(list(queries_dir.glob("*.sql")))
-
-        print("Summary:")
-        if query_ids is not None:
-            print(f"  - Queries benchmarked: {len(query_ids)} / {total_questions} ({', '.join(query_ids)})")
-        else:
-            print(f"  - Queries benchmarked: {total_questions} / {total_questions} (all)")
-        print(f"  - Ground truth:        {total_gt} queries available")
-        if multi_model:
-            print(f"  - Models:              {', '.join(models)}")
-        else:
-            print(f"  - Model:               {models[0]}")
-        if seeds:
-            print(f"  - Seeds per query:     {BENCHMARK_NUM_SEEDS}")
-            total_evals = len(query_ids) * BENCHMARK_NUM_SEEDS if query_ids else total_questions * BENCHMARK_NUM_SEEDS
-            print(f"  - Total evaluations:   {total_evals} ({len(query_ids) if query_ids else total_questions} queries × {BENCHMARK_NUM_SEEDS} seeds × {len(models)} model{'s' if len(models) > 1 else ''})")
-        print(f"  - Session:             {session_dir}")
-        print(f"  - Database:            {DATABASE_URL}")
-        print()
+        print(format_run_summary(
+            total_questions=len(list(paths.questions_dir.glob("*.md"))),
+            total_ground_truth=len(list(paths.queries_dir.glob("*.sql"))),
+            query_ids=query_ids,
+            models=models,
+            num_seeds=BENCHMARK_NUM_SEEDS,
+            session_dir=session_dir,
+            database_url=DATABASE_URL,
+            prompt_flags=asdict(PROMPT_FLAGS),
+        ))
 
         return 0
 

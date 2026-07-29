@@ -151,6 +151,8 @@ def generate_sql_with_retry(
         f"{result.prompt}\n\n"
         f"Your previous answer was:\n{result.raw_response}\n\n"
         f"{reason}\n"
+        # Wording deliberately overlaps PROMPT_STRICT_OUTPUT's emphatic rules text, so
+        # RETRY_ON_ERROR=true is not a clean ablation of retry independent of that flag.
         "Fix it. Return ONLY the corrected SQL query, no explanation, no markdown."
     )
     retried = _generate(retry_prompt, model or DEFAULT_MODEL, seed)

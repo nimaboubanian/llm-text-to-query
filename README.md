@@ -56,6 +56,21 @@ docker compose up -d --force-recreate ollama
 docker compose logs -f ollama
 ```
 
+### Prompt features
+
+All default off — the all-off state is the experimental baseline. Enable any
+combination in `compose.yml`'s `x-config` block to benchmark their effect:
+
+- `PROMPT_SCHEMA_DDL` — render the schema as `CREATE TABLE` DDL instead of prose
+- `PROMPT_SCHEMA_FK` — explicit foreign-key annotations in the schema
+- `PROMPT_SCHEMA_DESCRIPTIONS` — curated natural-language column descriptions
+- `PROMPT_SCHEMA_SAMPLES` — inline sample values for categorical columns
+- `PROMPT_XML_STRUCTURE` — wrap prompt sections in XML tags
+- `PROMPT_FEW_SHOT` — number of static few-shot examples (0-3)
+- `PROMPT_PLANNING` — ask the model to plan tables/joins as SQL comments before the query
+- `PROMPT_STRICT_OUTPUT` — emphatic "return only the SQL" output rules
+- `RETRY_ON_ERROR` — one retry with the Postgres error fed back on failure
+
 ## Mini Database
 
 An e-commerce dataset (customers, products, orders) loads automatically. Try: *"Top 3 best-selling products"*. Reset with `docker compose --profile benchmark down -v`.

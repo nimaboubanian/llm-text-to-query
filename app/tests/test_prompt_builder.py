@@ -81,3 +81,10 @@ def test_planning_scaffold_between_examples_and_question():
     assert "list the relevant tables and the join path as SQL comments" in prompt
     assert prompt.index("S") < prompt.index("join path") < prompt.index("Generate a query")
     assert "join path" not in build_prompt(BASELINE, "S", "Q")
+
+
+def test_flags_compose_in_fixed_order():
+    flags = replace(BASELINE, xml_structure=True, few_shot=2, planning=True, strict_output=True)
+    p = build_prompt(flags, "S", "Q")
+    assert p.index("<schema>") < p.index("<examples>") < p.index("join path") < p.index("<query>") < p.index("<rules>")
+    assert p.rstrip().endswith("no markdown.\n</rules>")

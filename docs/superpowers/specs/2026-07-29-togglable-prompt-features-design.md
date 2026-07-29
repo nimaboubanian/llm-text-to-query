@@ -211,3 +211,11 @@ per-step benchmark run is the integration test.
   roster grows.
 - Changes to SQL extraction, similarity scoring, or report formats beyond the
   flag manifest and retry counts.
+
+## Known limitations
+
+- `RETRY_ON_ERROR`'s retry prompt (`llm/ollama.py`) ends with wording that closely
+  resembles `PROMPT_STRICT_OUTPUT`'s emphatic rules text. A `RETRY_ON_ERROR=true`
+  run is therefore not a clean ablation of retry in isolation — retried queries
+  get strict-output-like phrasing regardless of the `PROMPT_STRICT_OUTPUT` flag's
+  own setting. Account for this when interpreting retry-ablation results.

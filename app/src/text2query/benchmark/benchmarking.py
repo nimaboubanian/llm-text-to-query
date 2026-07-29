@@ -134,9 +134,10 @@ def main():
     seeds = list(range(1, BENCHMARK_NUM_SEEDS + 1))
     if BENCHMARK_MODELS:
         models = BENCHMARK_MODELS
+        fallback_warning = None
     else:
         models = [DEFAULT_MODEL]
-        print(f"BENCHMARK_MODELS is empty — falling back to DEFAULT_MODEL ({DEFAULT_MODEL}).")
+        fallback_warning = f"BENCHMARK_MODELS is empty — falling back to DEFAULT_MODEL ({DEFAULT_MODEL})."
     multi_model = len(models) > 1
 
     start_time = time.monotonic()
@@ -159,6 +160,8 @@ def main():
             database_url=DATABASE_URL,
         ))
 
+        if fallback_warning:
+            print(fallback_warning)
         if skipped:
             print(f"  ⚠ Unknown query IDs (skipped): {', '.join(skipped)}")
         if query_ids is not None and not query_ids:

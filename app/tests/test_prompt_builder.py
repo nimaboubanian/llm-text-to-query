@@ -33,3 +33,14 @@ def test_flags_are_frozen():
     import dataclasses, pytest
     with pytest.raises(dataclasses.FrozenInstanceError):
         BASELINE.schema_ddl = True
+
+
+def test_strict_output_appends_emphatic_rules():
+    flags = replace(BASELINE, strict_output=True)
+    prompt = build_prompt(flags, "S", "Q")
+    assert prompt.endswith(
+        "Use PostgreSQL syntax. Only use tables and columns from the schema above.\n"
+        "Return ONLY the SQL query, nothing else.\n"
+        "No explanations, no comments, no markdown."
+    )
+    assert "Return ONLY" not in build_prompt(BASELINE, "S", "Q")

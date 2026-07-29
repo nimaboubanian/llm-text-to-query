@@ -50,3 +50,18 @@ def test_descriptions_flag_appends_comment_from_metadata():
 def test_unknown_columns_degrade_gracefully():
     out = render_schema(_engine(), PromptFlags(schema_descriptions=True), metadata={})
     assert "[" not in out  # no enrichment markers at all
+
+
+def test_samples_flag_appends_values():
+    meta = {"orders": {"o_status": {"desc": "status", "samples": ["'O' (open)", "'F' (fulfilled)"]}}}
+    out = render_schema(_engine(), PromptFlags(schema_samples=True), metadata=meta)
+    assert "values: 'O' (open), 'F' (fulfilled)" in out
+    assert "values:" not in render_schema(_engine(), PromptFlags(), metadata=meta)
+
+
+def test_desc_and_samples_combine_with_semicolon():
+    meta = {"orders": {"o_status": {"desc": "status", "samples": ["'O'"]}}}
+    out = render_schema(
+        _engine(), PromptFlags(schema_descriptions=True, schema_samples=True), metadata=meta
+    )
+    assert "[status; values: 'O']" in out

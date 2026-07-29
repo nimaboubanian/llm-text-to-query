@@ -5,6 +5,7 @@ import math
 import re
 import shutil
 import statistics
+import textwrap
 from datetime import datetime
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
@@ -23,6 +24,77 @@ CSV_FIELDNAMES = [
 
 METRICS = ("result_f1", "ast_similarity")
 METRIC_LABELS = {"result_f1": "Result F1", "ast_similarity": "AST similarity"}
+
+_LABEL_WIDTH = 18
+
+
+def _field(label: str, value: str) -> str:
+    """Render one aligned 'Label   value' row, wrapping long values under the value column."""
+    indent = " " * (2 + _LABEL_WIDTH)
+    wrapped = textwrap.wrap(value, width=78 - len(indent)) or [""]
+    rows = [f"  {label:<{_LABEL_WIDTH}}{wrapped[0]}"]
+    rows.extend(f"{indent}{cont}" for cont in wrapped[1:])
+    return "\n".join(rows)
+
+
+def _plural(n: int, singular: str, plural: str | None = None) -> str:
+    return singular if n == 1 else (plural or f"{singular}s")
+
+
+def format_session_header(
+    *,
+    scale_factor: int,
+    models: list[str],
+    total_available: int,
+    query_ids: list[str] | None,
+    num_seeds: int,
+    temperature: float,
+    max_tokens: int,
+    num_ctx: int,
+    prompt_flags: dict,
+    database_url: str,
+) -> str:
+    """Render the session header: what's being benchmarked, and how, printed once up front."""
+    rule = "═" * 60
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    lines = [
+        rule,
+        f"  text2query Benchmark · TPC-H (scale factor {scale_factor})",
+        f"  {timestamp}",
+        rule,
+    ]
+
+    model_label = "Models" if len(models) > 1 else "Model"
+    lines.append(_field(model_label, ", ".join(models)))
+
+    if query_ids is None:
+        queries_value = f"{total_available} of {total_available} (all)"
+    else:
+        queries_value = f"{len(query_ids)} of {total_available} ({', '.join(query_ids)})"
+    lines.append(_field("Queries", queries_value))
+
+    lines.append(_field("Seeds", str(num_seeds)))
+
+    benchmarked_count = len(query_ids) if query_ids else total_available
+    total_evals = benchmarked_count * num_seeds * len(models)
+    lines.append(_field(
+        "Evaluations",
+        f"{total_evals}  ({benchmarked_count} {_plural(benchmarked_count, 'query', 'queries')} "
+        f"× {num_seeds} {_plural(num_seeds, 'seed')} × {len(models)} {_plural(len(models), 'model')})",
+    ))
+
+    lines.append(_field("Metrics", ", ".join(METRIC_LABELS[m] for m in METRICS)))
+
+    enabled = [(k if isinstance(v, bool) else f"{k}={v}") for k, v in prompt_flags.items() if v]
+    lines.append(_field("Prompt features", ", ".join(enabled) if enabled else "none (baseline)"))
+
+    lines.append(_field("LLM params", f"temp={temperature}, max_tokens={max_tokens}, num_ctx={num_ctx}"))
+
+    lines.append(_field("Database", _redact_db_url(database_url)))
+
+    lines.append(rule)
+    return "\n".join(lines) + "\n"
 
 
 def _write_results_csv(results: list[dict], csv_path: Path) -> None:

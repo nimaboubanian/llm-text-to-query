@@ -3,7 +3,7 @@ from pathlib import Path
 
 from text2query.benchmark.reporting import (
     _compute_stats, generate_reports, format_run_summary,
-    METRICS, METRIC_LABELS,
+    METRICS, METRIC_LABELS, _field, format_session_header,
 )
 
 
@@ -108,3 +108,48 @@ def test_format_run_summary_multi_model_filtered_queries():
     assert "Models:              m1, m2" in summary
     assert "Total evaluations:   6 (2 queries × 3 seeds × 2 models)" in summary
     assert "Prompt features:     schema_ddl, few_shot=2" in summary
+
+
+def test_field_pads_label_and_wraps_long_values():
+    row = _field("Model", "qwen2.5-coder:7b")
+    assert row == "  Model             qwen2.5-coder:7b"
+
+    wrapped = _field("Prompt features", "a, " * 40 + "z")
+    lines = wrapped.split("\n")
+    assert len(lines) > 1
+    assert lines[0].startswith("  Prompt features  ")
+    # continuation lines line up under the value column, not the label
+    assert lines[1].startswith(" " * 20)
+
+
+def test_format_session_header_single_model_filtered_queries():
+    header = format_session_header(
+        scale_factor=1, models=["qwen2.5-coder:7b"], total_available=22,
+        query_ids=["01", "07", "16"], num_seeds=1,
+        temperature=0.1, max_tokens=2048, num_ctx=4096,
+        prompt_flags={"schema_ddl": True, "few_shot": 1, "planning": False},
+        database_url="postgresql://user:password@postgres:5432/testdb",
+    )
+    assert "TPC-H (scale factor 1)" in header
+    assert _field("Model", "qwen2.5-coder:7b") in header
+    assert _field("Queries", "3 of 22 (01, 07, 16)") in header
+    assert _field("Seeds", "1") in header
+    assert _field("Evaluations", "3  (3 queries × 1 seed × 1 model)") in header
+    assert _field("Metrics", "Result F1, AST similarity") in header
+    assert "schema_ddl, few_shot=1" in header
+    assert "planning" not in header  # False flags are omitted, not printed as planning=False
+    assert "password" not in header
+    assert _field("Database", "postgresql://***:***@postgres:5432/testdb") in header
+
+
+def test_format_session_header_multi_model_all_queries_no_flags():
+    header = format_session_header(
+        scale_factor=1, models=["m1", "m2"], total_available=22,
+        query_ids=None, num_seeds=3,
+        temperature=0.1, max_tokens=2048, num_ctx=4096,
+        prompt_flags={}, database_url="postgresql://u:p@host/db",
+    )
+    assert _field("Models", "m1, m2") in header
+    assert _field("Queries", "22 of 22 (all)") in header
+    assert _field("Evaluations", "132  (22 queries × 3 seeds × 2 models)") in header
+    assert _field("Prompt features", "none (baseline)") in header

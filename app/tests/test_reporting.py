@@ -153,3 +153,16 @@ def test_format_session_header_multi_model_all_queries_no_flags():
     assert _field("Queries", "22 of 22 (all)") in header
     assert _field("Evaluations", "132  (22 queries × 3 seeds × 2 models)") in header
     assert _field("Prompt features", "none (baseline)") in header
+
+
+def test_format_session_header_empty_query_ids_list():
+    # Empty list [] (distinct from None) means filter was requested but matched nothing
+    header = format_session_header(
+        scale_factor=1, models=["m1"], total_available=22,
+        query_ids=[], num_seeds=2,
+        temperature=0.1, max_tokens=2048, num_ctx=4096,
+        prompt_flags={}, database_url="postgresql://u:p@host/db",
+    )
+    assert _field("Queries", "0 of 22 ()") in header
+    # Evaluations must show 0, not fall back to total_available (22)
+    assert _field("Evaluations", "0  (0 queries × 2 seeds × 1 model)") in header

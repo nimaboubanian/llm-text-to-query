@@ -76,7 +76,7 @@ def format_session_header(
 
     lines.append(_field("Seeds", str(num_seeds)))
 
-    benchmarked_count = len(query_ids) if query_ids else total_available
+    benchmarked_count = len(query_ids) if query_ids is not None else total_available
     total_evals = benchmarked_count * num_seeds * len(models)
     lines.append(_field(
         "Evaluations",

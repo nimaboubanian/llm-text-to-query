@@ -20,6 +20,7 @@ x-config: &config
   PROMPT_STRICT_OUTPUT: "false"              # Emphatic "Return ONLY the SQL query" rules block
   PROMPT_SCHEMA_DESCRIPTIONS: "false"         # NL column descriptions from curated TPC-H metadata
   PROMPT_SCHEMA_SAMPLES: "false"              # Inline sample values for categorical columns
+  PROMPT_XML_STRUCTURE: "false"               # Wrap prompt sections in XML tags (<schema>, <rules>, ...)
 
   # --- Benchmark mode -----------------------------------------------------
   # Used by `docker compose --profile benchmark up benchmark`.

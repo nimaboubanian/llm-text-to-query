@@ -44,3 +44,13 @@ def test_strict_output_appends_emphatic_rules():
         "No explanations, no comments, no markdown."
     )
     assert "Return ONLY" not in build_prompt(BASELINE, "S", "Q")
+
+
+def test_xml_structure_wraps_sections_in_order():
+    flags = replace(BASELINE, xml_structure=True)
+    prompt = build_prompt(flags, "SCHEMA_TEXT", "QUESTION_TEXT")
+    assert "<schema>\nGiven the following database schema:\nSCHEMA_TEXT\n</schema>" in prompt
+    assert "<query>\nGenerate a query to answer: QUESTION_TEXT\n</query>" in prompt
+    assert "<rules>\nUse PostgreSQL syntax" in prompt and prompt.rstrip().endswith("</rules>")
+    assert prompt.index("<schema>") < prompt.index("<query>") < prompt.index("<rules>")
+    assert "<" not in build_prompt(BASELINE, "S", "Q")  # baseline untouched

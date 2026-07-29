@@ -7,9 +7,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pandas as pd
 
-from text2query.core.config import DATABASE_URL, DEFAULT_MODEL, LOG_LEVEL, SERVER_PORT
+from text2query.core.config import DATABASE_URL, DEFAULT_MODEL, LOG_LEVEL, PROMPT_FLAGS, SERVER_PORT
 from text2query.database.executor import execute_sql_query
-from text2query.database.schema import create_engine_for_database, get_database_schema_string
+from text2query.database.schema import create_engine_for_database, render_schema
 from text2query.llm import ollama
 
 logger = logging.getLogger(__name__)
@@ -99,7 +99,7 @@ class AppContext:
 
     def __init__(self):
         self.engine = create_engine_for_database(DATABASE_URL)
-        self.schema = get_database_schema_string(self.engine)
+        self.schema = render_schema(self.engine, PROMPT_FLAGS)
         self.llm = ollama
         self.llm.warmup(DEFAULT_MODEL)
 

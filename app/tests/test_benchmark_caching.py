@@ -30,7 +30,7 @@ def test_identical_config_resumes_from_cache(tmp_path):
     with patch("text2query.llm.ollama.generate_sql", side_effect=mock_generate), \
          patch("text2query.llm.ollama.warmup", return_value=True), \
          patch("text2query.benchmark.runner.create_engine_for_database"), \
-         patch("text2query.benchmark.runner.get_database_schema_string", return_value="schema"):
+         patch("text2query.benchmark.runner.render_schema", return_value="schema"):
 
         run_llm_generation(questions_dir, output_dir, "db://url", "test-model", seeds=None)
         assert call_count["n"] == 1
@@ -57,7 +57,7 @@ def test_model_change_invalidates_and_regenerates(tmp_path, capsys):
     with patch("text2query.llm.ollama.generate_sql", side_effect=mock_generate), \
          patch("text2query.llm.ollama.warmup", return_value=True), \
          patch("text2query.benchmark.runner.create_engine_for_database"), \
-         patch("text2query.benchmark.runner.get_database_schema_string", return_value="schema"):
+         patch("text2query.benchmark.runner.render_schema", return_value="schema"):
 
         run_llm_generation(questions_dir, output_dir, "db://url", "model-a", seeds=None)
         assert call_count["n"] == 1
@@ -85,7 +85,7 @@ def test_schema_change_invalidates_and_regenerates(tmp_path, capsys):
     with patch("text2query.llm.ollama.generate_sql", side_effect=mock_generate), \
          patch("text2query.llm.ollama.warmup", return_value=True), \
          patch("text2query.benchmark.runner.create_engine_for_database"), \
-         patch("text2query.benchmark.runner.get_database_schema_string", side_effect=["schema-v1", "schema-v2"]):
+         patch("text2query.benchmark.runner.render_schema", side_effect=["schema-v1", "schema-v2"]):
 
         run_llm_generation(questions_dir, output_dir, "db://url", "test-model", seeds=None)
         assert call_count["n"] == 1
@@ -112,7 +112,7 @@ def test_temperature_change_invalidates_and_regenerates(tmp_path, capsys, monkey
     with patch("text2query.llm.ollama.generate_sql", side_effect=mock_generate), \
          patch("text2query.llm.ollama.warmup", return_value=True), \
          patch("text2query.benchmark.runner.create_engine_for_database"), \
-         patch("text2query.benchmark.runner.get_database_schema_string", return_value="schema"):
+         patch("text2query.benchmark.runner.render_schema", return_value="schema"):
 
         monkeypatch.setattr("text2query.benchmark.runner.LLM_TEMPERATURE", 0.1)
         run_llm_generation(questions_dir, output_dir, "db://url", "test-model", seeds=None)

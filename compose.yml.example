@@ -22,6 +22,7 @@ x-config: &config
   PROMPT_SCHEMA_SAMPLES: "false"              # Inline sample values for categorical columns
   PROMPT_XML_STRUCTURE: "false"               # Wrap prompt sections in XML tags (<schema>, <rules>, ...)
   PROMPT_FEW_SHOT: "0"                        # Static few-shot examples: 0=off, max 3 (values above 3 clamp)
+  PROMPT_PLANNING: "false"                    # Ask model to plan tables/joins as SQL comments before the query
 
   # --- Benchmark mode -----------------------------------------------------
   # Used by `docker compose --profile benchmark up benchmark`.

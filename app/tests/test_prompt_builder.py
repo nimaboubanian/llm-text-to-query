@@ -73,3 +73,11 @@ def test_few_shot_examples_avoid_tpch_tables():
     assert len(FEW_SHOT_EXAMPLES) == 3
     for _, sql in FEW_SHOT_EXAMPLES:
         assert not any(t in sql.lower() for t in tpch)
+
+
+def test_planning_scaffold_between_examples_and_question():
+    flags = replace(BASELINE, planning=True)
+    prompt = build_prompt(flags, "S", "Q")
+    assert "list the relevant tables and the join path as SQL comments" in prompt
+    assert prompt.index("S") < prompt.index("join path") < prompt.index("Generate a query")
+    assert "join path" not in build_prompt(BASELINE, "S", "Q")

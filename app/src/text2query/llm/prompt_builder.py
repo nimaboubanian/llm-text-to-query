@@ -15,6 +15,11 @@ _RULES_STRICT = (
     "No explanations, no comments, no markdown."
 )
 
+_PLANNING = (
+    "Before writing the query: list the relevant tables and the join path as SQL "
+    "comments (lines starting with --). Then write the final SQL query."
+)
+
 
 # Static, schema-agnostic pairs (Spider-style; deliberately NOT TPC-H tables,
 # so small models can't copy structure instead of reading the user's question).
@@ -57,6 +62,8 @@ def build_prompt(flags: PromptFlags, schema_str: str, question: str) -> str:
     ]
     if flags.few_shot > 0:
         sections.append(("examples", _examples_section(flags.few_shot)))
+    if flags.planning:
+        sections.append((None, _PLANNING))
     sections.append(("query", f"Generate a query to answer: {question}"))
     sections.append(("rules", rules))
     return "\n\n".join(_wrap(tag, body, flags.xml_structure) for tag, body in sections)

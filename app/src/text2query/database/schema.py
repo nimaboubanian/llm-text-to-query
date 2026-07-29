@@ -35,10 +35,11 @@ def _render_prose(inspector, flags: PromptFlags, meta: dict) -> str:
                 part += f" [{comment}]"
             cols.append(part)
         line = f"Table '{table}': {', '.join(cols)}"
-        fks = [f"FK({','.join(fk['constrained_columns'])}) -> {fk['referred_table']}"
-               for fk in inspector.get_foreign_keys(table)]
-        if fks:
-            line += f". {' '.join(fks)}"
+        if flags.schema_fk:
+            fks = [f"FK({','.join(fk['constrained_columns'])}) -> {fk['referred_table']}"
+                   for fk in inspector.get_foreign_keys(table)]
+            if fks:
+                line += f". {' '.join(fks)}"
         lines.append(line)
     return "\n".join(lines)
 
@@ -47,9 +48,16 @@ def _render_ddl(inspector, flags: PromptFlags, meta: dict) -> str:
     stmts = []
     for table in inspector.get_table_names():
         table_meta = meta.get(table, {})
+        fk_targets: dict[str, str] = {}
+        if flags.schema_fk:
+            for fk in inspector.get_foreign_keys(table):
+                for src, dst in zip(fk["constrained_columns"], fk["referred_columns"]):
+                    fk_targets[src] = f"{fk['referred_table']}({dst})"
         entries = []
         for c in inspector.get_columns(table):
             decl = f"{c['name']} {c['type']}"
+            if c["name"] in fk_targets:
+                decl += f" REFERENCES {fk_targets[c['name']]}"
             entries.append((decl, _column_comment(table_meta, c["name"], flags)))
         pk = inspector.get_pk_constraint(table).get("constrained_columns") or []
         if pk:

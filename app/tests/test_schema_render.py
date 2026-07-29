@@ -16,9 +16,9 @@ def _engine():
 
 
 def test_prose_mode_matches_legacy_format():
-    out = render_schema(_engine(), PromptFlags())
+    out = render_schema(_engine(), PromptFlags(schema_fk=True))
     assert "Table 'orders': o_orderkey (INTEGER), o_status (CHAR(1))" in out
-    assert "FK(l_orderkey) -> orders" in out  # legacy FK notation kept until Task 3
+    assert "FK(l_orderkey) -> orders" in out  # legacy FK notation when flag enabled
 
 
 def test_ddl_mode_emits_create_table():
@@ -27,3 +27,13 @@ def test_ddl_mode_emits_create_table():
     assert "o_orderkey INTEGER" in out
     assert "PRIMARY KEY (o_orderkey)" in out
     assert "REFERENCES" not in out  # FK is a separate flag (Task 3)
+
+
+def test_fk_flag_controls_prose_fk_notation():
+    assert "FK(" not in render_schema(_engine(), PromptFlags())
+    assert "FK(l_orderkey) -> orders" in render_schema(_engine(), PromptFlags(schema_fk=True))
+
+
+def test_fk_flag_adds_references_in_ddl():
+    out = render_schema(_engine(), PromptFlags(schema_ddl=True, schema_fk=True))
+    assert "l_orderkey INTEGER REFERENCES orders(o_orderkey)" in out

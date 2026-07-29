@@ -16,6 +16,7 @@ x-config: &config
 
   # --- Prompt features (all default "false"/"0" = research baseline) --------
   PROMPT_SCHEMA_DDL: "false"                 # Schema as CREATE TABLE DDL instead of prose
+  PROMPT_SCHEMA_FK: "false"                  # Explicit FK annotations (REFERENCES in DDL, FK() notation in prose)
   PROMPT_STRICT_OUTPUT: "false"              # Emphatic "Return ONLY the SQL query" rules block
 
   # --- Benchmark mode -----------------------------------------------------

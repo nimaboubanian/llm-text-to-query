@@ -22,9 +22,11 @@ def run_llm_generation(
     seeds: list[int] | None = None,
     query_ids: list[str] | None = None,
 ) -> None:
-    for seed in seeds or [1]:
+    seeds = seeds or [1]
+    for seed in seeds:
         seed_dir = output_dir / f"seed_{seed}"
-        print(f"\n  --- Seed {seed} ---")
+        if len(seeds) > 1:
+            print(f"\n  --- Seed {seed} ---")
         _run_single_generation(
             questions_dir, seed_dir, db_url, model, seed=seed, query_ids=query_ids,
         )
@@ -73,7 +75,7 @@ def _run_single_generation(
     to_process = [q for q in question_files if q.stem not in existing]
 
     if not to_process:
-        print(f"  ✓ All {total} queries already generated in {output_dir}")
+        print(f"  ✓ All {total} queries already generated")
         return
 
     seed_label = f" (seed={seed})" if seed is not None else ""
@@ -126,7 +128,7 @@ def _run_single_generation(
             on_item_done(" ✗")
             errors.append((query_id, error or "No SQL extracted"))
 
-    print(f"  ✓ Generated {success} queries -> {output_dir}")
+    print(f"  ✓ Generated {success} queries")
     if retries:
         print(f"  ↻ {retries} queries needed a retry")
     if errors:
@@ -142,10 +144,12 @@ def execute_generated_queries(
     seeds: list[int] | None = None,
     query_ids: list[str] | None = None,
 ) -> None:
-    for seed in seeds or [1]:
+    seeds = seeds or [1]
+    for seed in seeds:
         seed_queries = queries_dir / f"seed_{seed}"
         seed_answers = answers_dir / f"seed_{seed}"
-        print(f"\n  --- Seed {seed} ---")
+        if len(seeds) > 1:
+            print(f"\n  --- Seed {seed} ---")
         _execute_single(seed_queries, seed_answers, db_url, query_ids=query_ids)
 
 
@@ -181,7 +185,7 @@ def _execute_single(
     to_process = [q for q in query_files if q.stem not in existing]
 
     if not to_process:
-        print(f"  ✓ All {total} answer files already exist in {answers_dir}")
+        print(f"  ✓ All {total} answer files already exist")
         return
 
     cache_label = f", {len(existing)} cached" if existing else ""

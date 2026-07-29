@@ -264,7 +264,7 @@ def execute_queries_to_csv(
 
     success = sum(1 for r in results if r["status"] == "success")
     errors = sum(1 for r in results if r["status"] == "error")
-    print(f"  ✓ Executed {success} queries -> {output_dir}")
+    print(f"  ✓ Executed {success} queries")
     if errors > 0:
         print(f"  ⚠ {errors} failed:")
         for r in results:

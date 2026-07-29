@@ -47,6 +47,30 @@ def test_run_llm_generation_multi_seed_creates_subdirs(tmp_path):
     assert captured_seeds == [1, 2, 3]
 
 
+def test_run_llm_generation_single_seed_omits_seed_banner(tmp_path, capsys):
+    questions_dir = tmp_path / "questions"
+    questions_dir.mkdir()
+    (questions_dir / "01.md").write_text('# Business Question:\n  "test?"\n')
+    output_dir = tmp_path / "out"
+
+    import text2query.benchmark.runner as runner_mod
+    from unittest.mock import patch
+    from text2query.llm.ollama import GenerationResult
+
+    with patch.object(runner_mod, "create_engine_for_database", lambda url: None), \
+         patch.object(runner_mod, "render_schema", lambda engine, flags, metadata=None: "schema"), \
+         patch.object(runner_mod, "load_tpch_metadata", lambda: {}), \
+         patch.object(runner_mod.ollama, "warmup", lambda model: True), \
+         patch.object(
+             runner_mod.ollama, "generate_sql_with_retry",
+             lambda *a, **kw: GenerationResult(sql="SELECT 1", raw_response="SELECT 1", prompt="p", error=None, retried=False),
+         ):
+        run_llm_generation(questions_dir, output_dir, "postgresql://fake", "m1", seeds=[1])
+
+    out = capsys.readouterr().out
+    assert "--- Seed" not in out
+
+
 def test_run_llm_generation_caching_per_seed(tmp_path):
     """Already-generated seed dirs should be skipped."""
     questions_dir = tmp_path / "questions"

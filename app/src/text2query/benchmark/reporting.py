@@ -21,6 +21,9 @@ CSV_FIELDNAMES = [
     "ast_similarity", "error_category",
 ]
 
+METRICS = ("result_f1", "ast_similarity")
+METRIC_LABELS = {"result_f1": "Result F1", "ast_similarity": "AST similarity"}
+
 
 def _write_results_csv(results: list[dict], csv_path: Path) -> None:
     """Write enriched evaluation results to CSV with the fixed column schema."""
@@ -137,7 +140,6 @@ def generate_reports(
 
     aggregated = []
     all_flat_results = []
-    metrics_to_aggregate = ["result_f1", "ast_similarity"]
 
     for qid in query_ids:
         seed_results = []
@@ -168,7 +170,7 @@ def generate_reports(
 
         # Aggregate statistics across seeds
         query_agg = {"query_id": int(qid)}
-        for metric in metrics_to_aggregate:
+        for metric in METRICS:
             query_agg[metric] = _compute_stats([r.get(metric) for r in seed_results])
 
         query_agg["per_seed"] = seed_results
@@ -246,10 +248,6 @@ def generate_cross_model_report(
     # {model: {qid: {metric: stats_dict}}}
     model_aggregated = {}
 
-    metrics_to_aggregate = [
-        "result_f1", "ast_similarity",
-    ]
-
     for model in models:
         model_aggregated[model] = {}
 
@@ -268,7 +266,7 @@ def generate_cross_model_report(
                 all_rows.append(sim)
 
             agg = {}
-            for metric in metrics_to_aggregate:
+            for metric in METRICS:
                 agg[metric] = _compute_stats([r.get(metric) for r in seed_results])
             ok_count = sum(1 for r in seed_results if r["status"] == "ok")
             n = len(seed_results)

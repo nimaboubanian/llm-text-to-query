@@ -1,7 +1,16 @@
 import csv
 from pathlib import Path
 
-from text2query.benchmark.reporting import _compute_stats, generate_reports, format_run_summary
+from text2query.benchmark.reporting import (
+    _compute_stats, generate_reports, format_run_summary,
+    METRICS, METRIC_LABELS,
+)
+
+
+def test_metrics_constant_has_matching_labels():
+    assert METRICS == ("result_f1", "ast_similarity")
+    assert METRIC_LABELS == {"result_f1": "Result F1", "ast_similarity": "AST similarity"}
+    assert set(METRICS) == set(METRIC_LABELS)
 
 
 def test_compute_stats_basic():

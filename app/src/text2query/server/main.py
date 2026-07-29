@@ -8,7 +8,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import pandas as pd
 
 from text2query.core.config import DATABASE_URL, DEFAULT_MODEL, LOG_LEVEL, PROMPT_FLAGS, SERVER_PORT
-from text2query.database.executor import execute_sql_query
+from text2query.database.executor import execute_sql_query, explain_error
 from text2query.database.schema import create_engine_for_database, load_tpch_metadata, render_schema
 from text2query.llm import ollama
 
@@ -74,7 +74,9 @@ def parse_question(raw_body: bytes) -> str:
 
 def handle_query(llm, engine, schema: str, model: str, question: str) -> dict:
     """Generate SQL for the question, execute it, and return the response payload."""
-    result = llm.generate_sql(question, schema, model)
+    result = llm.generate_sql_with_retry(
+        question, schema, model, validate=lambda sql: explain_error(engine, sql),
+    )
     if result.error:
         raise RequestError(422, result.error)
     if not result.sql:

@@ -3,6 +3,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 from text2query.core.config import LLM_MAX_TOKENS, LLM_TEMPERATURE, PROMPT_FLAGS
+from text2query.database.executor import explain_error
 from text2query.database.schema import create_engine_for_database, load_tpch_metadata, render_schema
 from text2query.llm import ollama
 from text2query.llm.prompt_builder import build_prompt
@@ -56,6 +57,7 @@ def _run_single_generation(
         temperature=LLM_TEMPERATURE,
         max_tokens=LLM_MAX_TOKENS,
         seed=seed,
+        retry_on_error=PROMPT_FLAGS.retry_on_error,
     )
 
     cached_fingerprint = read_manifest_fingerprint(output_dir)
@@ -82,6 +84,7 @@ def _run_single_generation(
     print(" ✓" if ollama.warmup(model) else " ⚠ (warmup failed, continuing)")
 
     success = 0
+    retries = 0
     errors = []
     process_total = len(to_process)
 
@@ -95,11 +98,16 @@ def _run_single_generation(
 
         on_item_start(i, process_total, f"Q{query_id}")
 
-        result = ollama.generate_sql(question, schema, model, seed=seed)
+        result = ollama.generate_sql_with_retry(
+            question, schema, model, seed=seed,
+            validate=lambda sql: explain_error(engine, sql),
+        )
         generated_sql = result.sql
         raw_response = result.raw_response
         prompt = result.prompt
         error = result.error
+        if result.retried:
+            retries += 1
 
         if prompt is not None:
             (output_dir / f"{query_id}.prompt").write_text(prompt)
@@ -119,6 +127,8 @@ def _run_single_generation(
             errors.append((query_id, error or "No SQL extracted"))
 
     print(f"  ✓ Generated {success} queries -> {output_dir}")
+    if retries:
+        print(f"  ↻ {retries} queries needed a retry")
     if errors:
         print(f"  ⚠ {len(errors)} failed:")
         for query_id, error in errors:

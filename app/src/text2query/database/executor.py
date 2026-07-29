@@ -32,3 +32,14 @@ def execute_sql_query(engine, query: str) -> ExecutionResult:
     except Exception as e:
         logger.warning("Query execution failed: %s", e)
         return ExecutionResult(None, str(e))
+
+
+def explain_error(engine, sql: str) -> str | None:
+    """Cheap validity probe: EXPLAIN surfaces syntax/schema errors without running the query."""
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SET TRANSACTION READ ONLY"))
+            conn.execute(text(f"EXPLAIN {sql}"))
+        return None
+    except Exception as e:
+        return str(e)

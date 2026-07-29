@@ -22,6 +22,8 @@ class GenerationResult:
     raw_response: str | None = None
     prompt: str | None = None
     error: str | None = None
+    retried: bool = False
+    retry_reason: str | None = None
 
 
 def _post_json(url: str, payload: dict, timeout: int) -> tuple[int, dict]:
@@ -69,7 +71,10 @@ def generate_sql(
 ) -> GenerationResult:
     selected_model = model or DEFAULT_MODEL
     prompt = build_prompt(flags or PROMPT_FLAGS, schema_str, user_query)
+    return _generate(prompt, selected_model, seed)
 
+
+def _generate(prompt: str, selected_model: str, seed: int | None) -> GenerationResult:
     options = {
         "temperature": LLM_TEMPERATURE,
         "num_predict": LLM_MAX_TOKENS,
@@ -115,3 +120,40 @@ def generate_sql(
     except urllib.error.URLError as e:
         logger.warning("Generate request failed (model=%r): %s", selected_model, e)
         return GenerationResult(sql=None, prompt=prompt, error=f"Connection failed: {e}")
+
+
+def generate_sql_with_retry(
+    user_query: str,
+    schema_str: str,
+    model: str | None = None,
+    seed: int | None = None,
+    validate=None,
+    flags=None,
+) -> GenerationResult:
+    """Single execution-guided retry: re-prompt once with the failure appended.
+
+    `validate(sql)` returns an error string (fed back to the model) or None.
+    Transport errors (timeout, 404) are returned as-is — feedback can't fix those.
+    """
+    flags = flags or PROMPT_FLAGS
+    result = generate_sql(user_query, schema_str, model, seed=seed, flags=flags)
+    if not flags.retry_on_error or result.error:
+        return result
+
+    if result.sql is None:
+        reason = "Your previous answer contained no SQL query."
+    elif validate is not None and (err := validate(result.sql)):
+        reason = f"Your previous query failed with this PostgreSQL error: {err}"
+    else:
+        return result
+
+    retry_prompt = (
+        f"{result.prompt}\n\n"
+        f"Your previous answer was:\n{result.raw_response}\n\n"
+        f"{reason}\n"
+        "Fix it. Return ONLY the corrected SQL query, no explanation, no markdown."
+    )
+    retried = _generate(retry_prompt, model or DEFAULT_MODEL, seed)
+    retried.retried = True
+    retried.retry_reason = reason
+    return retried

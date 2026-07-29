@@ -44,7 +44,7 @@ def test_parse_question_strips_and_returns_valid_input():
 
 def test_handle_query_generation_error_maps_to_422():
     llm = MagicMock()
-    llm.generate_sql.return_value = GenerationResult(sql=None, error="Model 'x' not found.")
+    llm.generate_sql_with_retry.return_value = GenerationResult(sql=None, error="Model 'x' not found.")
 
     with pytest.raises(RequestError) as exc:
         handle_query(llm, engine=MagicMock(), schema="s", model="m", question="q")
@@ -55,7 +55,7 @@ def test_handle_query_generation_error_maps_to_422():
 
 def test_handle_query_no_sql_extracted_maps_to_422():
     llm = MagicMock()
-    llm.generate_sql.return_value = GenerationResult(sql=None, raw_response="I can't help with that")
+    llm.generate_sql_with_retry.return_value = GenerationResult(sql=None, raw_response="I can't help with that")
 
     with pytest.raises(RequestError) as exc:
         handle_query(llm, engine=MagicMock(), schema="s", model="m", question="q")
@@ -65,7 +65,7 @@ def test_handle_query_no_sql_extracted_maps_to_422():
 
 def test_handle_query_database_error_maps_to_502(monkeypatch):
     llm = MagicMock()
-    llm.generate_sql.return_value = GenerationResult(sql="SELECT 1;")
+    llm.generate_sql_with_retry.return_value = GenerationResult(sql="SELECT 1;")
 
     monkeypatch.setattr(
         "text2query.server.main.execute_sql_query",
@@ -81,7 +81,7 @@ def test_handle_query_database_error_maps_to_502(monkeypatch):
 
 def test_handle_query_success_returns_response_payload(monkeypatch):
     llm = MagicMock()
-    llm.generate_sql.return_value = GenerationResult(sql="SELECT name FROM customers;")
+    llm.generate_sql_with_retry.return_value = GenerationResult(sql="SELECT name FROM customers;")
 
     df = pd.DataFrame({"name": ["Alice", "Bob"]})
     monkeypatch.setattr(
@@ -101,7 +101,7 @@ def test_handle_query_success_returns_response_payload(monkeypatch):
 def test_handle_query_serializes_decimal_date_and_nan(monkeypatch):
     """Postgres NUMERIC/DATE/NULL values must not crash json.dumps (regression)."""
     llm = MagicMock()
-    llm.generate_sql.return_value = GenerationResult(sql="SELECT * FROM orders;")
+    llm.generate_sql_with_retry.return_value = GenerationResult(sql="SELECT * FROM orders;")
 
     df = pd.DataFrame({
         "name": ["Alice", "Bob"],
@@ -131,7 +131,7 @@ def _serve(ctx):
 def test_handler_serves_health_and_query_end_to_end(monkeypatch):
     """Exercise real HTTP routing through the Handler, not just the pure helpers."""
     llm = MagicMock()
-    llm.generate_sql.return_value = GenerationResult(sql="SELECT name, price FROM products;")
+    llm.generate_sql_with_retry.return_value = GenerationResult(sql="SELECT name, price FROM products;")
     df = pd.DataFrame({"name": ["Widget"], "price": [Decimal("9.99")]})
     monkeypatch.setattr(
         "text2query.server.main.execute_sql_query",

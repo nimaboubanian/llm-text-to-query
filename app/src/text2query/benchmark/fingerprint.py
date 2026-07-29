@@ -16,6 +16,7 @@ class GenerationFingerprint:
     temperature: float
     max_tokens: int
     seed: int | None
+    retry_on_error: bool = False
 
     @property
     def hash(self) -> str:

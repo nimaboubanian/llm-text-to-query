@@ -54,3 +54,22 @@ def test_xml_structure_wraps_sections_in_order():
     assert "<rules>\nUse PostgreSQL syntax" in prompt and prompt.rstrip().endswith("</rules>")
     assert prompt.index("<schema>") < prompt.index("<query>") < prompt.index("<rules>")
     assert "<" not in build_prompt(BASELINE, "S", "Q")  # baseline untouched
+
+
+def test_few_shot_inserts_n_examples_between_schema_and_question():
+    flags = replace(BASELINE, few_shot=2)
+    prompt = build_prompt(flags, "S", "Q")
+    assert prompt.count("Question:") == 2 and prompt.count("SQL:") == 2
+    assert prompt.index("S") < prompt.index("Question:") < prompt.index("Generate a query")
+
+
+def test_few_shot_zero_means_no_examples():
+    assert "Question:" not in build_prompt(BASELINE, "S", "Q")
+
+
+def test_few_shot_examples_avoid_tpch_tables():
+    from text2query.llm.prompt_builder import FEW_SHOT_EXAMPLES
+    tpch = ("lineitem", "orders", "customer", "supplier", "partsupp", "nation", "region")
+    assert len(FEW_SHOT_EXAMPLES) == 3
+    for _, sql in FEW_SHOT_EXAMPLES:
+        assert not any(t in sql.lower() for t in tpch)

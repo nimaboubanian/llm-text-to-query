@@ -145,14 +145,14 @@ def test_format_run_summary_multi_model_shows_per_model_row():
 
 def test_field_pads_label_and_wraps_long_values():
     row = _field("Model", "qwen2.5-coder:7b")
-    assert row == "  Model             qwen2.5-coder:7b"
+    assert row == "  Model            qwen2.5-coder:7b"
 
     wrapped = _field("Prompt features", "a, " * 40 + "z")
     lines = wrapped.split("\n")
     assert len(lines) > 1
     assert lines[0].startswith("  Prompt features  ")
     # continuation lines line up under the value column, not the label
-    assert lines[1].startswith(" " * 20)
+    assert lines[1].startswith(" " * 19)
 
 
 def test_format_session_header_single_model_filtered_queries():

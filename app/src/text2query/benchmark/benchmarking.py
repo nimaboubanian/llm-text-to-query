@@ -161,12 +161,14 @@ def main():
         ))
 
         if fallback_warning:
-            print(fallback_warning)
+            print(f"  ⚠ {fallback_warning}")
         if skipped:
             print(f"  ⚠ Unknown query IDs (skipped): {', '.join(skipped)}")
         if query_ids is not None and not query_ids:
             print("  ✗ No valid query IDs remain after filtering — aborting")
             sys.exit(1)
+        if fallback_warning or skipped:
+            print()
 
         # === Phase 1: Setup (shared across all models) ===
         print(_banner("Setup"))
@@ -190,12 +192,6 @@ def main():
         print()
 
         # === Phase 2+3: Per-model benchmark ===
-        if multi_model:
-            print("═" * 60)
-            print(f"  Multi-Model Benchmark: {len(models)} models")
-            print("═" * 60)
-            print()
-
         precomputed = {}
         for i, model in enumerate(models, 1):
             if multi_model:

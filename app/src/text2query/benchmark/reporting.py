@@ -25,13 +25,13 @@ CSV_FIELDNAMES = [
 METRICS = ("result_f1", "ast_similarity")
 METRIC_LABELS = {"result_f1": "Result F1", "ast_similarity": "AST similarity"}
 
-_LABEL_WIDTH = 18
+_LABEL_WIDTH = 17
 
 
 def _field(label: str, value: str) -> str:
     """Render one aligned 'Label   value' row, wrapping long values under the value column."""
     indent = " " * (2 + _LABEL_WIDTH)
-    wrapped = textwrap.wrap(value, width=78 - len(indent)) or [""]
+    wrapped = textwrap.wrap(value, width=60 - len(indent), break_long_words=False) or [""]
     rows = [f"  {label:<{_LABEL_WIDTH}}{wrapped[0]}"]
     rows.extend(f"{indent}{cont}" for cont in wrapped[1:])
     return "\n".join(rows)
@@ -424,7 +424,7 @@ def _move_contents(src_dir: Path, dst_dir: Path) -> None:
 
 def _redact_db_url(db_url: str) -> str:
     """Strip user:password from a database URL before persisting it in a provenance record."""
-    return re.sub(r"//[^@/]*@", "//***:***@", db_url)
+    return re.sub(r"//[^/]*@", "//***:***@", db_url)
 
 
 def write_session_manifest(

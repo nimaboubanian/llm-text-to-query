@@ -16,7 +16,7 @@ def _make_question_file(questions_dir: Path, qid: str, question: str):
     (questions_dir / f"{qid}.md").write_text(content)
 
 
-def test_run_llm_generation_multi_seed_creates_subdirs(tmp_path):
+def test_run_llm_generation_multi_seed_creates_subdirs(tmp_path, capsys):
     """When seeds=[1,2,3], output goes to seed_1/, seed_2/, seed_3/ subdirs."""
     questions_dir = tmp_path / "questions"
     output_dir = tmp_path / "output"
@@ -45,6 +45,12 @@ def test_run_llm_generation_multi_seed_creates_subdirs(tmp_path):
 
     # Seeds should be passed to the LLM
     assert captured_seeds == [1, 2, 3]
+
+    # The seed banner should announce each seed as it starts
+    out = capsys.readouterr().out
+    assert "  --- Seed 1 ---" in out
+    assert "  --- Seed 2 ---" in out
+    assert "  --- Seed 3 ---" in out
 
 
 def test_run_llm_generation_single_seed_omits_seed_banner(tmp_path, capsys):

@@ -154,14 +154,24 @@ All nine audit findings are addressed:
 - Exactly one blank line separates stages.
 - `_redact_db_url` applies to the header's `Database` line.
 
-Setup phase on a warm cache, ~18 lines reduced to ~5:
+Setup phase on a warm cache, ~18 lines reduced to ~8. What actually disappeared
+is the duplicated wrapper *titles* around each step — the underlying pipeline
+functions (`validate_directories`, `check_database_readiness`,
+`generate_answers` in `pipeline.py`) keep their own
+progress-line-then-result-line pairs, since those lines carry real information
+(which specific thing succeeded) that a single collapsed line would lose, and
+matter more on a cold cache where the underlying work takes real time:
 
 ```
 ─── Setup ──────────────────────────────────────────────────
-  ✓ TPC-H data (cached, scale factor 1)
-  ✓ Questions & queries validated (22 each)
-  ✓ Database ready
-  ✓ Answer files complete (22)
+  ✓ Using cached data: benchmark/.tpch/data/sf1
+  Validating directories...
+  ✓ Questions: benchmark/.tpch/questions
+  ✓ Queries: benchmark/.tpch/queries
+  Checking database readiness...
+  ✓ Database is ready
+  Checking answer files...
+  ✓ All 22 answer files exist
 ```
 
 Lines expand naturally when work actually occurs — a cold cache still narrates

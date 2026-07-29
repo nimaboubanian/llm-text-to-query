@@ -23,3 +23,10 @@ def test_session_manifest_strips_credentials(tmp_path):
 
 def test_redact_db_url_handles_url_without_credentials():
     assert _redact_db_url("postgresql://postgres:5432/testdb") == "postgresql://postgres:5432/testdb"
+
+
+def test_redact_db_url_fully_redacts_password_containing_at_sign():
+    redacted = _redact_db_url("postgresql://user:p@ss@host/db")
+    assert redacted == "postgresql://***:***@host/db"
+    assert "p@ss" not in redacted
+    assert "user" not in redacted

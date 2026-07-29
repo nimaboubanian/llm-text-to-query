@@ -16,9 +16,18 @@ def test_banner_pads_to_60_columns():
 
 
 def test_banner_handles_long_titles_without_going_negative():
-    line = _banner("Cross-Model Comparison")
-    assert line.startswith("─── Cross-Model Comparison ")
-    assert len(line) >= len("─── Cross-Model Comparison ") + 3
+    # Long enough that "─── {title} " exceeds 57 chars, so 60 - len(prefix)
+    # goes negative and only the max(3, ...) floor keeps `"─" * n` from
+    # silently collapsing to "" (Python doesn't raise on negative repeat counts).
+    title = "X" * 60
+    prefix = f"─── {title} "
+    assert len(prefix) > 57  # sanity: this really exercises the floor guard
+
+    line = _banner(title)
+    assert line  # non-empty: the floor guard fired instead of "─" * -5 -> ""
+    assert line.startswith(prefix)
+    assert line.endswith("───")
+    assert line == prefix + "───"
 
 
 def test_no_filter_requested_returns_none():

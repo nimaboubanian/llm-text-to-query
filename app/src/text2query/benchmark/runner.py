@@ -26,7 +26,7 @@ def run_llm_generation(
     for seed in seeds:
         seed_dir = output_dir / f"seed_{seed}"
         if len(seeds) > 1:
-            print(f"\n  --- Seed {seed} ---")
+            print(f"  --- Seed {seed} ---")
         _run_single_generation(
             questions_dir, seed_dir, db_url, model, seed=seed, query_ids=query_ids,
         )
@@ -149,7 +149,7 @@ def execute_generated_queries(
         seed_queries = queries_dir / f"seed_{seed}"
         seed_answers = answers_dir / f"seed_{seed}"
         if len(seeds) > 1:
-            print(f"\n  --- Seed {seed} ---")
+            print(f"  --- Seed {seed} ---")
         _execute_single(seed_queries, seed_answers, db_url, query_ids=query_ids)
 
 

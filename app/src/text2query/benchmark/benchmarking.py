@@ -3,6 +3,7 @@
 
 from dataclasses import asdict, dataclass
 import logging
+import time
 from pathlib import Path
 import sys
 
@@ -23,8 +24,15 @@ from text2query.benchmark.reporting import (
     archive_session,
     write_session_manifest,
     format_run_summary,
+    format_session_header,
 )
 from text2query.benchmark.fingerprint import collect_fingerprints
+
+
+def _banner(title: str) -> str:
+    """Render a light section divider padded to 60 columns, matching the header/footer width."""
+    prefix = f"─── {title} "
+    return prefix + "─" * max(3, 60 - len(prefix))
 
 
 @dataclass(frozen=True)
@@ -53,9 +61,7 @@ def _run_single_model_benchmark(
     generated_answers_dir = paths.generated_answers_dir / slug
     report_dir = paths.report_dir / slug
 
-    print(f"\n--- LLM SQL Generation (model: {model}, seeds: {len(seeds)}) ---\n")
-
-    print("Generate SQL Queries via LLM")
+    print(_banner("SQL Generation"))
     run_llm_generation(
         questions_dir=paths.questions_dir, output_dir=output_dir,
         db_url=db_url, model=model,
@@ -63,14 +69,14 @@ def _run_single_model_benchmark(
     )
     print()
 
-    print("Execute LLM-Generated Queries")
+    print(_banner("Execution"))
     execute_generated_queries(
         queries_dir=output_dir, answers_dir=generated_answers_dir, db_url=db_url,
         seeds=seeds, query_ids=query_ids,
     )
     print()
 
-    print("Generate Reports")
+    print(_banner("Evaluation"))
     results = generate_reports(
         generated_queries_dir=output_dir, reference_queries_dir=paths.queries_dir,
         generated_answers_dir=generated_answers_dir, reference_answers_dir=paths.answers_dir,
@@ -133,67 +139,67 @@ def main():
         print(f"BENCHMARK_MODELS is empty — falling back to DEFAULT_MODEL ({DEFAULT_MODEL}).")
     multi_model = len(models) > 1
 
-    try:
-        # === Phase 1: Setup (shared across all models) ===
-        print("\n--- Setup & Validation ---\n")
+    start_time = time.monotonic()
 
-        # Resolve and validate query ID filter against available queries
+    try:
+        # Resolve the query filter, then announce the whole session up front.
         available = sorted(f.stem for f in paths.queries_dir.glob("*.sql"))
         query_ids, skipped = _resolve_query_id_filter(BENCHMARK_QUERY_IDS, available)
+
+        print(format_session_header(
+            scale_factor=BENCHMARK_SCALE_FACTOR,
+            models=models,
+            total_available=len(available),
+            query_ids=query_ids,
+            num_seeds=BENCHMARK_NUM_SEEDS,
+            temperature=LLM_TEMPERATURE,
+            max_tokens=LLM_MAX_TOKENS,
+            num_ctx=LLM_NUM_CTX,
+            prompt_flags=asdict(PROMPT_FLAGS),
+            database_url=DATABASE_URL,
+        ))
+
         if skipped:
             print(f"  ⚠ Unknown query IDs (skipped): {', '.join(skipped)}")
         if query_ids is not None and not query_ids:
             print("  ✗ No valid query IDs remain after filtering — aborting")
             sys.exit(1)
-        if query_ids:
-            print(f"  Query filter active: {len(query_ids)} / {len(available)} queries selected ({', '.join(query_ids)})")
-            print()
 
-        print("Data Generation")
+        # === Phase 1: Setup (shared across all models) ===
+        print(_banner("Setup"))
         if BENCHMARK_DATA_PATH:
             print(f"  Using existing data: {BENCHMARK_DATA_PATH}")
             data_dir = Path(BENCHMARK_DATA_PATH)
         else:
-            print(f"  Checking/Generating TPC-H data (scale factor: {BENCHMARK_SCALE_FACTOR})...")
             data_dir = generate_data(BENCHMARK_SCALE_FACTOR, data_dir)
-        print()
 
-        print("Validate Questions & Queries")
         validate_directories(paths.questions_dir, paths.queries_dir)
-        print()
 
-        print("Check Database Readiness")
         is_ready = check_database_readiness(db_url=DATABASE_URL)
-        print()
-
         if not is_ready:
-            print("Setup Database")
             setup_database(
                 schema_file=paths.schema_file,
                 data_dir=data_dir,
                 db_url=DATABASE_URL,
             )
-            print()
-        else:
-            print("Database already ready, skipping setup")
-            print()
 
-        print("Generate Answer Files")
         generate_answers(queries_dir=paths.queries_dir, answers_dir=paths.answers_dir, db_url=DATABASE_URL)
         print()
 
         # === Phase 2+3: Per-model benchmark ===
         if multi_model:
-            print(f"\n{'=' * 60}")
+            print("═" * 60)
             print(f"  Multi-Model Benchmark: {len(models)} models")
-            print(f"{'=' * 60}\n")
+            print("═" * 60)
+            print()
 
         precomputed = {}
         for i, model in enumerate(models, 1):
             if multi_model:
-                print(f"\n{'=' * 60}")
+                print("═" * 60)
                 print(f"  Model {i}/{len(models)}: {model}")
-                print(f"{'=' * 60}")
+                print("═" * 60)
+                print()
 
             results = _run_single_model_benchmark(
                 model=model,
@@ -206,7 +212,7 @@ def main():
 
         # === Cross-model comparison (if multi-model) ===
         if multi_model:
-            print("\n--- Cross-Model Comparison ---\n")
+            print(_banner("Cross-Model Comparison"))
             generate_cross_model_report(
                 models=models,
                 reference_queries_dir=paths.queries_dir,
@@ -218,11 +224,10 @@ def main():
             print()
 
         # === Archive ===
-        print("\n--- Archiving ---\n")
+        print(_banner("Archiving"))
 
         fingerprints = collect_fingerprints(paths.output_dir)
 
-        print("Archive Session")
         session_dir = archive_session(
             queries_dir=paths.output_dir, answers_dir=paths.generated_answers_dir,
             report_dir=paths.report_dir, results_base=paths.results_base,
@@ -243,18 +248,11 @@ def main():
             fingerprints=fingerprints,
             database_url=DATABASE_URL,
         )
+        print("  ✓ Archived")
         print()
 
-        print(format_run_summary(
-            total_questions=len(list(paths.questions_dir.glob("*.md"))),
-            total_ground_truth=len(list(paths.queries_dir.glob("*.sql"))),
-            query_ids=query_ids,
-            models=models,
-            num_seeds=BENCHMARK_NUM_SEEDS,
-            session_dir=session_dir,
-            database_url=DATABASE_URL,
-            prompt_flags=asdict(PROMPT_FLAGS),
-        ))
+        elapsed = time.monotonic() - start_time
+        print(format_run_summary(precomputed, models, session_dir, elapsed))
 
         return 0
 

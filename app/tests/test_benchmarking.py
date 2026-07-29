@@ -3,9 +3,22 @@ from unittest.mock import patch
 
 from text2query.benchmark.benchmarking import (
     BenchmarkPaths,
+    _banner,
     _resolve_query_id_filter,
     _run_single_model_benchmark,
 )
+
+
+def test_banner_pads_to_60_columns():
+    line = _banner("Setup")
+    assert len(line) == 60
+    assert line.startswith("─── Setup ")
+
+
+def test_banner_handles_long_titles_without_going_negative():
+    line = _banner("Cross-Model Comparison")
+    assert line.startswith("─── Cross-Model Comparison ")
+    assert len(line) >= len("─── Cross-Model Comparison ") + 3
 
 
 def test_no_filter_requested_returns_none():

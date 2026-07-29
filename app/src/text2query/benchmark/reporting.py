@@ -107,7 +107,7 @@ def _write_results_csv(results: list[dict], csv_path: Path) -> None:
             row = {field: v if (v := r.get(field)) is not None else "" for field in CSV_FIELDNAMES}
             row["query_id"] = f"{int(r['query_id']):02d}"
             writer.writerow(row)
-    print(f"  CSV export -> {csv_path} ({len(results)} rows)")
+    print(f"  CSV export ({len(results)} rows)")
 
 
 def _v(val: float | None) -> str:
@@ -298,7 +298,6 @@ def generate_reports(
     (report_dir / "summary.md").write_text(summary)
     _write_results_csv(all_flat_results, report_dir / "results.csv")
 
-    print(f"  Reports generated -> {report_dir}")
     return all_flat_results
 
 
@@ -381,7 +380,7 @@ def generate_cross_model_report(
 
     comparison_path = report_dir / "comparison.md"
     comparison_path.write_text("\n".join(lines) + "\n")
-    print(f"  Comparison report -> {comparison_path}")
+    print("  Comparison report generated")
 
 
 def archive_session(
@@ -400,22 +399,20 @@ def archive_session(
     session_queries.mkdir(parents=True, exist_ok=True)
     session_answers.mkdir(parents=True, exist_ok=True)
 
-    _move_contents(queries_dir, session_queries, "queries")
-    _move_contents(answers_dir, session_answers, "answers")
+    _move_contents(queries_dir, session_queries)
+    _move_contents(answers_dir, session_answers)
 
     if report_dir.exists():
         shutil.move(str(report_dir), str(session_report))
-        print(f"  Moved reports -> {session_report}")
 
     for d in [queries_dir, answers_dir]:
         if d.exists():
             shutil.rmtree(str(d))
 
-    print(f"  Session archived -> {session_dir}")
     return session_dir
 
 
-def _move_contents(src_dir: Path, dst_dir: Path, label: str) -> None:
+def _move_contents(src_dir: Path, dst_dir: Path) -> None:
     """Move a directory's subdirectories (model dirs, seed dirs, or nested layouts) to dst."""
     if not src_dir.exists():
         return
@@ -423,8 +420,6 @@ def _move_contents(src_dir: Path, dst_dir: Path, label: str) -> None:
     subdirs = sorted(d for d in src_dir.iterdir() if d.is_dir())
     for sd in subdirs:
         shutil.move(str(sd), str(dst_dir))
-    if subdirs:
-        print(f"  Moved {len(subdirs)} dirs of {label} -> {dst_dir}")
 
 
 def _redact_db_url(db_url: str) -> str:
@@ -464,7 +459,6 @@ def write_session_manifest(
     }
     manifest_path = session_dir / "session_manifest.json"
     manifest_path.write_text(json.dumps(manifest, indent=2, default=str))
-    print(f"  Session manifest -> {manifest_path}")
     return manifest_path
 
 

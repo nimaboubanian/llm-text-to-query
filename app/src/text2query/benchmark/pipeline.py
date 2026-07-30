@@ -19,7 +19,7 @@ def read_business_question(qfile: Path) -> str | None:
     """Extract the NL business question from a benchmark question file."""
     if not qfile.exists():
         return None
-    match = re.search(r'# Business Question:\s*\n\s*"([^"]+)"', qfile.read_text())
+    match = re.search(r'# Business Question:\s*\n\s*"(.+)"', qfile.read_text(), re.DOTALL)
     return match.group(1) if match else None
 
 

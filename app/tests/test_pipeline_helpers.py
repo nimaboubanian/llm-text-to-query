@@ -1,4 +1,4 @@
-from text2query.benchmark.pipeline import execute_queries_to_csv
+from text2query.benchmark.pipeline import execute_queries_to_csv, read_business_question
 from text2query.database.executor import ExecutionResult
 
 
@@ -43,3 +43,36 @@ class TestExecuteQueriesToCsv:
 
         assert starts == [(1, 1, "Q01")]
         assert outcomes == [" ✓ (2 rows)"]
+
+
+class TestReadBusinessQuestion:
+    def test_extracts_full_prose_with_internal_quoted_term(self, tmp_path):
+        qfile = tmp_path / "03.md"
+        qfile.write_text(
+            '# Business Question:\n'
+            '"Among all orders placed by customers in the "Building" market segment, '
+            'which 10 orders represent the greatest potential revenue?"\n'
+        )
+
+        result = read_business_question(qfile)
+
+        assert result == (
+            'Among all orders placed by customers in the "Building" market segment, '
+            'which 10 orders represent the greatest potential revenue?'
+        )
+
+    def test_extracts_full_prose_with_no_internal_quotes(self, tmp_path):
+        qfile = tmp_path / "06.md"
+        qfile.write_text(
+            '# Business Question:\n'
+            '"If we had eliminated all discounts, how much revenue would we have collected?"\n'
+        )
+
+        result = read_business_question(qfile)
+
+        assert result == "If we had eliminated all discounts, how much revenue would we have collected?"
+
+    def test_missing_file_returns_none(self, tmp_path):
+        qfile = tmp_path / "does-not-exist.md"
+
+        assert read_business_question(qfile) is None

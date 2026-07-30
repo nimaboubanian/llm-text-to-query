@@ -67,13 +67,22 @@ class TestAstSimilarityNormalized:
         assert _ast_similarity_normalized(gt, llm) == 1.0
 
     def test_self_join_aliases_survive(self):
-        # both aliases reference the same table; stripping would collide, so
-        # identical self-joins must still score 1.0
-        sql = (
+        # Both aliases reference the same table, so stripping is skipped and
+        # a/b must stay distinct. Using the *same* query on both sides would
+        # be tautological (identical trees score 1.0 whether or not the
+        # collision guard exists) so this pins gt/llm selecting from opposite
+        # sides of the self-join: if the guard were removed and both aliases
+        # collapsed to "lineitem", these would falsely normalize to the same
+        # tree and score 1.0.
+        gt = (
             "SELECT a.l_orderkey FROM lineitem AS a "
             "JOIN lineitem AS b ON a.l_orderkey = b.l_orderkey"
         )
-        assert _ast_similarity_normalized(sql, sql) == 1.0
+        llm = (
+            "SELECT b.l_orderkey FROM lineitem AS a "
+            "JOIN lineitem AS b ON a.l_orderkey = b.l_orderkey"
+        )
+        assert _ast_similarity_normalized(gt, llm) < 1.0
 
     def test_unparseable_returns_none(self):
         assert _ast_similarity_normalized("", "") is None

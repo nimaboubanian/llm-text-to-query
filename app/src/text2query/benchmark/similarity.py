@@ -2,12 +2,15 @@
 import logging
 import re
 from collections import Counter
+from functools import lru_cache
 from itertools import permutations
 from pathlib import Path
 
 import pandas as pd
 import sqlglot
+from sqlglot import exp
 from sqlglot.diff import Keep, diff
+from sqlglot.optimizer import optimize
 
 from text2query.core.config import BENCHMARK_FLOAT_EPSILON
 
@@ -33,6 +36,7 @@ def evaluate_query(
         error_category = _classify_error(llm_sql_text, error_detail)
 
     ast_sim = _ast_similarity(gt_sql_text, llm_sql_text)
+    ast_sim_norm = _ast_similarity_normalized(gt_sql_text, llm_sql_text)
 
     return {
         "query_id": query_id,
@@ -41,6 +45,7 @@ def evaluate_query(
         "result_recall": _round(recall),
         "result_f1": _round(f1),
         "ast_similarity": _round(ast_sim),
+        "ast_similarity_normalized": _round(ast_sim_norm),
         "error_category": error_category,
     }
 
@@ -219,24 +224,86 @@ def _result_set_comparison(
     return "ok", precision, recall, f1, None
 
 
-def _ast_similarity(gt_sql: str, llm_sql: str) -> float | None:
+@lru_cache(maxsize=1)
+def _tpch_schema() -> dict:
+    """Parse the TPC-H DDL into a {table: {column: type}} mapping for the optimizer."""
+    # ponytail: cwd-relative like benchmarking.py's schema_file default;
+    # container cwd is /app, pytest cwd is app/ (hence the parent fallback)
+    ddl_path = Path("benchmark/.tpch/schema.sql")
+    if not ddl_path.exists():
+        ddl_path = Path("../benchmark/.tpch/schema.sql")
+    schema: dict[str, dict[str, str]] = {}
+    for stmt in sqlglot.parse(ddl_path.read_text(), dialect="postgres"):
+        if isinstance(stmt, exp.Create) and isinstance(stmt.this, exp.Schema):
+            schema[stmt.this.this.name.lower()] = {
+                col.name.lower(): col.args["kind"].sql(dialect="postgres")
+                for col in stmt.this.expressions
+                if isinstance(col, exp.ColumnDef)
+            }
+    return schema
+
+
+def _strip_aliases(tree: exp.Expression) -> exp.Expression:
+    """Rename table aliases to their base table names (alias-removal step).
+
+    ponytail: tables appearing more than once (self-joins) keep their aliases;
+    renaming both sides to the table name would collide.
+    """
+    tables = list(tree.find_all(exp.Table))
+    counts = Counter(t.name for t in tables)
+    for table in tables:
+        alias = table.args.get("alias")
+        if alias and counts[table.name] == 1 and alias.name != table.name:
+            old = alias.name
+            for col in tree.find_all(exp.Column):
+                if col.table == old:
+                    col.set("table", table.this.copy())
+            table.set("alias", exp.TableAlias(this=table.this.copy()))
+    return tree
+
+
+def _normalize(tree: exp.Expression) -> exp.Expression:
+    """Best-effort canonicalization. Falls back to the raw tree per side so a
+    canonicalizer failure never zeroes out a model's score."""
+    try:
+        return _strip_aliases(optimize(tree.copy(), schema=_tpch_schema(), dialect="postgres"))
+    except Exception as e:
+        logger.debug("AST normalization failed, using raw tree: %s", e)
+        return tree
+
+
+def _parse_pair(gt_sql: str, llm_sql: str) -> tuple | None:
     try:
         gt_tree = sqlglot.parse(gt_sql, dialect="postgres")[0]
         llm_tree = sqlglot.parse(llm_sql, dialect="postgres")[0]
-        if gt_tree is None or llm_tree is None:
-            return None
     except Exception as e:
         logger.debug("Failed to parse SQL for AST similarity: %s", e)
         return None
+    if gt_tree is None or llm_tree is None:
+        return None
+    return gt_tree, llm_tree
 
+
+def _diff_score(gt_tree, llm_tree) -> float | None:
     try:
         changes = diff(gt_tree, llm_tree)
     except Exception as e:
         logger.debug("Failed to diff SQL ASTs: %s", e)
         return None
-
     kept = sum(1 for c in changes if isinstance(c, Keep))
-    edits = sum(1 for c in changes if not isinstance(c, Keep))
-
-    total = kept + edits
+    total = len(changes)
     return kept / total if total > 0 else 1.0
+
+
+def _ast_similarity(gt_sql: str, llm_sql: str) -> float | None:
+    trees = _parse_pair(gt_sql, llm_sql)
+    if trees is None:
+        return None
+    return _diff_score(*trees)
+
+
+def _ast_similarity_normalized(gt_sql: str, llm_sql: str) -> float | None:
+    trees = _parse_pair(gt_sql, llm_sql)
+    if trees is None:
+        return None
+    return _diff_score(_normalize(trees[0]), _normalize(trees[1]))

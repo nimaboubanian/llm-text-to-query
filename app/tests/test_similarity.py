@@ -2,8 +2,8 @@ import pytest
 from pathlib import Path
 
 from text2query.benchmark.similarity import (
-    _ast_similarity, _classify_error,
-    _result_set_comparison,
+    _ast_similarity, _ast_similarity_normalized, _classify_error,
+    _result_set_comparison, _tpch_schema,
 )
 
 
@@ -46,6 +46,48 @@ class TestAstSimilarity:
         assert score is not None
         assert score >= 0.5
 
+
+
+class TestAstSimilarityNormalized:
+    def test_tpch_schema_parsed(self):
+        schema = _tpch_schema()
+        assert len(schema) == 8
+        assert "l_orderkey" in schema["lineitem"]
+
+    def test_alias_divergence_normalizes_to_perfect(self):
+        gt = "SELECT c.c_name FROM customer AS c"
+        llm = "SELECT customer.c_name FROM customer"
+        raw = _ast_similarity(gt, llm)
+        assert raw is not None and raw < 1.0
+        assert _ast_similarity_normalized(gt, llm) == 1.0
+
+    def test_predicate_reorder_normalizes_to_perfect(self):
+        gt = "SELECT c_name FROM customer WHERE c_acctbal > 100 AND c_nationkey = 3"
+        llm = "SELECT c_name FROM customer WHERE c_nationkey = 3 AND c_acctbal > 100"
+        assert _ast_similarity_normalized(gt, llm) == 1.0
+
+    def test_self_join_aliases_survive(self):
+        # both aliases reference the same table; stripping would collide, so
+        # identical self-joins must still score 1.0
+        sql = (
+            "SELECT a.l_orderkey FROM lineitem AS a "
+            "JOIN lineitem AS b ON a.l_orderkey = b.l_orderkey"
+        )
+        assert _ast_similarity_normalized(sql, sql) == 1.0
+
+    def test_unparseable_returns_none(self):
+        assert _ast_similarity_normalized("", "") is None
+
+    def test_optimizer_failure_falls_back_to_raw(self, monkeypatch):
+        import text2query.benchmark.similarity as sim
+
+        def boom():
+            raise RuntimeError("schema unavailable")
+
+        monkeypatch.setattr(sim, "_tpch_schema", boom)
+        gt = "SELECT c.c_name FROM customer AS c"
+        llm = "SELECT customer.c_name FROM customer"
+        assert sim._ast_similarity_normalized(gt, llm) == sim._ast_similarity(gt, llm)
 
 
 class TestClassifyError:

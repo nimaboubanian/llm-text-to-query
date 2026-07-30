@@ -13,13 +13,19 @@ def load_tpch_metadata() -> dict:
     return json.loads(Path(__file__).with_name("tpch_metadata.json").read_text(encoding="utf-8"))
 
 
-def render_schema(engine, flags: PromptFlags, metadata: dict | None = None) -> str:
-    """Render the DB schema for the prompt, shaped by the schema feature flags."""
+def render_schema(engine, flags: PromptFlags, metadata: dict | None = None,
+                   include_tables: set[str] | None = None) -> str:
+    """Render the DB schema for the prompt, shaped by the schema feature flags.
+
+    include_tables: restrict to these table names (None = all tables).
+    """
     inspector = inspect(engine)
     meta = metadata or {}
+    tables = [t for t in inspector.get_table_names()
+              if include_tables is None or t in include_tables]
     if flags.schema_ddl:
-        return _render_ddl(inspector, flags, meta)
-    return _render_prose(inspector, flags, meta)
+        return _render_ddl(inspector, flags, meta, tables)
+    return _render_prose(inspector, flags, meta, tables)
 
 
 def _column_comment(table_meta: dict, col_name: str, flags: PromptFlags) -> str:
@@ -33,9 +39,9 @@ def _column_comment(table_meta: dict, col_name: str, flags: PromptFlags) -> str:
     return "; ".join(parts)
 
 
-def _render_prose(inspector, flags: PromptFlags, meta: dict) -> str:
+def _render_prose(inspector, flags: PromptFlags, meta: dict, tables: list[str]) -> str:
     lines = []
-    for table in inspector.get_table_names():
+    for table in tables:
         table_meta = meta.get(table, {})
         cols = []
         for c in inspector.get_columns(table):
@@ -54,9 +60,9 @@ def _render_prose(inspector, flags: PromptFlags, meta: dict) -> str:
     return "\n".join(lines)
 
 
-def _render_ddl(inspector, flags: PromptFlags, meta: dict) -> str:
+def _render_ddl(inspector, flags: PromptFlags, meta: dict, tables: list[str]) -> str:
     stmts = []
-    for table in inspector.get_table_names():
+    for table in tables:
         table_meta = meta.get(table, {})
         fk_targets: dict[str, str] = {}
         if flags.schema_fk:

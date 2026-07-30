@@ -7,6 +7,7 @@ from text2query.database.executor import explain_error
 from text2query.database.schema import create_engine_for_database, load_tpch_metadata, render_schema
 from text2query.llm import ollama
 from text2query.llm.prompt_builder import build_prompt
+from text2query.benchmark.data_loader import TPCH_TABLES
 from text2query.benchmark.fingerprint import (
     MANIFEST_FILENAME, GenerationFingerprint, read_manifest_fingerprint, write_manifest,
 )
@@ -50,7 +51,8 @@ def _run_single_generation(
     output_dir.mkdir(parents=True, exist_ok=True)
 
     engine = create_engine_for_database(db_url)
-    schema = render_schema(engine, PROMPT_FLAGS, metadata=load_tpch_metadata())
+    schema = render_schema(engine, PROMPT_FLAGS, metadata=load_tpch_metadata(),
+                           include_tables=set(TPCH_TABLES))
 
     fingerprint = GenerationFingerprint(
         model=model,

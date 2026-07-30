@@ -65,3 +65,11 @@ def test_desc_and_samples_combine_with_semicolon():
         _engine(), PromptFlags(schema_descriptions=True, schema_samples=True), metadata=meta
     )
     assert "[status; values: 'O']" in out
+
+
+def test_render_schema_include_tables_filters():
+    full = render_schema(_engine(), PromptFlags())
+    filtered = render_schema(_engine(), PromptFlags(), include_tables={"orders"})
+    assert "Table 'orders'" in filtered
+    assert "Table 'lineitem'" not in filtered  # a table present in full must be absent from filtered
+    assert filtered != full

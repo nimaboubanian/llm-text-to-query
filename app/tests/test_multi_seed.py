@@ -64,7 +64,8 @@ def test_run_llm_generation_single_seed_omits_seed_banner(tmp_path, capsys):
     from text2query.llm.ollama import GenerationResult
 
     with patch.object(runner_mod, "create_engine_for_database", lambda url: None), \
-         patch.object(runner_mod, "render_schema", lambda engine, flags, metadata=None: "schema"), \
+         patch.object(runner_mod, "render_schema",
+                      lambda engine, flags, metadata=None, include_tables=None: "schema"), \
          patch.object(runner_mod, "load_tpch_metadata", lambda: {}), \
          patch.object(runner_mod.ollama, "warmup", lambda model: True), \
          patch.object(

@@ -4,7 +4,7 @@ from pathlib import Path
 from text2query.benchmark.reporting import (
     _compute_stats, generate_reports, format_run_summary,
     METRICS, METRIC_LABELS, _field, format_session_header,
-    _aggregate_model_results,
+    _aggregate_model_results, _LABEL_WIDTH,
 )
 
 
@@ -13,7 +13,7 @@ def test_metrics_constant_has_matching_labels():
     assert METRIC_LABELS == {
         "result_f1": "Result F1",
         "ast_similarity": "AST similarity",
-        "ast_similarity_normalized": "AST similarity (normalized)",
+        "ast_similarity_normalized": "AST sim (norm)",
     }
     assert set(METRICS) == set(METRIC_LABELS)
 
@@ -129,7 +129,7 @@ def test_format_run_summary_single_model():
     assert "password" not in summary
     assert "postgresql" not in summary
     # Verify normalized metric is properly formatted with space between label and value
-    assert _field("AST similarity (normalized)", "0.7500") in summary
+    assert _field("AST sim (norm)", "0.7500") in summary
 
 
 def test_format_run_summary_multi_model_shows_per_model_row():
@@ -146,14 +146,54 @@ def test_format_run_summary_multi_model_shows_per_model_row():
 
 def test_field_pads_label_and_wraps_long_values():
     row = _field("Model", "qwen2.5-coder:7b")
-    assert row == "  Model                         qwen2.5-coder:7b"
+    assert row == f"  {'Model':<{_LABEL_WIDTH}}qwen2.5-coder:7b"
 
     wrapped = _field("Prompt features", "a, " * 40 + "z")
     lines = wrapped.split("\n")
     assert len(lines) > 1
-    assert lines[0].startswith("  Prompt features  ")
+    assert lines[0].startswith(f"  {'Prompt features':<{_LABEL_WIDTH}}")
     # continuation lines line up under the value column, not the label
-    assert lines[1].startswith(" " * 32)
+    assert lines[1].startswith(" " * (2 + _LABEL_WIDTH))
+
+
+def _assert_field_not_wrapped(text: str, label: str) -> None:
+    """Assert the field's rendered row is a single line (no continuation row)."""
+    lines = text.splitlines()
+    prefix = f"  {label:<{_LABEL_WIDTH}}"
+    matches = [i for i, l in enumerate(lines) if l.startswith(prefix)]
+    assert matches, f"field {label!r} not found in output"
+    i = matches[0]
+    indent = " " * (2 + _LABEL_WIDTH)
+    wrapped = i + 1 < len(lines) and lines[i + 1].startswith(indent)
+    assert not wrapped, f"field {label!r} wrapped to a continuation line: {lines[i]!r} / {lines[i + 1]!r}"
+
+
+def test_session_header_fields_stay_on_one_line():
+    """Regression for the _LABEL_WIDTH=30 bug: widening the label column to
+    fit one long label shrank the value column enough to wrap five other
+    fields. Render the full composed header (not just _field in isolation)
+    and confirm none of them wrap."""
+    header = format_session_header(
+        scale_factor=1, models=["qwen2.5-coder:7b"], total_available=22,
+        query_ids=["01", "07", "16"], num_seeds=1,
+        temperature=0.1, max_tokens=2048, num_ctx=4096,
+        prompt_flags={"schema_ddl": True, "few_shot": 1, "planning": False},
+        database_url="postgresql://user:password@postgres:5432/testdb",
+    )
+    for label in ("Evaluations", "Metrics", "Prompt features", "LLM params"):
+        _assert_field_not_wrapped(header, label)
+
+
+def test_run_summary_result_f1_field_stays_on_one_line():
+    precomputed = {
+        "m1": [
+            {"query_id": q, "seed": 1, "status": "ok", "result_f1": 1.0,
+             "ast_similarity": 0.9, "ast_similarity_normalized": 0.85}
+            for q in range(1, 4)
+        ]
+    }
+    summary = format_run_summary(precomputed, ["m1"], Path("benchmark/results/x"), elapsed=5.0)
+    _assert_field_not_wrapped(summary, "Result F1")
 
 
 def test_format_session_header_single_model_filtered_queries():
@@ -169,7 +209,7 @@ def test_format_session_header_single_model_filtered_queries():
     assert _field("Queries", "3 of 22 (01, 07, 16)") in header
     assert _field("Seeds", "1") in header
     assert _field("Evaluations", "3  (3 queries × 1 seed × 1 model)") in header
-    assert _field("Metrics", "Result F1, AST similarity, AST similarity (normalized)") in header
+    assert _field("Metrics", "Result F1, AST similarity, AST sim (norm)") in header
     assert "schema_ddl, few_shot=1" in header
     assert "planning" not in header  # False flags are omitted, not printed as planning=False
     assert "password" not in header

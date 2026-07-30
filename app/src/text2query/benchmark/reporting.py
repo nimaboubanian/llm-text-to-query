@@ -26,10 +26,10 @@ METRICS = ("result_f1", "ast_similarity", "ast_similarity_normalized")
 METRIC_LABELS = {
     "result_f1": "Result F1",
     "ast_similarity": "AST similarity",
-    "ast_similarity_normalized": "AST similarity (normalized)",
+    "ast_similarity_normalized": "AST sim (norm)",
 }
 
-_LABEL_WIDTH = 30
+_LABEL_WIDTH = 17
 
 
 def _field(label: str, value: str) -> str:

@@ -35,8 +35,9 @@ def evaluate_query(
     if status == "exec_error" and error_detail:
         error_category = _classify_error(llm_sql_text, error_detail)
 
-    ast_sim = _ast_similarity(gt_sql_text, llm_sql_text)
-    ast_sim_norm = _ast_similarity_normalized(gt_sql_text, llm_sql_text)
+    trees = _parse_pair(gt_sql_text, llm_sql_text)
+    ast_sim = _diff_score(*trees) if trees else None
+    ast_sim_norm = _diff_score(_normalize(trees[0]), _normalize(trees[1])) if trees else None
 
     return {
         "query_id": query_id,
@@ -106,7 +107,9 @@ def _align_columns(ref_df: pd.DataFrame, gen_df: pd.DataFrame) -> pd.DataFrame:
         return gen_df
     n = len(gen_df.columns)
     if n > 8:
-        return gen_df
+        # Too many columns for permutation search; still align labels
+        # positionally so callers can index gen_df by ref_df's column names.
+        return gen_df.set_axis(ref_df.columns, axis=1)
 
     best_perm = list(range(n))
     best_score = -1
@@ -163,9 +166,12 @@ def _bag_match(
     matched = 0
     for key, gt_vecs in by_key(gt_df).items():
         llm_vecs = llm_groups.get(key, [])
-        # Sort both lists by value to enable greedy matching on sorted pairs;
-        # this ensures near-ties are paired optimally (e.g., 1.00000 and 1.00009
-        # can both match 1.00005, but sorted pairing ensures both get matched)
+        # ponytail: sorted greedy is provably optimal in 1-D (the common case
+        # here, since int/exact key columns are excluded from num_cols above)
+        # but not for multi-column float vectors, where it can strand a
+        # matchable pair. Upgrade to scipy.optimize.linear_sum_assignment
+        # (Hungarian algorithm) if multi-column near-ties start costing
+        # real matches.
         sorted_gt_vecs = sorted(gt_vecs, key=_sort_key)
         sorted_llm_vecs = sorted(llm_vecs, key=_sort_key)
         # Greedy matching: pair each gt vector with first available matching llm vector
@@ -203,6 +209,7 @@ def _result_set_comparison(
     num_cols = [
         c for c in gt_df.columns
         if gt_df[c].dtype.kind in "if" and llm_df[c].dtype.kind in "if"
+        and not (gt_df[c].dtype.kind == "i" and llm_df[c].dtype.kind == "i")
     ]
     other_cols = [c for c in gt_df.columns if c not in num_cols]
 

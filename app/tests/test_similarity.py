@@ -280,6 +280,19 @@ class TestResultSetComparison:
         assert f1_default == 0.0
         assert f1_loose == 1.0
 
+    def test_int_columns_use_exact_match_not_epsilon(self, tmp_path):
+        # Spec: only floats get epsilon tolerance. Integer columns must stay
+        # exact-match even with a loose epsilon, or adjacent IDs would
+        # falsely collapse together.
+        gt = tmp_path / "gt.csv"
+        llm = tmp_path / "llm.csv"
+        gt.write_text("id\n4\n5\n")
+        llm.write_text("id\n5\n6\n")
+
+        status, prec, rec, f1, _ = _result_set_comparison(gt, llm, eps=1.0)
+        assert status == "ok"
+        assert f1 == pytest.approx(0.5)  # only the exact "5" match counts
+
     def test_nan_matches_nan(self, tmp_path):
         gt = tmp_path / "gt.csv"
         llm = tmp_path / "llm.csv"
@@ -313,6 +326,20 @@ class TestResultSetComparison:
         status, _, _, f1, _ = _result_set_comparison(gt, llm)
         assert status == "ok"
         assert f1 == 0.0
+
+    def test_many_columns_with_renamed_llm_columns_does_not_crash(self, tmp_path):
+        # >8 columns skips _align_columns's permutation search; the LLM using
+        # different column names/aliases than the reference must not KeyError.
+        gt = tmp_path / "gt.csv"
+        llm = tmp_path / "llm.csv"
+        cols_gt = ",".join(f"c{i}" for i in range(9))
+        cols_llm = ",".join(f"total_{i}" for i in range(9))
+        row = ",".join(str(i) for i in range(9))
+        gt.write_text(f"{cols_gt}\n{row}\n")
+        llm.write_text(f"{cols_llm}\n{row}\n")
+
+        status, prec, rec, f1, err = _result_set_comparison(gt, llm)
+        assert status == "ok"
 
     def test_sorted_greedy_matching_resolves_near_ties(self, tmp_path):
         # When multiple gt values can each match multiple llm values (near-ties),

@@ -43,4 +43,5 @@ ORDER BY
   s_acctbal DESC,
   n_name,
   s_name,
-  p_partkey;
+  p_partkey
+FETCH FIRST 100 ROWS ONLY;

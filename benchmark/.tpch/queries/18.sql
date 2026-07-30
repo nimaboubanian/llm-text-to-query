@@ -33,4 +33,5 @@ GROUP BY
   o_totalprice
 ORDER BY
   o_totalprice DESC,
-  o_orderdate;
+  o_orderdate
+FETCH FIRST 100 ROWS ONLY;

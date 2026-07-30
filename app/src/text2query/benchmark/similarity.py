@@ -174,7 +174,6 @@ def _bag_match(
         # real matches.
         sorted_gt_vecs = sorted(gt_vecs, key=_sort_key)
         sorted_llm_vecs = sorted(llm_vecs, key=_sort_key)
-        # Greedy matching: pair each gt vector with first available matching llm vector
         llm_used = [False] * len(sorted_llm_vecs)
         for a in sorted_gt_vecs:
             for j, b in enumerate(sorted_llm_vecs):
@@ -214,18 +213,16 @@ def _result_set_comparison(
     other_cols = [c for c in gt_df.columns if c not in num_cols]
 
     if _has_top_level_order_limit(ref_sql):
-        min_len = min(len(gt_df), len(llm_df))
-        matches = sum(
-            1 for i in range(min_len)
+        matched = sum(
+            1 for i in range(min(len(gt_df), len(llm_df)))
             if all(_num_eq(gt_df[c].iat[i], llm_df[c].iat[i], eps) for c in num_cols)
             and all(str(gt_df[c].iat[i]) == str(llm_df[c].iat[i]) for c in other_cols)
         )
-        precision = matches / len(llm_df) if len(llm_df) > 0 else 0.0
-        recall = matches / len(gt_df) if len(gt_df) > 0 else 0.0
     else:
         matched = _bag_match(gt_df, llm_df, num_cols, other_cols, eps)
-        precision = matched / len(llm_df) if len(llm_df) > 0 else 0.0
-        recall = matched / len(gt_df) if len(gt_df) > 0 else 0.0
+
+    precision = matched / len(llm_df) if len(llm_df) > 0 else 0.0
+    recall = matched / len(gt_df) if len(gt_df) > 0 else 0.0
 
     f1 = (2 * precision * recall / (precision + recall)) if (precision + recall) > 0 else 0.0
     return "ok", precision, recall, f1, None

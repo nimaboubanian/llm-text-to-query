@@ -245,17 +245,6 @@ class TestResultSetComparison:
         assert status == "ok"
         assert f1 == 1.0
 
-    def test_tiny_float_noise_within_epsilon(self, tmp_path):
-        gt = tmp_path / "gt.csv"
-        llm = tmp_path / "llm.csv"
-        gt.write_text("val\n1.12340001\n")
-        llm.write_text("val\n1.12339999\n")
-
-        # Within default epsilon (1e-4), both match
-        status, _, _, f1, _ = _result_set_comparison(gt, llm)
-        assert status == "ok"
-        assert f1 == 1.0
-
     def test_epsilon_boundary_and_beyond(self, tmp_path):
         # 1.12345 vs 1.12354 straddle the old round(4) boundary but differ by
         # 9e-5 < 1e-4 -> match; 2.0 vs 2.001 differ by 1e-3 > 1e-4 -> no match

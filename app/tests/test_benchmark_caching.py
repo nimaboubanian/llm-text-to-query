@@ -157,3 +157,47 @@ def test_stale_answers_cleared_when_queries_manifest_changes(tmp_path, monkeypat
     execute_generated_queries(queries_dir, answers_dir, "db://url", seeds=None)
     assert call_count["n"] == 2  # stale answer cleared, re-executed
     assert read_manifest_fingerprint(answers_dir / "seed_1") == "fp-new"
+
+
+def test_generate_answers_regenerates_when_query_content_changes(tmp_path, monkeypatch):
+    queries = tmp_path / "queries"; queries.mkdir()
+    answers = tmp_path / "answers"; answers.mkdir()
+    (queries / "01.sql").write_text("SELECT 1;")
+    (answers / "01.csv").write_text("a\n1\n")
+
+    calls = []
+    monkeypatch.setattr(
+        "text2query.benchmark.pipeline.execute_queries_to_csv",
+        lambda files, out, db, **kw: calls.append([f.stem for f in files]) or [
+            {"query_id": f.stem, "status": "success", "rows": 1} for f in files],
+    )
+
+    from text2query.benchmark.pipeline import generate_answers
+    generate_answers(queries, answers, "sqlite://", scale_factor=1)   # first run: manifest written
+    generate_answers(queries, answers, "sqlite://", scale_factor=1)   # unchanged: no regeneration
+    (queries / "01.sql").write_text("SELECT 2;")                       # content edit, same filename
+    (answers / "01.csv").write_text("a\n1\n")                          # stale CSV still present
+    generate_answers(queries, answers, "sqlite://", scale_factor=1)    # must regenerate
+    assert calls[-1] == ["01"]
+    n_after_content_change = len(calls)
+    assert n_after_content_change >= 2
+
+    (answers / "01.csv").write_text("a\n1\n")                          # stale CSV again
+    generate_answers(queries, answers, "sqlite://", scale_factor=10)   # SF change must regenerate
+    assert len(calls) == n_after_content_change + 1 and calls[-1] == ["01"]
+
+
+def test_generate_answers_raises_on_reference_failure(tmp_path, monkeypatch):
+    import pytest
+    queries = tmp_path / "queries"; queries.mkdir()
+    answers = tmp_path / "answers"
+    (queries / "01.sql").write_text("SELECT broken;")
+
+    monkeypatch.setattr(
+        "text2query.benchmark.pipeline.execute_queries_to_csv",
+        lambda files, out, db, **kw: [{"query_id": "01", "status": "error", "error": "boom"}],
+    )
+
+    from text2query.benchmark.pipeline import generate_answers
+    with pytest.raises(RuntimeError, match="01"):
+        generate_answers(queries, answers, "sqlite://", scale_factor=1)

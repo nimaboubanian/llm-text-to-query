@@ -71,3 +71,12 @@ def test_missing_manifest_returns_none(tmp_path):
 def test_corrupt_manifest_returns_none(tmp_path):
     (tmp_path / "manifest.json").write_text("not json")
     assert read_manifest_fingerprint(tmp_path) is None
+
+
+def test_fingerprint_changes_when_questions_change():
+    from text2query.benchmark.fingerprint import GenerationFingerprint
+    base = dict(model="m", prompt_template="t", schema="s",
+                temperature=0.1, max_tokens=10, seed=1)
+    a = GenerationFingerprint(**base, questions="hash-a")
+    b = GenerationFingerprint(**base, questions="hash-b")
+    assert a.hash != b.hash

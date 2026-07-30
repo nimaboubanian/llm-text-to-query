@@ -17,6 +17,7 @@ class GenerationFingerprint:
     max_tokens: int
     seed: int | None
     retry_on_error: bool = False
+    questions: str = ""
 
     @property
     def hash(self) -> str:

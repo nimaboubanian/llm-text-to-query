@@ -188,7 +188,10 @@ def main():
                 db_url=DATABASE_URL,
             )
 
-        generate_answers(queries_dir=paths.queries_dir, answers_dir=paths.answers_dir, db_url=DATABASE_URL)
+        generate_answers(
+            queries_dir=paths.queries_dir, answers_dir=paths.answers_dir,
+            db_url=DATABASE_URL, scale_factor=BENCHMARK_SCALE_FACTOR,
+        )
         print()
 
         # === Phase 2+3: Per-model benchmark ===

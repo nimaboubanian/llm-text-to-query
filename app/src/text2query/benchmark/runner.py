@@ -1,4 +1,5 @@
 """Stage: LLM SQL generation and generated-query execution, per seed."""
+import hashlib
 from dataclasses import asdict
 from pathlib import Path
 
@@ -48,6 +49,10 @@ def _run_single_generation(
         question_files = [q for q in question_files if q.stem in query_ids]
     total = len(question_files)
 
+    questions_digest = hashlib.sha256(
+        "\n".join(q.read_text() for q in question_files).encode()
+    ).hexdigest()[:16]
+
     output_dir.mkdir(parents=True, exist_ok=True)
 
     engine = create_engine_for_database(db_url)
@@ -62,6 +67,7 @@ def _run_single_generation(
         max_tokens=LLM_MAX_TOKENS,
         seed=seed,
         retry_on_error=PROMPT_FLAGS.retry_on_error,
+        questions=questions_digest,
     )
 
     cached_fingerprint = read_manifest_fingerprint(output_dir)

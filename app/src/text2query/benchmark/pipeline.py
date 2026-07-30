@@ -1,4 +1,6 @@
 """Stages: data generation, validation, database setup, and query execution."""
+import hashlib
+import json
 import logging
 import re
 import subprocess
@@ -10,6 +12,7 @@ from text2query.database.schema import create_engine_for_database
 from text2query.database.executor import execute_sql_query
 
 from text2query.benchmark.data_loader import TPCH_TABLES, load_tpch_data
+from text2query.benchmark.fingerprint import read_manifest_fingerprint, write_manifest
 from text2query.benchmark.progress import print_item_done, print_item_start
 
 logger = logging.getLogger(__name__)
@@ -196,22 +199,51 @@ def setup_database(
 def generate_answers(
     queries_dir: Path,
     answers_dir: Path,
-    db_url: str
+    db_url: str,
+    scale_factor: int = 1,
 ) -> None:
     print("  Checking answer files...")
 
-    expected = {q.stem for q in queries_dir.glob("*.sql")}
+    query_files = sorted(queries_dir.glob("*.sql"))
+    payload = json.dumps(
+        {"scale_factor": scale_factor,
+         "queries": {f.name: f.read_text() for f in query_files}},
+        sort_keys=True,
+    )
+    fingerprint = hashlib.sha256(payload.encode()).hexdigest()[:16]
+
+    cached = read_manifest_fingerprint(answers_dir)
+    if cached != fingerprint:
+        # Note: unlike runner.py's generation cache, this fires even when cached is None
+        # (no manifest yet). The manifest here is only written after a fully successful
+        # regeneration (see below), so a guard requiring "cached is not None" would mean
+        # any pre-existing, manifest-less answers/ (e.g. from before this fix, or a crash
+        # that left stale csvs without ever writing a manifest) could never be validated
+        # against the current queries/scale factor — the exact silent-staleness bug this
+        # fingerprint exists to close.
+        print(f"  ⚠ Reference queries or scale factor changed — clearing stale ground truth in {answers_dir}")
+        for f in answers_dir.glob("*.csv"):
+            f.unlink()
+
+    expected = {q.stem for q in query_files}
     actual = {a.stem for a in answers_dir.glob("*.csv")} if answers_dir.exists() else set()
     missing_ids = expected - actual
-    is_complete = not missing_ids
 
-    if is_complete:
+    if not missing_ids:
         print(f"  ✓ All {len(expected)} answer files exist")
         return
 
     print(f"  Generating {len(missing_ids)} missing answer files...")
-    query_files = [queries_dir / f"{qid}.sql" for qid in sorted(missing_ids)]
-    execute_queries_to_csv(query_files, answers_dir, db_url, write_error_file=False)
+    to_run = [queries_dir / f"{qid}.sql" for qid in sorted(missing_ids)]
+    results = execute_queries_to_csv(to_run, answers_dir, db_url, write_error_file=False)
+
+    failed = [r["query_id"] for r in results if r["status"] == "error"]
+    if failed:
+        raise RuntimeError(
+            f"Ground-truth generation failed for queries: {', '.join(failed)} — "
+            "benchmark cannot proceed with incomplete reference answers"
+        )
+    write_manifest(answers_dir, fingerprint, {"scale_factor": scale_factor, "queries": len(query_files)})
 
 
 def execute_queries_to_csv(

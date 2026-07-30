@@ -33,6 +33,7 @@ SERVER_PORT = _env("SERVER_PORT", 8000, int)
 BENCHMARK_SCALE_FACTOR = _env("BENCHMARK_SCALE_FACTOR", 1, int)
 BENCHMARK_NUM_SEEDS = _env("BENCHMARK_NUM_SEEDS", 1, int)
 BENCHMARK_DATA_PATH = os.getenv("BENCHMARK_DATA_PATH")
+BENCHMARK_FLOAT_EPSILON = _env("BENCHMARK_FLOAT_EPSILON", 1e-4, float)
 
 _models_raw = os.getenv("BENCHMARK_MODELS", "")
 BENCHMARK_MODELS = [m.strip() for m in _models_raw.split(",") if m.strip()]

@@ -9,6 +9,8 @@ import pandas as pd
 import sqlglot
 from sqlglot.diff import Keep, diff
 
+from text2query.core.config import BENCHMARK_FLOAT_EPSILON
+
 logger = logging.getLogger(__name__)
 
 
@@ -128,8 +130,47 @@ def _has_top_level_order_limit(sql: str) -> bool:
         return "ORDER BY" in sql.upper() and "LIMIT" in sql.upper()
 
 
+def _num_eq(a, b, eps: float) -> bool:
+    """Two numeric cells match when both are NaN or within eps of each other."""
+    if pd.isna(a) or pd.isna(b):
+        return bool(pd.isna(a) and pd.isna(b))
+    return abs(a - b) <= eps
+
+
+def _sort_key(vec: tuple) -> tuple:
+    return tuple((bool(pd.isna(v)), 0.0 if pd.isna(v) else v) for v in vec)
+
+
+def _bag_match(
+    gt_df: pd.DataFrame, llm_df: pd.DataFrame,
+    num_cols: list, other_cols: list, eps: float,
+) -> int:
+    """Count matching rows under bag semantics: exact on non-numeric columns,
+    within-eps on numeric ones."""
+    def by_key(df: pd.DataFrame) -> dict[tuple, list[tuple]]:
+        groups: dict[tuple, list[tuple]] = {}
+        for _, row in df.iterrows():
+            key = tuple(str(row[c]) for c in other_cols)
+            groups.setdefault(key, []).append(tuple(row[c] for c in num_cols))
+        return groups
+
+    llm_groups = by_key(llm_df)
+    matched = 0
+    for key, gt_vecs in by_key(gt_df).items():
+        llm_vecs = llm_groups.get(key, [])
+        # Greedy matching: pair each gt vector with first available matching llm vector
+        llm_used = [False] * len(llm_vecs)
+        for a in gt_vecs:
+            for j, b in enumerate(llm_vecs):
+                if not llm_used[j] and all(_num_eq(x, y, eps) for x, y in zip(a, b)):
+                    llm_used[j] = True
+                    matched += 1
+                    break
+    return matched
+
+
 def _result_set_comparison(
-    gt_csv: Path, llm_csv: Path, ref_sql: str = "",
+    gt_csv: Path, llm_csv: Path, ref_sql: str = "", eps: float = BENCHMARK_FLOAT_EPSILON,
 ) -> tuple[str, float | None, float | None, float | None, str | None]:
     error_file = llm_csv.with_suffix(".error")
     if error_file.exists():
@@ -149,27 +190,25 @@ def _result_set_comparison(
 
     llm_df = _align_columns(gt_df, llm_df)
 
-    for df in (gt_df, llm_df):
-        for col in df.select_dtypes(include=["float"]).columns:
-            df[col] = df[col].round(4)
-        df.fillna("NULL", inplace=True)
+    num_cols = [
+        c for c in gt_df.columns
+        if gt_df[c].dtype.kind in "if" and llm_df[c].dtype.kind in "if"
+    ]
+    other_cols = [c for c in gt_df.columns if c not in num_cols]
 
     if _has_top_level_order_limit(ref_sql):
         min_len = min(len(gt_df), len(llm_df))
         matches = sum(
-            tuple(gt_df.iloc[i]) == tuple(llm_df.iloc[i])
-            for i in range(min_len)
+            1 for i in range(min_len)
+            if all(_num_eq(gt_df[c].iat[i], llm_df[c].iat[i], eps) for c in num_cols)
+            and all(str(gt_df[c].iat[i]) == str(llm_df[c].iat[i]) for c in other_cols)
         )
         precision = matches / len(llm_df) if len(llm_df) > 0 else 0.0
         recall = matches / len(gt_df) if len(gt_df) > 0 else 0.0
     else:
-        gt_rows = Counter(tuple(row) for row in gt_df.itertuples(index=False, name=None))
-        llm_rows = Counter(tuple(row) for row in llm_df.itertuples(index=False, name=None))
-        matched = sum((gt_rows & llm_rows).values())
-        total_llm = sum(llm_rows.values())
-        total_gt = sum(gt_rows.values())
-        precision = matched / total_llm if total_llm > 0 else 0.0
-        recall = matched / total_gt if total_gt > 0 else 0.0
+        matched = _bag_match(gt_df, llm_df, num_cols, other_cols, eps)
+        precision = matched / len(llm_df) if len(llm_df) > 0 else 0.0
+        recall = matched / len(gt_df) if len(gt_df) > 0 else 0.0
 
     f1 = (2 * precision * recall / (precision + recall)) if (precision + recall) > 0 else 0.0
     return "ok", precision, recall, f1, None

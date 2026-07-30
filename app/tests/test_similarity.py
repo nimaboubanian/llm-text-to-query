@@ -194,13 +194,71 @@ class TestResultSetComparison:
         assert status == "ok"
         assert f1 == 1.0
 
-    def test_float_rounding_to_four_decimal_places(self, tmp_path):
+    def test_tiny_float_noise_within_epsilon(self, tmp_path):
         gt = tmp_path / "gt.csv"
         llm = tmp_path / "llm.csv"
         gt.write_text("val\n1.12340001\n")
         llm.write_text("val\n1.12339999\n")
 
-        # Within 4 decimal places, both round to 1.1234
+        # Within default epsilon (1e-4), both match
         status, _, _, f1, _ = _result_set_comparison(gt, llm)
         assert status == "ok"
         assert f1 == 1.0
+
+    def test_epsilon_boundary_and_beyond(self, tmp_path):
+        # 1.12345 vs 1.12354 straddle the old round(4) boundary but differ by
+        # 9e-5 < 1e-4 -> match; 2.0 vs 2.001 differ by 1e-3 > 1e-4 -> no match
+        gt = tmp_path / "gt.csv"
+        llm = tmp_path / "llm.csv"
+        gt.write_text("val\n1.12345\n2.0\n")
+        llm.write_text("val\n1.12354\n2.001\n")
+
+        status, prec, rec, f1, _ = _result_set_comparison(gt, llm)
+        assert status == "ok"
+        assert prec == pytest.approx(0.5)
+        assert rec == pytest.approx(0.5)
+
+    def test_custom_epsilon_loosens_match(self, tmp_path):
+        gt = tmp_path / "gt.csv"
+        llm = tmp_path / "llm.csv"
+        gt.write_text("val\n100.0\n")
+        llm.write_text("val\n100.005\n")
+
+        _, _, _, f1_default, _ = _result_set_comparison(gt, llm)
+        _, _, _, f1_loose, _ = _result_set_comparison(gt, llm, eps=1e-2)
+        assert f1_default == 0.0
+        assert f1_loose == 1.0
+
+    def test_nan_matches_nan(self, tmp_path):
+        gt = tmp_path / "gt.csv"
+        llm = tmp_path / "llm.csv"
+        gt.write_text("name,val\na,1.5\nb,\n")
+        llm.write_text("name,val\nb,\na,1.5\n")
+
+        status, _, _, f1, _ = _result_set_comparison(gt, llm)
+        assert status == "ok"
+        assert f1 == 1.0
+
+    def test_ordered_mode_uses_epsilon(self, tmp_path):
+        gt = tmp_path / "gt.csv"
+        llm = tmp_path / "llm.csv"
+        gt.write_text("val\n1.00001\n2.0\n")
+        llm.write_text("val\n1.00002\n2.0\n")
+
+        status, _, _, f1, _ = _result_set_comparison(
+            gt, llm, ref_sql="SELECT val FROM t ORDER BY val LIMIT 2",
+        )
+        assert status == "ok"
+        assert f1 == 1.0
+
+    def test_no_cross_key_float_matching(self, tmp_path):
+        # floats are grouped under their exact non-float key; a's 1.0 must not
+        # match b's 1.0
+        gt = tmp_path / "gt.csv"
+        llm = tmp_path / "llm.csv"
+        gt.write_text("name,val\na,1.0\nb,2.0\n")
+        llm.write_text("name,val\na,2.0\nb,1.0\n")
+
+        status, _, _, f1, _ = _result_set_comparison(gt, llm)
+        assert status == "ok"
+        assert f1 == 0.0

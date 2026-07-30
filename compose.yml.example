@@ -32,6 +32,7 @@ x-config: &config
   BENCHMARK_NUM_SEEDS: "2"                  # Repetitions per query, for statistical robustness
   BENCHMARK_QUERY_IDS: "1,3,7"              # Comma-separated query IDs to run, or "all"
   BENCHMARK_SCALE_FACTOR: "1"                # TPC-H data scale factor
+  BENCHMARK_FLOAT_EPSILON: "1e-4"           # Absolute float tolerance in result comparison; loosen to 1e-2 for money-heavy queries
   # BENCHMARK_DATA_PATH: ""                  # Optional: reuse existing generated TPC-H data instead of regenerating
 
 # Default database — used by both App and Benchmark modes.

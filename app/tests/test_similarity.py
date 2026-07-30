@@ -262,3 +262,22 @@ class TestResultSetComparison:
         status, _, _, f1, _ = _result_set_comparison(gt, llm)
         assert status == "ok"
         assert f1 == 0.0
+
+    def test_sorted_greedy_matching_resolves_near_ties(self, tmp_path):
+        # When multiple gt values can each match multiple llm values (near-ties),
+        # sorting before greedy matching ensures optimal pairing.
+        # gt:  1.00000, 1.00009 (both within 1e-4 of 1.00005)
+        # llm: 1.00005, 0.99995 (neither within 1e-4 of 1.00009)
+        # Optimal: pair 1.00000 with 0.99995, 1.00009 with 1.00005 → 2 matches
+        # Unsorted greedy would pair 1.00000 with 1.00005 first, leaving 1.00009
+        # unmatched → 1 match (incorrect)
+        gt = tmp_path / "gt.csv"
+        llm = tmp_path / "llm.csv"
+        gt.write_text("val\n1.00000\n1.00009\n")
+        llm.write_text("val\n1.00005\n0.99995\n")
+
+        status, prec, rec, f1, _ = _result_set_comparison(gt, llm)
+        assert status == "ok"
+        assert f1 == 1.0  # Both rows match with sorting+greedy
+        assert prec == 1.0
+        assert rec == 1.0

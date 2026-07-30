@@ -158,10 +158,15 @@ def _bag_match(
     matched = 0
     for key, gt_vecs in by_key(gt_df).items():
         llm_vecs = llm_groups.get(key, [])
+        # Sort both lists by value to enable greedy matching on sorted pairs;
+        # this ensures near-ties are paired optimally (e.g., 1.00000 and 1.00009
+        # can both match 1.00005, but sorted pairing ensures both get matched)
+        sorted_gt_vecs = sorted(gt_vecs, key=_sort_key)
+        sorted_llm_vecs = sorted(llm_vecs, key=_sort_key)
         # Greedy matching: pair each gt vector with first available matching llm vector
-        llm_used = [False] * len(llm_vecs)
-        for a in gt_vecs:
-            for j, b in enumerate(llm_vecs):
+        llm_used = [False] * len(sorted_llm_vecs)
+        for a in sorted_gt_vecs:
+            for j, b in enumerate(sorted_llm_vecs):
                 if not llm_used[j] and all(_num_eq(x, y, eps) for x, y in zip(a, b)):
                     llm_used[j] = True
                     matched += 1

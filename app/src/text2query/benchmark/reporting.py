@@ -29,7 +29,7 @@ METRIC_LABELS = {
     "ast_similarity_normalized": "AST similarity (normalized)",
 }
 
-_LABEL_WIDTH = 17
+_LABEL_WIDTH = 30
 
 
 def _field(label: str, value: str) -> str:

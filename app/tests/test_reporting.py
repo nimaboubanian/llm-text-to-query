@@ -116,9 +116,9 @@ def test_aggregate_model_results_exact_match_requires_perfect_mean_across_seeds(
 def test_format_run_summary_single_model():
     precomputed = {
         "m1": [
-            {"query_id": 1, "seed": 1, "status": "ok", "result_f1": 1.0, "ast_similarity": 0.9},
-            {"query_id": 2, "seed": 1, "status": "ok", "result_f1": 0.5, "ast_similarity": 0.7},
-            {"query_id": 3, "seed": 1, "status": "exec_error", "result_f1": 0.0, "ast_similarity": 0.0},
+            {"query_id": 1, "seed": 1, "status": "ok", "result_f1": 1.0, "ast_similarity": 0.9, "ast_similarity_normalized": 0.85},
+            {"query_id": 2, "seed": 1, "status": "ok", "result_f1": 0.5, "ast_similarity": 0.7, "ast_similarity_normalized": 0.65},
+            {"query_id": 3, "seed": 1, "status": "exec_error", "result_f1": 0.0, "ast_similarity": 0.0, "ast_similarity_normalized": None},
         ]
     }
     summary = format_run_summary(precomputed, ["m1"], Path("benchmark/results/x"), elapsed=252.0)
@@ -128,6 +128,8 @@ def test_format_run_summary_single_model():
     assert _field("Session", "benchmark/results/x") in summary
     assert "password" not in summary
     assert "postgresql" not in summary
+    # Verify normalized metric is properly formatted with space between label and value
+    assert _field("AST similarity (normalized)", "0.7500") in summary
 
 
 def test_format_run_summary_multi_model_shows_per_model_row():
@@ -144,14 +146,14 @@ def test_format_run_summary_multi_model_shows_per_model_row():
 
 def test_field_pads_label_and_wraps_long_values():
     row = _field("Model", "qwen2.5-coder:7b")
-    assert row == "  Model            qwen2.5-coder:7b"
+    assert row == "  Model                         qwen2.5-coder:7b"
 
     wrapped = _field("Prompt features", "a, " * 40 + "z")
     lines = wrapped.split("\n")
     assert len(lines) > 1
     assert lines[0].startswith("  Prompt features  ")
     # continuation lines line up under the value column, not the label
-    assert lines[1].startswith(" " * 19)
+    assert lines[1].startswith(" " * 32)
 
 
 def test_format_session_header_single_model_filtered_queries():

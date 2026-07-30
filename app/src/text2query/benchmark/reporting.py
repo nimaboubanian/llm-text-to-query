@@ -19,11 +19,15 @@ CSV_FIELDNAMES = [
     "seed", "model", "query_id", "nl_query", "prompt",
     "generated_sql", "real_sql", "status",
     "result_precision", "result_recall", "result_f1",
-    "ast_similarity", "error_category",
+    "ast_similarity", "ast_similarity_normalized", "error_category",
 ]
 
-METRICS = ("result_f1", "ast_similarity")
-METRIC_LABELS = {"result_f1": "Result F1", "ast_similarity": "AST similarity"}
+METRICS = ("result_f1", "ast_similarity", "ast_similarity_normalized")
+METRIC_LABELS = {
+    "result_f1": "Result F1",
+    "ast_similarity": "AST similarity",
+    "ast_similarity_normalized": "AST similarity (normalized)",
+}
 
 _LABEL_WIDTH = 17
 
@@ -137,14 +141,14 @@ def _format_per_query(seed_results: list[dict]) -> str:
     """Format a per-query report showing all seeds + aggregated stats."""
     lines = [
         "## Per-Seed Results\n",
-        "| Seed | Status | Result F1 | AST Sim |",
-        "|---|---|---|---|",
+        "| Seed | Status | Result F1 | AST Sim | AST Sim (norm) |",
+        "|---|---|---|---|---|",
     ]
 
     for r in seed_results:
         lines.append(
             f"| {r['seed']} | {r['status']} | {_v(r['result_f1'])} "
-            f"| {_v(r['ast_similarity'])} |"
+            f"| {_v(r['ast_similarity'])} | {_v(r.get('ast_similarity_normalized'))} |"
         )
 
     ok_count = sum(1 for r in seed_results if r["status"] == "ok")
@@ -157,7 +161,8 @@ def _format_per_query(seed_results: list[dict]) -> str:
     lines.append("| Metric | Mean | Std | 95% CI |")
     lines.append("|---|---|---|---|")
 
-    for label, metric in [("Result F1", "result_f1"), ("AST Similarity", "ast_similarity")]:
+    for metric in METRICS:
+        label = METRIC_LABELS[metric]
         stats = _compute_stats([r.get(metric) for r in seed_results])
         if stats["mean"] is not None:
             ci = f"[{stats['ci_lower']:.4f}, {stats['ci_upper']:.4f}]"
@@ -172,21 +177,23 @@ def _format_per_query(seed_results: list[dict]) -> str:
 def _format_summary(aggregated: list[dict], num_seeds: int) -> str:
     """Format per-query summary table with mean±std columns."""
     lines = [
-        "| Query | Seeds ok | F1 (mean±std) | AST (mean±std) | F1 95% CI |",
-        "|---|---|---|---|---|",
+        "| Query | Seeds ok | F1 (mean±std) | AST (mean±std) | AST norm (mean±std) | F1 95% CI |",
+        "|---|---|---|---|---|---|",
     ]
 
     for q in aggregated:
         qid = f"{q['query_id']:02d}"
         f1 = q["result_f1"]
         ast = q["ast_similarity"]
+        norm = q["ast_similarity_normalized"]
         ok_count = sum(1 for r in q["per_seed"] if r["status"] == "ok")
 
         f1_str = f"{f1['mean']:.4f} ± {f1['std']:.4f}" if f1["mean"] is not None else "—"
         ast_str = f"{ast['mean']:.4f} ± {ast['std']:.4f}" if ast["mean"] is not None else "—"
+        norm_str = f"{norm['mean']:.4f} ± {norm['std']:.4f}" if norm["mean"] is not None else "—"
         ci_str = f"[{f1['ci_lower']:.4f}, {f1['ci_upper']:.4f}]" if f1["mean"] is not None else "—"
 
-        lines.append(f"| {qid} | {ok_count}/{num_seeds} | {f1_str} | {ast_str} | {ci_str} |")
+        lines.append(f"| {qid} | {ok_count}/{num_seeds} | {f1_str} | {ast_str} | {norm_str} | {ci_str} |")
 
     return "\n".join(lines) + "\n"
 
@@ -360,7 +367,11 @@ def generate_cross_model_report(
     header = "| Query | " + " | ".join(m for m in models) + " |"
     sep = "|---|" + "|".join("---" for _ in models) + "|"
 
-    for title, metric, show_status in [("F1", "result_f1", True), ("AST Similarity", "ast_similarity", False)]:
+    for title, metric, show_status in [
+        ("F1", "result_f1", True),
+        ("AST Similarity", "ast_similarity", False),
+        ("AST Similarity (normalized)", "ast_similarity_normalized", False),
+    ]:
         lines += ["", f"## {title}\n", header, sep]
         for qid in query_ids:
             row = f"| {qid} "
@@ -517,17 +528,19 @@ def format_run_summary(
     else:
         name_width = max(len("Model"), max(len(m) for m in models))
         lines.append(
-            f"  {'Model':<{name_width}}   {'Result F1':>9}   {'AST sim':>7}   {'Exact':>7}   {'Fail':>4}"
+            f"  {'Model':<{name_width}}   {'Result F1':>9}   {'AST sim':>7}   {'AST norm':>8}   {'Exact':>7}   {'Fail':>4}"
         )
         for model in models:
             agg = aggregates[model]
             f1 = agg["metrics"]["result_f1"]["mean"]
             ast = agg["metrics"]["ast_similarity"]["mean"]
+            norm = agg["metrics"]["ast_similarity_normalized"]["mean"]
             f1_str = f"{f1:.4f}" if f1 is not None else "—"
             ast_str = f"{ast:.4f}" if ast is not None else "—"
+            norm_str = f"{norm:.4f}" if norm is not None else "—"
             exact_str = f"{agg['exact_matches']} / {agg['total_queries']}"
             lines.append(
-                f"  {model:<{name_width}}   {f1_str:>9}   {ast_str:>7}   {exact_str:>7}   {agg['failures']:>4}"
+                f"  {model:<{name_width}}   {f1_str:>9}   {ast_str:>7}   {norm_str:>8}   {exact_str:>7}   {agg['failures']:>4}"
             )
 
     lines.append("")

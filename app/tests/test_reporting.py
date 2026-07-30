@@ -9,8 +9,12 @@ from text2query.benchmark.reporting import (
 
 
 def test_metrics_constant_has_matching_labels():
-    assert METRICS == ("result_f1", "ast_similarity")
-    assert METRIC_LABELS == {"result_f1": "Result F1", "ast_similarity": "AST similarity"}
+    assert METRICS == ("result_f1", "ast_similarity", "ast_similarity_normalized")
+    assert METRIC_LABELS == {
+        "result_f1": "Result F1",
+        "ast_similarity": "AST similarity",
+        "ast_similarity_normalized": "AST similarity (normalized)",
+    }
     assert set(METRICS) == set(METRIC_LABELS)
 
 
@@ -163,7 +167,7 @@ def test_format_session_header_single_model_filtered_queries():
     assert _field("Queries", "3 of 22 (01, 07, 16)") in header
     assert _field("Seeds", "1") in header
     assert _field("Evaluations", "3  (3 queries × 1 seed × 1 model)") in header
-    assert _field("Metrics", "Result F1, AST similarity") in header
+    assert _field("Metrics", "Result F1, AST similarity, AST similarity (normalized)") in header
     assert "schema_ddl, few_shot=1" in header
     assert "planning" not in header  # False flags are omitted, not printed as planning=False
     assert "password" not in header

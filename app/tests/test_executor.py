@@ -4,6 +4,7 @@ from sqlalchemy.exc import OperationalError
 
 from text2query.core.config import DATABASE_URL
 from text2query.database.executor import execute_sql_query
+import text2query.database.executor as ex
 
 
 def _live_engine():
@@ -43,3 +44,18 @@ def test_write_statement_rejected_by_read_only_transaction():
         count = conn.execute(text("SELECT count(*) FROM _readonly_probe")).scalar()
         conn.execute(text("DROP TABLE _readonly_probe"))
     assert count == 1
+
+
+@pytest.mark.integration
+def test_result_at_cap_logs_truncation_warning(caplog):
+    engine = _live_engine()
+    original = ex.MAX_RESULT_ROWS
+    ex.MAX_RESULT_ROWS = 3
+    try:
+        with caplog.at_level("WARNING"):
+            result = ex.execute_sql_query(engine, "SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4")
+        assert result.ok
+        assert len(result.data) == 3
+        assert any("truncated" in r.message.lower() for r in caplog.records)
+    finally:
+        ex.MAX_RESULT_ROWS = original

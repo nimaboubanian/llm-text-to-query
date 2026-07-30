@@ -7,7 +7,7 @@ from sqlalchemy import text
 logger = logging.getLogger(__name__)
 
 STATEMENT_TIMEOUT_MS = 30_000
-MAX_RESULT_ROWS = 10_000
+MAX_RESULT_ROWS = 100_000  # ponytail: flat cap; per-caller limits if SF>10 ground truth ever needed
 
 
 @dataclass
@@ -28,6 +28,8 @@ def execute_sql_query(engine, query: str) -> ExecutionResult:
             conn.execute(text("SET TRANSACTION READ ONLY"))
             result = conn.execute(text(query))
             rows = result.fetchmany(MAX_RESULT_ROWS)
+            if len(rows) == MAX_RESULT_ROWS and result.fetchone() is not None:
+                logger.warning("Result truncated at %d rows — scores against this result are unreliable", MAX_RESULT_ROWS)
             return ExecutionResult(pd.DataFrame(rows, columns=result.keys()), None)
     except Exception as e:
         logger.warning("Query execution failed: %s", e)

@@ -49,7 +49,19 @@ def _clean_sql_response(response: str) -> str | None:
     match = re.search(r"```(?:sql)?\s*(.*?)```", response, re.DOTALL | re.IGNORECASE)
     if match:
         sql = match.group(1).strip()
-        return sql if _is_safe_sql(sql) else None
+        if _is_safe_sql(sql):
+            return sql
+        # A stray leading EXPLAIN shouldn't sink an otherwise-valid embedded SELECT —
+        # salvage it instead of discarding the whole response. Gated on EXPLAIN
+        # specifically (not a generic fallback) so DDL/DML/multi-statement rejections
+        # below are unaffected.
+        if re.match(r"(?i)^\s*EXPLAIN\b", sql):
+            salvage = re.search(r"(SELECT|WITH)\s+.*?;", sql, re.DOTALL | re.IGNORECASE)
+            if salvage:
+                candidate = salvage.group(0).strip()
+                if _is_safe_sql(candidate):
+                    return candidate
+        return None
 
     match = re.search(r"(SELECT|WITH)\s+.*?;", response, re.DOTALL | re.IGNORECASE)
     if match:

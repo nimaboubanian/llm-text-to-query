@@ -93,3 +93,18 @@ def test_allows_unparsable_select_prefixed_fallback():
     result = _clean_sql_response(response)
     assert result is not None
     assert result.upper().startswith("SELECT")
+
+
+def test_salvages_select_from_explain_prefixed_fence():
+    """A stray leading EXPLAIN (e.g. echoed back from validator feedback, or a
+    model habit) shouldn't discard an otherwise-valid embedded SELECT."""
+    response = (
+        "```sql\n"
+        "EXPLAIN -- Relevant tables: orders\n"
+        "SELECT o_orderkey FROM orders WHERE o_orderdate > '1994-01-01';\n"
+        "```"
+    )
+    result = _clean_sql_response(response)
+    assert result is not None
+    assert result.upper().startswith("SELECT")
+    assert "EXPLAIN" not in result.upper()

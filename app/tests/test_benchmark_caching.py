@@ -126,6 +126,42 @@ def test_temperature_change_invalidates_and_regenerates(tmp_path, capsys, monkey
     assert "config changed" in capsys.readouterr().out
 
 
+def test_query_ids_filter_does_not_invalidate_cache(tmp_path, capsys):
+    """Resuming with a query_ids subset must not change the fingerprint (Finding 1):
+    the questions digest has to be computed over the full question set, not the
+    filtered one, or a --query-ids re-run wipes the whole generation cache."""
+    questions_dir = tmp_path / "questions"
+    output_dir = tmp_path / "output"
+    questions_dir.mkdir()
+    _make_question_file(questions_dir, "01", "What are the customer names?")
+    _make_question_file(questions_dir, "02", "How many orders are there?")
+
+    call_count = {"n": 0}
+
+    def mock_generate(*args, **kwargs):
+        call_count["n"] += 1
+        return GenerationResult(sql="SELECT name FROM customers;", raw_response="r", prompt="p")
+
+    with patch("text2query.llm.ollama.generate_sql", side_effect=mock_generate), \
+         patch("text2query.llm.ollama.warmup", return_value=True), \
+         patch("text2query.benchmark.runner.create_engine_for_database"), \
+         patch("text2query.benchmark.runner.render_schema", return_value="schema"):
+
+        run_llm_generation(questions_dir, output_dir, "db://url", "test-model", seeds=None)
+        assert call_count["n"] == 2
+        capsys.readouterr()
+
+        # Re-run filtered to just one query id, as if resuming after an interruption.
+        run_llm_generation(
+            questions_dir, output_dir, "db://url", "test-model", seeds=None, query_ids=["02"],
+        )
+
+    assert call_count["n"] == 2  # both still cached — no stale-cache wipe from filtering
+    assert "config changed" not in capsys.readouterr().out
+    assert (output_dir / "seed_1" / "01.sql").exists()
+    assert (output_dir / "seed_1" / "02.sql").exists()
+
+
 def test_stale_answers_cleared_when_queries_manifest_changes(tmp_path, monkeypatch):
     queries_dir = tmp_path / "queries"
     answers_dir = tmp_path / "answers"

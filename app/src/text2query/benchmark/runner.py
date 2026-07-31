@@ -45,14 +45,17 @@ def _run_single_generation(
     on_item_start=print_item_start,
     on_item_done=print_item_done,
 ) -> None:
+    # Digest is over the FULL question set, independent of query_ids filtering below —
+    # otherwise a --query-ids re-run (e.g. resuming just the failed queries after an
+    # interrupted run) would change the fingerprint and wipe the entire generation cache.
+    questions_digest = hashlib.sha256(
+        "\n".join(f.read_text() for f in sorted(questions_dir.glob("*.md"))).encode()
+    ).hexdigest()[:16]
+
     question_files = sorted(questions_dir.glob("*.md"))
     if query_ids is not None:
         question_files = [q for q in question_files if q.stem in query_ids]
     total = len(question_files)
-
-    questions_digest = hashlib.sha256(
-        "\n".join(q.read_text() for q in question_files).encode()
-    ).hexdigest()[:16]
 
     output_dir.mkdir(parents=True, exist_ok=True)
 

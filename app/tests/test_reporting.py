@@ -125,6 +125,45 @@ def test_results_csv_includes_timing_columns(tmp_path):
     assert "63.0" in csv_text
 
 
+def test_results_csv_marks_retried_rows(tmp_path):
+    """A <id>.retry.prompt sidecar means the row was retried; its absence means it wasn't."""
+    ref_queries = tmp_path / "ref_queries"
+    ref_answers = tmp_path / "ref_answers"
+    gen_queries = tmp_path / "gen_queries" / "seed_1"
+    gen_answers = tmp_path / "gen_answers" / "seed_1"
+    questions = tmp_path / "questions"
+    report_dir = tmp_path / "report"
+    for d in [ref_queries, ref_answers, gen_queries, gen_answers, questions]:
+        d.mkdir(parents=True)
+
+    for qid in ["01", "02"]:
+        (ref_queries / f"{qid}.sql").write_text("SELECT name FROM customers;")
+        (ref_answers / f"{qid}.csv").write_text("name\nAlice\n")
+        (gen_queries / f"{qid}.sql").write_text("SELECT name FROM customers;")
+        (gen_queries / f"{qid}.prompt").write_text("SCHEMA: customers(name)\nQuestion: list names")
+        (gen_answers / f"{qid}.csv").write_text("name\nAlice\n")
+        (questions / f"{qid}.md").write_text('# Business Question:\n  "What are the customer names?"\n')
+
+    # Only 02 was retried.
+    (gen_queries / "02.retry.prompt").write_text("SCHEMA: customers(name)\nQuestion: list names\n\nfix it")
+
+    generate_reports(
+        generated_queries_dir=gen_queries.parent,
+        reference_queries_dir=ref_queries,
+        generated_answers_dir=gen_answers.parent,
+        reference_answers_dir=ref_answers,
+        report_dir=report_dir,
+        model="m1",
+        questions_dir=questions,
+    )
+
+    with open(report_dir / "results.csv") as f:
+        rows = {r["query_id"]: r for r in csv.DictReader(f)}
+
+    assert rows["01"]["retried"] == "False"
+    assert rows["02"]["retried"] == "True"
+
+
 def test_aggregate_model_results_counts_exact_matches_and_failures():
     rows = [
         {"query_id": 1, "seed": 1, "status": "ok", "result_f1": 1.0, "ast_similarity": 0.9},

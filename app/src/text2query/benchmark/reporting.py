@@ -20,7 +20,7 @@ CSV_FIELDNAMES = [
     "generated_sql", "real_sql", "status",
     "result_precision", "result_recall", "result_f1",
     "ast_similarity", "ast_similarity_normalized", "error_category",
-    "prompt_eval_count", "eval_count", "generation_seconds",
+    "prompt_eval_count", "eval_count", "generation_seconds", "retried",
 ]
 
 METRICS = ("result_f1", "ast_similarity", "ast_similarity_normalized")
@@ -244,6 +244,7 @@ def generate_reports(
             sim_result["prompt"] = prompt_path.read_text() if prompt_path.exists() else None
             gen_sql_path = seed_queries / f"{qid}.sql"
             sim_result["generated_sql"] = gen_sql_path.read_text().strip() if gen_sql_path.exists() else None
+            sim_result["retried"] = (seed_queries / f"{qid}.retry.prompt").exists()
             timing_path = seed_queries / f"{qid}.timing.json"
             if timing_path.exists():
                 timing = json.loads(timing_path.read_text())

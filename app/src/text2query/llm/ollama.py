@@ -199,6 +199,11 @@ def generate_sql_with_retry(
     else:
         return result
 
+    # Wording here deliberately overlaps both _RULES_STRICT ("Return ONLY the SQL
+    # query... no markdown", gated on PROMPT_STRICT_OUTPUT) and _RULES_MINIMAL
+    # ("Only use tables and columns from the schema above", always included) in
+    # prompt_builder.py, so RETRY_ON_ERROR=true is not a clean ablation of retry
+    # independent of those rules.
     retry_prompt = (
         f"{result.prompt}\n\n"
         f"{reason}\n"

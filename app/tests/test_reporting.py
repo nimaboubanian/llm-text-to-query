@@ -45,16 +45,21 @@ def test_compute_stats_with_nones():
     assert abs(result["mean"] - 0.6) < 0.001
 
 
-def test_results_csv_single_seed(tmp_path):
-    """Single-model single-seed runs should emit results.csv with the new columns."""
+def _report_dirs(tmp_path):
+    """Create the standard generate_reports layout; returns its six paths in order."""
     ref_queries = tmp_path / "ref_queries"
     ref_answers = tmp_path / "ref_answers"
     gen_queries = tmp_path / "gen_queries" / "seed_1"
     gen_answers = tmp_path / "gen_answers" / "seed_1"
     questions = tmp_path / "questions"
-    report_dir = tmp_path / "report"
     for d in [ref_queries, ref_answers, gen_queries, gen_answers, questions]:
         d.mkdir(parents=True)
+    return ref_queries, ref_answers, gen_queries, gen_answers, questions, tmp_path / "report"
+
+
+def test_results_csv_single_seed(tmp_path):
+    """Single-model single-seed runs should emit results.csv with the new columns."""
+    ref_queries, ref_answers, gen_queries, gen_answers, questions, report_dir = _report_dirs(tmp_path)
 
     (ref_queries / "01.sql").write_text("SELECT name FROM customers;")
     (ref_answers / "01.csv").write_text("name\nAlice\n")
@@ -91,14 +96,7 @@ def test_results_csv_single_seed(tmp_path):
 
 def test_results_csv_includes_timing_columns(tmp_path):
     """A .timing.json sidecar next to a generated query should merge into results.csv."""
-    ref_queries = tmp_path / "ref_queries"
-    ref_answers = tmp_path / "ref_answers"
-    gen_queries = tmp_path / "gen_queries" / "seed_1"
-    gen_answers = tmp_path / "gen_answers" / "seed_1"
-    questions = tmp_path / "questions"
-    report_dir = tmp_path / "report"
-    for d in [ref_queries, ref_answers, gen_queries, gen_answers, questions]:
-        d.mkdir(parents=True)
+    ref_queries, ref_answers, gen_queries, gen_answers, questions, report_dir = _report_dirs(tmp_path)
 
     (ref_queries / "01.sql").write_text("SELECT name FROM customers;")
     (ref_answers / "01.csv").write_text("name\nAlice\n")
@@ -127,14 +125,7 @@ def test_results_csv_includes_timing_columns(tmp_path):
 
 def test_results_csv_marks_retried_rows(tmp_path):
     """A <id>.retry.prompt sidecar means the row was retried; its absence means it wasn't."""
-    ref_queries = tmp_path / "ref_queries"
-    ref_answers = tmp_path / "ref_answers"
-    gen_queries = tmp_path / "gen_queries" / "seed_1"
-    gen_answers = tmp_path / "gen_answers" / "seed_1"
-    questions = tmp_path / "questions"
-    report_dir = tmp_path / "report"
-    for d in [ref_queries, ref_answers, gen_queries, gen_answers, questions]:
-        d.mkdir(parents=True)
+    ref_queries, ref_answers, gen_queries, gen_answers, questions, report_dir = _report_dirs(tmp_path)
 
     for qid in ["01", "02"]:
         (ref_queries / f"{qid}.sql").write_text("SELECT name FROM customers;")

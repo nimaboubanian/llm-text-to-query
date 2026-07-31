@@ -20,9 +20,9 @@ def _tpch_sqlite_engine(row_counts: dict[str, int], default_rows: int = 1):
     with engine.begin() as conn:
         for table in TPCH_TABLES:
             conn.execute(text(f"CREATE TABLE {table} (id INTEGER)"))
-            n = row_counts.get(table, default_rows)
-            for i in range(n):
-                conn.execute(text(f"INSERT INTO {table} (id) VALUES ({i})"))
+            rows = [{"i": i} for i in range(row_counts.get(table, default_rows))]
+            if rows:
+                conn.execute(text(f"INSERT INTO {table} (id) VALUES (:i)"), rows)
     return engine
 
 

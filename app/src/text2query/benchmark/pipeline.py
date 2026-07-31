@@ -220,13 +220,9 @@ def generate_answers(
 
     cached = read_manifest_fingerprint(answers_dir)
     if cached != fingerprint:
-        # Note: unlike runner.py's generation cache, this fires even when cached is None
-        # (no manifest yet). The manifest here is only written after a fully successful
-        # regeneration (see below), so a guard requiring "cached is not None" would mean
-        # any pre-existing, manifest-less answers/ (e.g. from before this fix, or a crash
-        # that left stale csvs without ever writing a manifest) could never be validated
-        # against the current queries/scale factor — the exact silent-staleness bug this
-        # fingerprint exists to close.
+        # Fires even when cached is None, unlike runner.py's guard: the manifest is written
+        # only after a fully successful regeneration, so a manifest-less answers/ (pre-fix,
+        # or left by a crash) must revalidate or the staleness check never activates.
         print(f"  ⚠ Reference queries or scale factor changed — clearing stale ground truth in {answers_dir}")
         for f in answers_dir.glob("*.csv"):
             f.unlink()

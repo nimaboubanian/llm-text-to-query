@@ -3,6 +3,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pandas as pd
+import pytest
 
 from text2query.benchmark.fingerprint import read_manifest_fingerprint, write_manifest
 from text2query.benchmark.runner import run_llm_generation, execute_generated_queries
@@ -224,7 +225,6 @@ def test_generate_answers_regenerates_when_query_content_changes(tmp_path, monke
 
 
 def test_generate_answers_raises_on_reference_failure(tmp_path, monkeypatch):
-    import pytest
     queries = tmp_path / "queries"; queries.mkdir()
     answers = tmp_path / "answers"
     (queries / "01.sql").write_text("SELECT broken;")

@@ -161,7 +161,7 @@ def _generate(prompt: str, selected_model: str, seed: int | None) -> GenerationR
             prompt=prompt,
             prompt_eval_count=data.get("prompt_eval_count"),
             eval_count=data.get("eval_count"),
-            duration_seconds=duration_ns / 1e9 if duration_ns else None,
+            duration_seconds=duration_ns / 1e9 if duration_ns is not None else None,
         )
 
     except TimeoutError:

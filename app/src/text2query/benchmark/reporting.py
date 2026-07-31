@@ -20,6 +20,7 @@ CSV_FIELDNAMES = [
     "generated_sql", "real_sql", "status",
     "result_precision", "result_recall", "result_f1",
     "ast_similarity", "ast_similarity_normalized", "error_category",
+    "prompt_eval_count", "eval_count", "generation_seconds",
 ]
 
 METRICS = ("result_f1", "ast_similarity", "ast_similarity_normalized")
@@ -243,6 +244,12 @@ def generate_reports(
             sim_result["prompt"] = prompt_path.read_text() if prompt_path.exists() else None
             gen_sql_path = seed_queries / f"{qid}.sql"
             sim_result["generated_sql"] = gen_sql_path.read_text().strip() if gen_sql_path.exists() else None
+            timing_path = seed_queries / f"{qid}.timing.json"
+            if timing_path.exists():
+                timing = json.loads(timing_path.read_text())
+                sim_result["prompt_eval_count"] = timing.get("prompt_eval_count")
+                sim_result["eval_count"] = timing.get("eval_count")
+                sim_result["generation_seconds"] = timing.get("duration_seconds")
             sim_result["real_sql"] = ref_sql
             seed_results.append(sim_result)
         all_flat_results.extend(seed_results)

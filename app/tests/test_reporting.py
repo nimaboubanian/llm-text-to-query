@@ -89,6 +89,42 @@ def test_results_csv_single_seed(tmp_path):
     assert r["real_sql"] == "SELECT name FROM customers;"
 
 
+def test_results_csv_includes_timing_columns(tmp_path):
+    """A .timing.json sidecar next to a generated query should merge into results.csv."""
+    ref_queries = tmp_path / "ref_queries"
+    ref_answers = tmp_path / "ref_answers"
+    gen_queries = tmp_path / "gen_queries" / "seed_1"
+    gen_answers = tmp_path / "gen_answers" / "seed_1"
+    questions = tmp_path / "questions"
+    report_dir = tmp_path / "report"
+    for d in [ref_queries, ref_answers, gen_queries, gen_answers, questions]:
+        d.mkdir(parents=True)
+
+    (ref_queries / "01.sql").write_text("SELECT name FROM customers;")
+    (ref_answers / "01.csv").write_text("name\nAlice\n")
+    (gen_queries / "01.sql").write_text("SELECT name FROM customers;")
+    (gen_queries / "01.prompt").write_text("SCHEMA: customers(name)\nQuestion: list names")
+    (gen_queries / "01.timing.json").write_text(
+        '{"prompt_eval_count": 2500, "eval_count": 120, "duration_seconds": 63.0}')
+    (gen_answers / "01.csv").write_text("name\nAlice\n")
+    (questions / "01.md").write_text('# Business Question:\n  "What are the customer names?"\n')
+
+    generate_reports(
+        generated_queries_dir=gen_queries.parent,
+        reference_queries_dir=ref_queries,
+        generated_answers_dir=gen_answers.parent,
+        reference_answers_dir=ref_answers,
+        report_dir=report_dir,
+        model="m1",
+        questions_dir=questions,
+    )
+
+    csv_text = (report_dir / "results.csv").read_text()
+    header = csv_text.splitlines()[0]
+    assert "prompt_eval_count" in header and "generation_seconds" in header
+    assert "63.0" in csv_text
+
+
 def test_aggregate_model_results_counts_exact_matches_and_failures():
     rows = [
         {"query_id": 1, "seed": 1, "status": "ok", "result_f1": 1.0, "ast_similarity": 0.9},

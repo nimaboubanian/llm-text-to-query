@@ -69,6 +69,9 @@ class GenerationResult:
     error: str | None = None
     retried: bool = False
     first_prompt: str | None = None
+    prompt_eval_count: int | None = None
+    eval_count: int | None = None
+    duration_seconds: float | None = None
 
 
 def _post_json(url: str, payload: dict, timeout: int) -> tuple[int, dict]:
@@ -151,10 +154,14 @@ def _generate(prompt: str, selected_model: str, seed: int | None) -> GenerationR
             )
 
         full_response = data.get("response", "")
+        duration_ns = data.get("total_duration")
         return GenerationResult(
             sql=_clean_sql_response(full_response),
             raw_response=full_response,
             prompt=prompt,
+            prompt_eval_count=data.get("prompt_eval_count"),
+            eval_count=data.get("eval_count"),
+            duration_seconds=duration_ns / 1e9 if duration_ns else None,
         )
 
     except TimeoutError:

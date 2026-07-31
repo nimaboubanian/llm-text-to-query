@@ -76,3 +76,15 @@ def test_retried_result_preserves_first_prompt(monkeypatch):
     assert result.retried is True
     assert result.first_prompt is not None
     assert result.first_prompt != result.prompt
+
+
+def test_generate_captures_telemetry(monkeypatch):
+    def fake_post(url, payload, timeout):
+        return 200, {"response": "```sql\nSELECT 1;\n```",
+                     "prompt_eval_count": 2500, "eval_count": 120,
+                     "total_duration": 63_000_000_000}
+    monkeypatch.setattr(ollama, "_post_json", fake_post)
+    result = ollama._generate("p", "m", 1)
+    assert result.prompt_eval_count == 2500
+    assert result.eval_count == 120
+    assert result.duration_seconds == 63.0

@@ -1,5 +1,6 @@
 """Stage: LLM SQL generation and generated-query execution, per seed."""
 import hashlib
+import json
 from dataclasses import asdict
 from pathlib import Path
 
@@ -73,7 +74,7 @@ def _run_single_generation(
     cached_fingerprint = read_manifest_fingerprint(output_dir)
     if cached_fingerprint is not None and cached_fingerprint != fingerprint.hash:
         print(f"  ⚠ Generation config changed since last run — clearing stale cache in {output_dir}")
-        _clear(output_dir, ("*.sql", "*.prompt", "*.raw"))
+        _clear(output_dir, ("*.sql", "*.prompt", "*.raw", "*.timing.json"))
     write_manifest(output_dir, fingerprint.hash, asdict(fingerprint))
 
     # Cache: skip queries whose .sql file already exists. Safe to resume from — the
@@ -124,6 +125,13 @@ def _run_single_generation(
             (output_dir / f"{query_id}.retry.prompt").write_text(prompt)
         elif prompt is not None:
             (output_dir / f"{query_id}.prompt").write_text(prompt)
+
+        if result.duration_seconds is not None:
+            (output_dir / f"{query_id}.timing.json").write_text(json.dumps({
+                "prompt_eval_count": result.prompt_eval_count,
+                "eval_count": result.eval_count,
+                "duration_seconds": result.duration_seconds,
+            }))
 
         if generated_sql:
             output_file = output_dir / f"{query_id}.sql"

@@ -84,8 +84,9 @@ def test_explain_error_message_excludes_wrapper_and_sql_dump():
 def test_explain_error_strips_explain_from_postgres_line_annotation():
     engine = _live_engine()
     # Syntax error: missing table name in FROM clause.
-    # Postgres will report this as "LINE 1: EXPLAIN SELECT * FROM" → error.
-    # The fix should strip the "EXPLAIN " so the error just reads "LINE 1: SELECT * FROM".
+    # explain_error sends "EXPLAIN\n<sql>" (EXPLAIN on its own line), so Postgres's
+    # LINE N: annotation — which only echoes the single line the error occurred on —
+    # never includes "EXPLAIN" and its column offset matches the real query text.
     sql = "SELECT * FROM"
     error = ex.explain_error(engine, sql)
 

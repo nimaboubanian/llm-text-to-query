@@ -1,5 +1,4 @@
 import logging
-import re
 from dataclasses import dataclass
 
 import pandas as pd
@@ -42,17 +41,22 @@ def explain_error(engine, sql: str) -> str | None:
     try:
         with engine.connect() as conn:
             conn.execute(text("SET TRANSACTION READ ONLY"))
-            conn.execute(text(f"EXPLAIN {sql}"))
+            # EXPLAIN on its own line, query starting on line 2: Postgres's LINE N:
+            # annotation only echoes the single line the error occurred on, so this
+            # keeps "EXPLAIN" out of that annotation entirely (see comment below).
+            conn.execute(text(f"EXPLAIN\n{sql}"))
         return None
     except Exception as e:
         # str(e) on a SQLAlchemy DBAPIError dumps the executed statement verbatim —
-        # including our "EXPLAIN " wrapper — back into the message. That message is
+        # including our "EXPLAIN" wrapper — back into the message. That message is
         # fed into the retry prompt (ollama.py) and shown to the model as if it were
         # its own previous query, which it then sometimes echoes back literally.
         # .orig is the bare driver exception with just the real error text.
+        #
+        # Putting "EXPLAIN" on its own line (above) rather than stripping it out of
+        # the message after the fact keeps the LINE N: annotation's column offset
+        # (and the "^" position marker below it) aligned with the real query text —
+        # a post-hoc string strip would shift the visible SQL left without shifting
+        # the marker, pointing the caret at the wrong column.
         msg = str(getattr(e, "orig", e))
-        # Postgres syntax errors include a LINE N: annotation echoing the exact failing line.
-        # Since we send "EXPLAIN <query>", the LINE annotation includes "EXPLAIN " which leaks
-        # the wrapper. Strip it from those annotations (e.g., "LINE 1: EXPLAIN ..." → "LINE 1: ...").
-        msg = re.sub(r"(?im)^(LINE \d+:\s*)EXPLAIN ", r"\1", msg)
         return msg

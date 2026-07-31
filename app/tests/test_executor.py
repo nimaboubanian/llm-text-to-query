@@ -59,3 +59,37 @@ def test_result_at_cap_logs_truncation_warning(caplog):
         assert any("truncated" in r.message.lower() for r in caplog.records)
     finally:
         ex.MAX_RESULT_ROWS = original
+
+
+@pytest.mark.integration
+def test_explain_error_message_excludes_wrapper_and_sql_dump():
+    engine = _live_engine()
+    with engine.begin() as conn:
+        conn.execute(text("CREATE TABLE IF NOT EXISTS _explain_probe (id INT)"))
+
+    # Duplicate alias "a" — same failure shape as the qwen2.5-coder Q07 incident.
+    sql = "SELECT a.id FROM _explain_probe a JOIN _explain_probe a ON a.id = a.id"
+    error = ex.explain_error(engine, sql)
+
+    with engine.begin() as conn:
+        conn.execute(text("DROP TABLE _explain_probe"))
+
+    assert error is not None
+    assert "specified more than once" in error.lower()
+    assert "EXPLAIN" not in error
+    assert "[SQL:" not in error
+
+
+@pytest.mark.integration
+def test_explain_error_strips_explain_from_postgres_line_annotation():
+    engine = _live_engine()
+    # Syntax error: missing table name in FROM clause.
+    # explain_error sends "EXPLAIN\n<sql>" (EXPLAIN on its own line), so Postgres's
+    # LINE N: annotation — which only echoes the single line the error occurred on —
+    # never includes "EXPLAIN" and its column offset matches the real query text.
+    sql = "SELECT * FROM"
+    error = ex.explain_error(engine, sql)
+
+    assert error is not None
+    assert "EXPLAIN" not in error
+    assert "syntax error" in error.lower()

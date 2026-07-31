@@ -108,3 +108,13 @@ def test_salvages_select_from_explain_prefixed_fence():
     assert result is not None
     assert result.upper().startswith("SELECT")
     assert "EXPLAIN" not in result.upper()
+
+
+def test_salvages_select_from_explain_prefixed_fence_without_semicolon():
+    """Models often omit the trailing semicolon (esp. in retry responses that ask
+    for "ONLY the corrected SQL query"). The salvage regex must not require one."""
+    response = "```sql\nEXPLAIN\nSELECT o_orderkey FROM orders\n```"
+    result = _clean_sql_response(response)
+    assert result is not None
+    assert result.upper().startswith("SELECT")
+    assert "EXPLAIN" not in result.upper()

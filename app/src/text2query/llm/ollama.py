@@ -56,7 +56,7 @@ def _clean_sql_response(response: str) -> str | None:
         # specifically (not a generic fallback) so DDL/DML/multi-statement rejections
         # below are unaffected.
         if re.match(r"(?i)^\s*EXPLAIN\b", sql):
-            salvage = re.search(r"(SELECT|WITH)\s+.*?;", sql, re.DOTALL | re.IGNORECASE)
+            salvage = re.search(r"(SELECT|WITH)\s+.*?(?:;|$)", sql, re.DOTALL | re.IGNORECASE)
             if salvage:
                 candidate = salvage.group(0).strip()
                 if _is_safe_sql(candidate):

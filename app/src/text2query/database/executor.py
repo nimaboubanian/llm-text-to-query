@@ -1,4 +1,5 @@
 import logging
+import re
 from dataclasses import dataclass
 
 import pandas as pd
@@ -49,4 +50,9 @@ def explain_error(engine, sql: str) -> str | None:
         # fed into the retry prompt (ollama.py) and shown to the model as if it were
         # its own previous query, which it then sometimes echoes back literally.
         # .orig is the bare driver exception with just the real error text.
-        return str(getattr(e, "orig", e))
+        msg = str(getattr(e, "orig", e))
+        # Postgres syntax errors include a LINE N: annotation echoing the exact failing line.
+        # Since we send "EXPLAIN <query>", the LINE annotation includes "EXPLAIN " which leaks
+        # the wrapper. Strip it from those annotations (e.g., "LINE 1: EXPLAIN ..." → "LINE 1: ...").
+        msg = re.sub(r"(?im)^(LINE \d+:\s*)EXPLAIN ", r"\1", msg)
+        return msg

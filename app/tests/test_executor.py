@@ -78,3 +78,17 @@ def test_explain_error_message_excludes_wrapper_and_sql_dump():
     assert "specified more than once" in error.lower()
     assert "EXPLAIN" not in error
     assert "[SQL:" not in error
+
+
+@pytest.mark.integration
+def test_explain_error_strips_explain_from_postgres_line_annotation():
+    engine = _live_engine()
+    # Syntax error: missing table name in FROM clause.
+    # Postgres will report this as "LINE 1: EXPLAIN SELECT * FROM" → error.
+    # The fix should strip the "EXPLAIN " so the error just reads "LINE 1: SELECT * FROM".
+    sql = "SELECT * FROM"
+    error = ex.explain_error(engine, sql)
+
+    assert error is not None
+    assert "EXPLAIN" not in error
+    assert "syntax error" in error.lower()

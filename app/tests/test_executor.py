@@ -93,3 +93,28 @@ def test_explain_error_strips_explain_from_postgres_line_annotation():
     assert error is not None
     assert "EXPLAIN" not in error
     assert "syntax error" in error.lower()
+
+
+@pytest.mark.integration
+def test_explain_error_excludes_sqlalche_me_link_for_bind_param_misparse():
+    engine = _live_engine()
+    # ":abc" here is misparsed by SQLAlchemy's text() as a bind parameter
+    # placeholder, not a driver-level syntax error — a different exception
+    # class (StatementError/InvalidRequestError) than the EXPLAIN leak.
+    sql = "SELECT 1 WHERE 1 = 1 AND 'foo' LIKE :abc"
+    error = ex.explain_error(engine, sql)
+    assert error is not None
+    assert "sqlalche.me" not in error
+    assert "[SQL:" not in error
+    assert "bind parameter" in error.lower()
+
+
+@pytest.mark.integration
+def test_execute_sql_query_excludes_wrapper_and_sql_dump_on_error():
+    engine = _live_engine()
+    sql = "SELECT a.id FROM (SELECT 1 AS id) a JOIN (SELECT 1 AS id) a ON a.id = a.id"
+    result = execute_sql_query(engine, sql)
+    assert not result.ok
+    assert "specified more than once" in result.error.lower()
+    assert "[SQL:" not in result.error
+    assert "sqlalche.me" not in result.error

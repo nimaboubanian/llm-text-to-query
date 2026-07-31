@@ -33,7 +33,20 @@ def execute_sql_query(engine, query: str) -> ExecutionResult:
             return ExecutionResult(pd.DataFrame(rows, columns=result.keys()), None)
     except Exception as e:
         logger.warning("Query execution failed: %s", e)
-        return ExecutionResult(None, str(e))
+        return ExecutionResult(None, _driver_error_message(e))
+
+
+def _driver_error_message(e: Exception) -> str:
+    """Bare message from a driver/SQLAlchemy exception, without SQLAlchemy's
+    wrapper (statement dump, sqlalche.me error-code link). .args[0] holds the
+    raw message for both driver-level exceptions (e.g. psycopg2) and
+    SQLAlchemy-level ones (e.g. StatementError from bind-parameter
+    misinterpretation) — SQLAlchemy's own __str__ appends the "[SQL: ...]"
+    dump and hyperlink footer that .args[0] doesn't have.
+    """
+    orig = getattr(e, "orig", e)
+    args = getattr(orig, "args", None)
+    return str(args[0]) if args else str(orig)
 
 
 def explain_error(engine, sql: str) -> str | None:
@@ -58,5 +71,4 @@ def explain_error(engine, sql: str) -> str | None:
         # (and the "^" position marker below it) aligned with the real query text —
         # a post-hoc string strip would shift the visible SQL left without shifting
         # the marker, pointing the caret at the wrong column.
-        msg = str(getattr(e, "orig", e))
-        return msg
+        return _driver_error_message(e)

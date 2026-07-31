@@ -118,3 +118,12 @@ def test_salvages_select_from_explain_prefixed_fence_without_semicolon():
     assert result is not None
     assert result.upper().startswith("SELECT")
     assert "EXPLAIN" not in result.upper()
+
+
+def test_salvages_first_statement_from_explain_prefixed_multi_statement():
+    """EXPLAIN-prefixed input with multiple statements salvages only the first
+    (mirrors the accepted precedent for bare multi-statement input, see
+    test_bare_multi_statement_extracts_only_first)."""
+    response = "```sql\nEXPLAIN\nSELECT 1; DROP TABLE users;\n```"
+    result = _clean_sql_response(response)
+    assert result == "SELECT 1;"

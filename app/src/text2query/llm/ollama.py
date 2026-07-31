@@ -60,6 +60,7 @@ def _clean_sql_response(response: str) -> str | None:
             if salvage:
                 candidate = salvage.group(0).strip()
                 if _is_safe_sql(candidate):
+                    logger.debug("Salvaged SELECT from EXPLAIN-prefixed fenced SQL (%d chars)", len(candidate))
                     return candidate
         return None
 

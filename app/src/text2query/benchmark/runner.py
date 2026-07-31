@@ -119,7 +119,10 @@ def _run_single_generation(
         if result.retried:
             retries += 1
 
-        if prompt is not None:
+        if result.retried and result.first_prompt is not None:
+            (output_dir / f"{query_id}.prompt").write_text(result.first_prompt)
+            (output_dir / f"{query_id}.retry.prompt").write_text(prompt)
+        elif prompt is not None:
             (output_dir / f"{query_id}.prompt").write_text(prompt)
 
         if generated_sql:

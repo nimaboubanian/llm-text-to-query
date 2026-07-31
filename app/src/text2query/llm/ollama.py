@@ -68,6 +68,7 @@ class GenerationResult:
     prompt: str | None = None
     error: str | None = None
     retried: bool = False
+    first_prompt: str | None = None
 
 
 def _post_json(url: str, payload: dict, timeout: int) -> tuple[int, dict]:
@@ -193,12 +194,12 @@ def generate_sql_with_retry(
 
     retry_prompt = (
         f"{result.prompt}\n\n"
-        f"Your previous answer was:\n{result.raw_response}\n\n"
         f"{reason}\n"
-        # Wording deliberately overlaps PROMPT_STRICT_OUTPUT's emphatic rules text, so
-        # RETRY_ON_ERROR=true is not a clean ablation of retry independent of that flag.
-        "Fix it. Return ONLY the corrected SQL query, no explanation, no markdown."
+        "Do not repeat your previous answer. Re-derive the query from the schema above, "
+        "using only tables and columns that appear in it. "
+        "Return ONLY the corrected SQL query, no explanation, no markdown."
     )
     retried = _generate(retry_prompt, model or DEFAULT_MODEL, seed)
     retried.retried = True
+    retried.first_prompt = result.prompt
     return retried

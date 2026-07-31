@@ -1,5 +1,29 @@
-from text2query.benchmark.pipeline import execute_queries_to_csv, read_business_question
+from sqlalchemy import create_engine, text
+from sqlalchemy.pool import StaticPool
+
+from text2query.benchmark.data_loader import TPCH_TABLES
+from text2query.benchmark.pipeline import (
+    check_database_readiness,
+    execute_queries_to_csv,
+    read_business_question,
+)
 from text2query.database.executor import ExecutionResult
+
+
+def _tpch_sqlite_engine(row_counts: dict[str, int], default_rows: int = 1):
+    """In-memory SQLite engine with all 8 TPCH-named tables, each pre-populated.
+
+    `row_counts` overrides `default_rows` per table (used to simulate a
+    half-loaded or wrong-scale-factor database).
+    """
+    engine = create_engine("sqlite://", poolclass=StaticPool)
+    with engine.begin() as conn:
+        for table in TPCH_TABLES:
+            conn.execute(text(f"CREATE TABLE {table} (id INTEGER)"))
+            n = row_counts.get(table, default_rows)
+            for i in range(n):
+                conn.execute(text(f"INSERT INTO {table} (id) VALUES ({i})"))
+    return engine
 
 
 class TestExecuteQueriesToCsv:
@@ -43,6 +67,34 @@ class TestExecuteQueriesToCsv:
 
         assert starts == [(1, 1, "Q01")]
         assert outcomes == [" ✓ (2 rows)"]
+
+
+class TestCheckDatabaseReadiness:
+    def _patch(self, monkeypatch, engine):
+        monkeypatch.setattr(
+            "text2query.benchmark.pipeline.create_engine_for_database", lambda url: engine
+        )
+
+    def test_ready_when_fixed_tables_have_correct_counts(self, monkeypatch):
+        engine = _tpch_sqlite_engine({"nation": 25, "region": 5, "supplier": 10_000})
+        self._patch(monkeypatch, engine)
+
+        assert check_database_readiness("sqlite://", scale_factor=1) is True
+
+    def test_rejects_wrong_fixed_table_counts(self, monkeypatch):
+        # all 8 tables exist with 1 row each — passes the old "non-empty" check,
+        # but nation/region/supplier don't match their expected fixed counts.
+        engine = _tpch_sqlite_engine({}, default_rows=1)
+        self._patch(monkeypatch, engine)
+
+        assert check_database_readiness("sqlite://", scale_factor=1) is False
+
+    def test_supplier_count_scales_with_scale_factor(self, monkeypatch):
+        engine = _tpch_sqlite_engine({"nation": 25, "region": 5, "supplier": 20_000})
+        self._patch(monkeypatch, engine)
+
+        assert check_database_readiness("sqlite://", scale_factor=2) is True
+        assert check_database_readiness("sqlite://", scale_factor=1) is False
 
 
 class TestReadBusinessQuestion:

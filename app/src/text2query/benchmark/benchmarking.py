@@ -164,10 +164,13 @@ def main():
             print(f"  ⚠ {fallback_warning}")
         if skipped:
             print(f"  ⚠ Unknown query IDs (skipped): {', '.join(skipped)}")
+        if BENCHMARK_SCALE_FACTOR != 1:
+            print("  ⚠ BENCHMARK_SCALE_FACTOR != 1: reference query 11 hardcodes the SF1 "
+                  "fraction (0.0001); its ground truth is wrong at this scale")
         if query_ids is not None and not query_ids:
             print("  ✗ No valid query IDs remain after filtering — aborting")
             sys.exit(1)
-        if fallback_warning or skipped:
+        if fallback_warning or skipped or BENCHMARK_SCALE_FACTOR != 1:
             print()
 
         # === Phase 1: Setup (shared across all models) ===
@@ -180,7 +183,7 @@ def main():
 
         validate_directories(paths.questions_dir, paths.queries_dir)
 
-        is_ready = check_database_readiness(db_url=DATABASE_URL)
+        is_ready = check_database_readiness(db_url=DATABASE_URL, scale_factor=BENCHMARK_SCALE_FACTOR)
         if not is_ready:
             setup_database(
                 schema_file=paths.schema_file,

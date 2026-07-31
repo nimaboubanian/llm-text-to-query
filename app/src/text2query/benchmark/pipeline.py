@@ -81,7 +81,7 @@ def validate_directories(
     print(f"  ✓ Queries: {queries_dir}")
 
 
-def check_database_readiness(db_url: str) -> bool:
+def check_database_readiness(db_url: str, scale_factor: int = 1) -> bool:
     print("  Checking database readiness...")
     engine = create_engine_for_database(db_url)
     ready = False
@@ -91,11 +91,17 @@ def check_database_readiness(db_url: str) -> bool:
         expected = {t.lower() for t in TPCH_TABLES}
 
         if expected.issubset(actual):
-            # Fast non-empty check (avoid COUNT(*) on multi-million row tables)
+            # Fast non-empty check (avoid COUNT(*) on multi-million row tables), plus
+            # exact-count checks on the small fixed/predictable-size tables — cheap even
+            # at large scale factors — to catch a half-loaded or wrong-scale-factor DB.
+            fixed_counts = {"nation": 25, "region": 5, "supplier": 10_000 * scale_factor}
             with engine.connect() as conn:
                 ready = all(
                     conn.execute(text(f"SELECT 1 FROM {table} LIMIT 1")).fetchone() is not None
                     for table in TPCH_TABLES
+                ) and all(
+                    conn.execute(text(f"SELECT COUNT(*) FROM {table}")).scalar() == count
+                    for table, count in fixed_counts.items()
                 )
     except Exception as e:
         logger.warning("Database readiness check failed: %s", e)

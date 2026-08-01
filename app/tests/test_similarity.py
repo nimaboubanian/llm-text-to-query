@@ -160,14 +160,19 @@ class TestResultSetComparison:
         assert prec == pytest.approx(2 / 3, abs=0.01)
         assert rec == pytest.approx(2 / 3, abs=0.01)
 
-    def test_missing_llm_csv(self, tmp_path):
+    def test_missing_llm_csv_scores_zero_not_none(self, tmp_path):
+        """A model that produced no result must score 0, not drop out of the
+        average. With None, _compute_stats filtered it out and a generation
+        failure silently improved the mean (spec §3)."""
         gt = tmp_path / "gt.csv"
         gt.write_text("id\n1\n")
         missing = tmp_path / "nope.csv"
 
         status, prec, rec, f1, err = _result_set_comparison(gt, missing)
         assert status == "missing"
-        assert prec is None
+        assert prec == 0.0
+        assert rec == 0.0
+        assert f1 == 0.0
 
     def test_error_sidecar_file(self, tmp_path):
         gt = tmp_path / "gt.csv"
@@ -498,3 +503,18 @@ class TestEvaluateQueryReportsEX:
         result = evaluate_query(1, gt_csv, llm_csv, gt_sql, llm_sql)
         assert result["execution_accuracy"] == 1
         assert result["result_f1"] == 1.0
+
+
+def test_missing_query_floors_f1_but_leaves_ast_none(tmp_path):
+    gt_csv = tmp_path / "gt.csv"
+    gt_csv.write_text("id\n1\n")
+    gt_sql = tmp_path / "gt.sql"
+    gt_sql.write_text("SELECT id FROM t")
+
+    result = evaluate_query(
+        1, gt_csv, tmp_path / "nope.csv", gt_sql, tmp_path / "nope.sql",
+    )
+    assert result["status"] == "missing"
+    assert result["result_f1"] == 0.0
+    assert result["execution_accuracy"] == 0
+    assert result["ast_similarity"] is None

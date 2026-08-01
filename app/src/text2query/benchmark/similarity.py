@@ -251,7 +251,10 @@ def _result_set_comparison(
         return "exec_error", 0.0, 0.0, 0.0, error_file.read_text().strip()
 
     if not llm_csv.exists():
-        return "missing", None, None, None, None
+        # Score 0, don't return None: _compute_stats drops None, which would
+        # let a generation failure lift the model's own mean. The status string
+        # keeps the failure mode distinguishable in per-query output.
+        return "missing", 0.0, 0.0, 0.0, None
 
     gt_df = pd.read_csv(gt_csv)
     llm_df = pd.read_csv(llm_csv)

@@ -26,11 +26,13 @@ def test_compute_stats_basic():
     assert result["ci_upper"] > result["mean"]
 
 
-def test_compute_stats_single_value():
+def test_compute_stats_single_value_has_no_variance():
+    """One sample has no measurable spread — std/CI must be None, not a fabricated 0.0
+    that renders as '± 0.0000' and a zero-width CI in the reports."""
     result = _compute_stats([0.85])
     assert result["mean"] == 0.85
-    assert result["std"] == 0.0
-    assert result["ci_lower"] == result["ci_upper"] == 0.85
+    assert result["std"] is None
+    assert result["ci_lower"] is None and result["ci_upper"] is None
 
 
 def test_compute_stats_empty():
@@ -153,6 +155,38 @@ def test_results_csv_marks_retried_rows(tmp_path):
 
     assert rows["01"]["retried"] == "False"
     assert rows["02"]["retried"] == "True"
+
+
+def test_summary_omits_variance_columns_at_one_seed(tmp_path):
+    """At 1 seed there is no spread to report: summary.md must not print '± 0.0000'
+    or a zero-width '[x, x]' CI, which claimed a measurement that was never made."""
+    ref_queries, ref_answers, gen_queries, gen_answers, questions, report_dir = _report_dirs(tmp_path)
+
+    (ref_queries / "01.sql").write_text("SELECT name FROM customers;")
+    (ref_answers / "01.csv").write_text("name\nAlice\n")
+    (gen_queries / "01.sql").write_text("SELECT name FROM customers;")
+    (gen_answers / "01.csv").write_text("name\nAlice\n")
+    (questions / "01.md").write_text('# Business Question:\n  "Names?"\n')
+
+    generate_reports(
+        generated_queries_dir=gen_queries.parent,
+        reference_queries_dir=ref_queries,
+        generated_answers_dir=gen_answers.parent,
+        reference_answers_dir=ref_answers,
+        report_dir=report_dir,
+        model="m1",
+        questions_dir=questions,
+    )
+
+    summary = (report_dir / "summary.md").read_text()
+    assert "±" not in summary
+    assert "95% CI" not in summary
+    assert "| Query | SQL ran | F1 | AST | AST norm |" in summary
+    assert "1.0000" in summary  # the real score still shows
+
+    per_query = (report_dir / "per_query" / "01.md").read_text()
+    assert "±" not in per_query
+    assert "95% CI" not in per_query
 
 
 def test_aggregate_model_results_counts_exact_matches_and_failures():

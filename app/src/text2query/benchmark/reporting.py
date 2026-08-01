@@ -122,14 +122,16 @@ def _v(val: float | None) -> str:
 
 
 def _compute_stats(values: list[float]) -> dict:
-    """Compute mean, std, and 95% confidence interval for a list of values."""
+    """Mean, std, and 95% CI. std/CI are None below 2 samples — undefined, not zero."""
     values = [v for v in values if v is not None]
     if not values:
         return {"mean": None, "std": None, "ci_lower": None, "ci_upper": None}
     n = len(values)
     mean = statistics.mean(values)
-    std = statistics.stdev(values) if n > 1 else 0.0
-    ci_margin = 1.96 * std / math.sqrt(n) if n > 1 else 0.0
+    if n < 2:
+        return {"mean": round(mean, 4), "std": None, "ci_lower": None, "ci_upper": None}
+    std = statistics.stdev(values)
+    ci_margin = 1.96 * std / math.sqrt(n)
     return {
         "mean": round(mean, 4),
         "std": round(std, 4),
@@ -139,7 +141,7 @@ def _compute_stats(values: list[float]) -> dict:
 
 
 def _format_per_query(seed_results: list[dict]) -> str:
-    """Format a per-query report showing all seeds + aggregated stats."""
+    """Per-query report: every seed, then aggregates. Std/CI omitted at n=1 — see _compute_stats."""
     lines = [
         "## Per-Seed Results\n",
         "| Seed | Status | Result F1 | AST Sim | AST Sim (norm) |",
@@ -159,42 +161,44 @@ def _format_per_query(seed_results: list[dict]) -> str:
     lines.append("## Aggregated Statistics\n")
     lines.append(f"*Seeds executed successfully: {ok_count} / {n}*\n")
 
-    lines.append("| Metric | Mean | Std | 95% CI |")
-    lines.append("|---|---|---|---|")
+    multi = n > 1
+    lines.append("| Metric | Mean | Std | 95% CI |" if multi else "| Metric | Value |")
+    lines.append("|---|---|---|---|" if multi else "|---|---|")
 
     for metric in METRICS:
-        label = METRIC_LABELS[metric]
-        stats = _compute_stats([r.get(metric) for r in seed_results])
-        if stats["mean"] is not None:
-            ci = f"[{stats['ci_lower']:.4f}, {stats['ci_upper']:.4f}]"
-            lines.append(
-                f"| {label} | {stats['mean']:.4f} "
-                f"| {stats['std']:.4f} | {ci} |"
-            )
+        s = _compute_stats([r.get(metric) for r in seed_results])
+        if s["mean"] is None:
+            continue
+        cells = [METRIC_LABELS[metric], f"{s['mean']:.4f}"]
+        if s["std"] is not None:
+            cells += [f"{s['std']:.4f}", f"[{s['ci_lower']:.4f}, {s['ci_upper']:.4f}]"]
+        lines.append("| " + " | ".join(cells) + " |")
 
     return "\n".join(lines) + "\n"
 
 
 def _format_summary(aggregated: list[dict], num_seeds: int) -> str:
-    """Format per-query summary table with mean±std columns."""
-    lines = [
-        "| Query | Seeds ok | F1 (mean±std) | AST (mean±std) | AST norm (mean±std) | F1 95% CI |",
-        "|---|---|---|---|---|---|",
-    ]
+    """Per-query summary. Std/CI columns omitted at num_seeds=1 — see _compute_stats."""
+    multi = num_seeds > 1
+    sfx = " (mean±std)" if multi else ""
+    head = ["Query", "SQL ran", f"F1{sfx}", f"AST{sfx}", f"AST norm{sfx}"] + (["F1 95% CI"] if multi else [])
+    lines = ["| " + " | ".join(head) + " |", "|" + "---|" * len(head)]
+
+    def cell(s: dict) -> str:
+        if s["mean"] is None:
+            return "—"
+        return f"{s['mean']:.4f} ± {s['std']:.4f}" if multi else f"{s['mean']:.4f}"
 
     for q in aggregated:
-        qid = f"{q['query_id']:02d}"
         f1 = q["result_f1"]
-        ast = q["ast_similarity"]
-        norm = q["ast_similarity_normalized"]
         ok_count = sum(1 for r in q["per_seed"] if r["status"] == "ok")
-
-        f1_str = f"{f1['mean']:.4f} ± {f1['std']:.4f}" if f1["mean"] is not None else "—"
-        ast_str = f"{ast['mean']:.4f} ± {ast['std']:.4f}" if ast["mean"] is not None else "—"
-        norm_str = f"{norm['mean']:.4f} ± {norm['std']:.4f}" if norm["mean"] is not None else "—"
-        ci_str = f"[{f1['ci_lower']:.4f}, {f1['ci_upper']:.4f}]" if f1["mean"] is not None else "—"
-
-        lines.append(f"| {qid} | {ok_count}/{num_seeds} | {f1_str} | {ast_str} | {norm_str} | {ci_str} |")
+        row = [
+            f"{q['query_id']:02d}", f"{ok_count}/{num_seeds}",
+            cell(f1), cell(q["ast_similarity"]), cell(q["ast_similarity_normalized"]),
+        ]
+        if multi:
+            row.append(f"[{f1['ci_lower']:.4f}, {f1['ci_upper']:.4f}]" if f1["mean"] is not None else "—")
+        lines.append("| " + " | ".join(row) + " |")
 
     return "\n".join(lines) + "\n"
 
@@ -390,7 +394,7 @@ def generate_cross_model_report(
                 prefix = f"{status} · " if status else ""
                 if stats["mean"] is None:
                     row += f"| {status} "
-                elif num_seeds > 1:
+                elif stats["std"] is not None:
                     row += f"| {prefix}{stats['mean']:.4f} ± {stats['std']:.4f} "
                 else:
                     row += f"| {prefix}{stats['mean']:.4f} "

@@ -18,13 +18,15 @@ from text2query.benchmark.pipeline import read_business_question
 CSV_FIELDNAMES = [
     "seed", "model", "query_id", "nl_query", "prompt",
     "generated_sql", "real_sql", "status",
+    "execution_accuracy", "first_attempt_ex",
     "result_precision", "result_recall", "result_f1",
     "ast_similarity", "ast_similarity_normalized", "error_category",
     "prompt_eval_count", "eval_count", "generation_seconds", "retried",
 ]
 
-METRICS = ("result_f1", "ast_similarity", "ast_similarity_normalized")
+METRICS = ("execution_accuracy", "result_f1", "ast_similarity", "ast_similarity_normalized")
 METRIC_LABELS = {
+    "execution_accuracy": "Execution accuracy",
     "result_f1": "Result F1",
     "ast_similarity": "AST similarity",
     "ast_similarity_normalized": "AST sim (norm)",
@@ -267,6 +269,9 @@ def generate_reports(
             gen_sql_path = seed_queries / f"{qid}.sql"
             sim_result["generated_sql"] = gen_sql_path.read_text().strip() if gen_sql_path.exists() else None
             sim_result["retried"] = (seed_queries / f"{qid}.retry.prompt").exists()
+            sim_result["first_attempt_ex"] = (
+                0 if sim_result["retried"] else sim_result["execution_accuracy"]
+            )
             timing_path = seed_queries / f"{qid}.timing.json"
             if timing_path.exists():
                 timing = json.loads(timing_path.read_text())
@@ -316,7 +321,7 @@ def generate_reports(
     total = len(query_ids)
     exact_matches = sum(
         1 for q in aggregated
-        if q["result_f1"]["mean"] is not None and q["result_f1"]["mean"] == 1.0
+        if q["execution_accuracy"]["mean"] is not None and q["execution_accuracy"]["mean"] == 1.0
     )
 
     model_line = f"| Model | {model} |\n" if model else ""
@@ -329,7 +334,7 @@ def generate_reports(
         f"| Total queries | {total} |\n"
         f"| Seeds per query | {len(seeds)} |\n"
         f"| Total evaluations | {total * len(seeds)} |\n"
-        f"| Exact matches (F1 = 1.0 mean) | {exact_matches} |\n\n"
+        f"| Exact matches (EX = 1.0 mean) | {exact_matches} |\n\n"
         + _format_summary(aggregated, len(seeds))
     )
     (report_dir / "summary.md").write_text(summary)
@@ -513,15 +518,21 @@ def _aggregate_model_results(rows: list[dict]) -> dict:
 
     exact_matches = 0
     for qid_rows in by_query.values():
-        qid_f1 = _compute_stats([r.get("result_f1") for r in qid_rows])
-        if qid_f1["mean"] == 1.0:
+        qid_ex = _compute_stats([r.get("execution_accuracy") for r in qid_rows])
+        if qid_ex["mean"] == 1.0:
             exact_matches += 1
+
+    ex_values = [r.get("execution_accuracy") for r in rows if r.get("execution_accuracy") is not None]
+    ex_successes = sum(ex_values)
+    ex_total = len(ex_values)
 
     failures = sum(1 for r in rows if r["status"] != "ok")
 
     return {
         "metrics": metrics,
         "exact_matches": exact_matches,
+        "ex_successes": ex_successes,
+        "ex_total": ex_total,
         "total_queries": len(by_query),
         "failures": failures,
         "num_seeds": len(rows) // len(by_query) if by_query else 0,

@@ -5,12 +5,16 @@ from text2query.benchmark.reporting import (
     _compute_stats, generate_reports, format_run_summary,
     METRICS, METRIC_LABELS, _field, format_session_header,
     _aggregate_model_results, _LABEL_WIDTH, _wilson_interval,
+    CSV_FIELDNAMES,
 )
 
 
 def test_metrics_constant_has_matching_labels():
-    assert METRICS == ("result_f1", "ast_similarity", "ast_similarity_normalized")
+    assert METRICS == (
+        "execution_accuracy", "result_f1", "ast_similarity", "ast_similarity_normalized",
+    )
     assert METRIC_LABELS == {
+        "execution_accuracy": "Execution accuracy",
         "result_f1": "Result F1",
         "ast_similarity": "AST similarity",
         "ast_similarity_normalized": "AST sim (norm)",
@@ -191,12 +195,17 @@ def test_summary_omits_variance_columns_at_one_seed(tmp_path):
 
 def test_aggregate_model_results_counts_exact_matches_and_failures():
     rows = [
-        {"query_id": 1, "seed": 1, "status": "ok", "result_f1": 1.0, "ast_similarity": 0.9},
-        {"query_id": 2, "seed": 1, "status": "ok", "result_f1": 0.5, "ast_similarity": 0.7},
-        {"query_id": 3, "seed": 1, "status": "exec_error", "result_f1": 0.0, "ast_similarity": 0.0},
+        {"query_id": 1, "seed": 1, "status": "ok", "execution_accuracy": 1,
+         "result_f1": 1.0, "ast_similarity": 0.9},
+        {"query_id": 2, "seed": 1, "status": "ok", "execution_accuracy": 0,
+         "result_f1": 0.5, "ast_similarity": 0.7},
+        {"query_id": 3, "seed": 1, "status": "exec_error", "execution_accuracy": 0,
+         "result_f1": 0.0, "ast_similarity": 0.0},
     ]
     agg = _aggregate_model_results(rows)
     assert agg["exact_matches"] == 1
+    assert agg["ex_successes"] == 1
+    assert agg["ex_total"] == 3
     assert agg["total_queries"] == 3
     assert agg["failures"] == 1
     assert agg["num_seeds"] == 1
@@ -204,11 +213,14 @@ def test_aggregate_model_results_counts_exact_matches_and_failures():
 
 def test_aggregate_model_results_exact_match_requires_perfect_mean_across_seeds():
     rows = [
-        {"query_id": 1, "seed": 1, "status": "ok", "result_f1": 1.0, "ast_similarity": 0.9},
-        {"query_id": 1, "seed": 2, "status": "ok", "result_f1": 0.8, "ast_similarity": 0.9},
+        {"query_id": 1, "seed": 1, "status": "ok", "execution_accuracy": 1,
+         "result_f1": 1.0, "ast_similarity": 0.9},
+        {"query_id": 1, "seed": 2, "status": "ok", "execution_accuracy": 0,
+         "result_f1": 0.8, "ast_similarity": 0.9},
     ]
     agg = _aggregate_model_results(rows)
-    assert agg["exact_matches"] == 0  # mean F1 across the two seeds is 0.9, not 1.0
+    assert agg["exact_matches"] == 0  # correct on 1 of 2 seeds, not all
+    assert agg["ex_successes"] == 1
     assert agg["total_queries"] == 1
     assert agg["num_seeds"] == 2
 
@@ -216,9 +228,9 @@ def test_aggregate_model_results_exact_match_requires_perfect_mean_across_seeds(
 def test_format_run_summary_single_model():
     precomputed = {
         "m1": [
-            {"query_id": 1, "seed": 1, "status": "ok", "result_f1": 1.0, "ast_similarity": 0.9, "ast_similarity_normalized": 0.85},
-            {"query_id": 2, "seed": 1, "status": "ok", "result_f1": 0.5, "ast_similarity": 0.7, "ast_similarity_normalized": 0.65},
-            {"query_id": 3, "seed": 1, "status": "exec_error", "result_f1": 0.0, "ast_similarity": 0.0, "ast_similarity_normalized": None},
+            {"query_id": 1, "seed": 1, "status": "ok", "execution_accuracy": 1, "result_f1": 1.0, "ast_similarity": 0.9, "ast_similarity_normalized": 0.85},
+            {"query_id": 2, "seed": 1, "status": "ok", "execution_accuracy": 0, "result_f1": 0.5, "ast_similarity": 0.7, "ast_similarity_normalized": 0.65},
+            {"query_id": 3, "seed": 1, "status": "exec_error", "execution_accuracy": 0, "result_f1": 0.0, "ast_similarity": 0.0, "ast_similarity_normalized": None},
         ]
     }
     summary = format_run_summary(precomputed, ["m1"], Path("benchmark/results/x"), elapsed=252.0)
@@ -280,7 +292,10 @@ def test_session_header_fields_stay_on_one_line():
         prompt_flags={"schema_ddl": True, "few_shot": 1, "planning": False},
         database_url="postgresql://user:password@postgres:5432/testdb",
     )
-    for label in ("Evaluations", "Metrics", "Prompt features", "LLM params"):
+    # "Metrics" is excluded: with 4 metrics (EX added), its joined label list now
+    # legitimately exceeds one line — see test_field_pads_label_and_wraps_long_values
+    # for continuation-line alignment coverage.
+    for label in ("Evaluations", "Prompt features", "LLM params"):
         _assert_field_not_wrapped(header, label)
 
 
@@ -309,7 +324,7 @@ def test_format_session_header_single_model_filtered_queries():
     assert _field("Queries", "3 of 22 (01, 07, 16)") in header
     assert _field("Seeds", "1") in header
     assert _field("Evaluations", "3  (3 queries × 1 seed × 1 model)") in header
-    assert _field("Metrics", "Result F1, AST similarity, AST sim (norm)") in header
+    assert _field("Metrics", "Execution accuracy, Result F1, AST similarity, AST sim (norm)") in header
     assert "schema_ddl, few_shot=1" in header
     assert "planning" not in header  # False flags are omitted, not printed as planning=False
     assert "password" not in header
@@ -369,3 +384,40 @@ def test_wilson_interval_narrows_as_n_grows():
 
 def test_wilson_interval_no_samples():
     assert _wilson_interval(0, 0) == (None, None)
+
+
+def test_metrics_lead_with_execution_accuracy():
+    assert METRICS[0] == "execution_accuracy"
+    assert set(METRICS) == set(METRIC_LABELS)
+
+
+def test_csv_fieldnames_include_ex_columns():
+    assert "execution_accuracy" in CSV_FIELDNAMES
+    assert "first_attempt_ex" in CSV_FIELDNAMES
+
+
+def test_first_attempt_ex_is_zero_when_retried():
+    """A retry only fires when attempt 1 produced no SQL or failed EXPLAIN
+    validation, so a retried query's first attempt was never correct (spec §1)."""
+    rows = [
+        {"query_id": 1, "status": "ok", "execution_accuracy": 1,
+         "first_attempt_ex": 1, "retried": False, "result_f1": 1.0},
+        {"query_id": 2, "status": "ok", "execution_accuracy": 1,
+         "first_attempt_ex": 0, "retried": True, "result_f1": 1.0},
+    ]
+    agg = _aggregate_model_results(rows)
+    assert agg["exact_matches"] == 2
+    assert agg["ex_successes"] == 2
+    assert agg["ex_total"] == 2
+    assert sum(r["first_attempt_ex"] for r in rows) == 1
+
+
+def test_exact_matches_counted_from_ex_not_f1():
+    """Q20's superset scored F1 0.8878 but is not a correct answer."""
+    rows = [
+        {"query_id": 20, "status": "ok", "execution_accuracy": 0,
+         "first_attempt_ex": 0, "retried": False, "result_f1": 0.8878},
+    ]
+    agg = _aggregate_model_results(rows)
+    assert agg["exact_matches"] == 0
+    assert agg["ex_successes"] == 0

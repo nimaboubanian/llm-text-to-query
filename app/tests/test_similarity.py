@@ -1,9 +1,10 @@
 import pytest
+import pandas as pd
 from pathlib import Path
 
 from text2query.benchmark.similarity import (
     _ast_similarity, _ast_similarity_normalized, _classify_error,
-    _result_set_comparison, _tpch_schema,
+    _result_set_comparison, _tpch_schema, _order_spec, _is_sorted_by,
 )
 
 
@@ -348,3 +349,86 @@ class TestResultSetComparison:
         assert f1 == 1.0  # Both rows match with sorting+greedy
         assert prec == 1.0
         assert rec == 1.0
+
+
+class TestOrderSpec:
+    def test_extracts_column_and_direction(self):
+        spec = _order_spec("SELECT a, b FROM t ORDER BY a DESC, b")
+        assert spec == [("a", True), ("b", False)]
+
+    def test_strips_table_qualifier(self):
+        # TPC-H Q03 orders by o.o_orderdate; the CSV column is o_orderdate.
+        spec = _order_spec("SELECT x FROM t o ORDER BY o.o_orderdate")
+        assert spec == [("o_orderdate", False)]
+
+    def test_no_order_by_returns_none(self):
+        assert _order_spec("SELECT sum(x) FROM t") is None
+
+    def test_unparseable_sql_returns_none(self):
+        assert _order_spec("this is not sql ((") is None
+
+    def test_empty_sql_returns_none(self):
+        assert _order_spec("") is None
+
+
+class TestIsSortedBy:
+    def test_correctly_sorted_ascending(self):
+        df = pd.DataFrame({"a": [1, 2, 3]})
+        assert _is_sorted_by(df, [("a", False)]) is True
+
+    def test_wrong_order_detected(self):
+        df = pd.DataFrame({"a": [3, 2, 1]})
+        assert _is_sorted_by(df, [("a", False)]) is False
+
+    def test_descending_key(self):
+        df = pd.DataFrame({"a": [3, 2, 1]})
+        assert _is_sorted_by(df, [("a", True)]) is True
+
+    def test_mixed_directions(self):
+        df = pd.DataFrame({"a": [1, 1, 2], "b": [9, 5, 7]})
+        assert _is_sorted_by(df, [("a", False), ("b", True)]) is True
+        assert _is_sorted_by(df, [("a", False), ("b", False)]) is False
+
+    def test_ties_may_permute(self):
+        # Rows tied on the key may appear in any order — the non-key column
+        # is not part of the ordering requirement.
+        df = pd.DataFrame({"k": [1, 1, 2], "other": ["z", "a", "m"]})
+        assert _is_sorted_by(df, [("k", False)]) is True
+
+    def test_missing_key_column_returns_none(self):
+        df = pd.DataFrame({"a": [1, 2]})
+        assert _is_sorted_by(df, [("nope", False)]) is None
+
+    def test_nan_in_key_column_returns_none(self):
+        # Postgres and pandas disagree on NULL placement for DESC; rather than
+        # emulate it, skip the check so a model is never wrongly penalised.
+        df = pd.DataFrame({"a": [1.0, float("nan"), 2.0]})
+        assert _is_sorted_by(df, [("a", False)]) is None
+
+    def test_single_row_is_trivially_sorted(self):
+        df = pd.DataFrame({"a": [42]})
+        assert _is_sorted_by(df, [("a", False)]) is True
+
+
+def test_order_spec_resolves_for_every_tpch_reference():
+    """Every reference query's ORDER BY keys must be extractable; spec §2."""
+    import pathlib
+    queries = sorted(pathlib.Path("../benchmark/.tpch/queries").glob("*.sql"))
+    if not queries:
+        pytest.skip("TPC-H reference queries not available")
+    assert len(queries) == 22
+
+    ordered = {}
+    for q in queries:
+        spec = _order_spec(q.read_text())
+        if spec is not None:
+            ordered[q.stem] = spec
+
+    # 18 of 22 have a top-level ORDER BY; 06/14/17/19 are single-row aggregates.
+    assert len(ordered) == 18
+    assert set(ordered) == {
+        "01", "02", "03", "04", "05", "07", "08", "09", "10", "11",
+        "12", "13", "15", "16", "18", "20", "21", "22",
+    }
+    # Q03's key is table-qualified in the SQL and must arrive unqualified.
+    assert ("o_orderdate", False) in ordered["03"]

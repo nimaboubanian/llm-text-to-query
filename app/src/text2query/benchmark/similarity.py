@@ -138,6 +138,68 @@ def _has_top_level_order_limit(sql: str) -> bool:
         return "ORDER BY" in sql.upper() and "LIMIT" in sql.upper()
 
 
+def _order_spec(ref_sql: str) -> list[tuple[str, bool]] | None:
+    """[(column_name, descending)] for a top-level ORDER BY, else None.
+
+    Returns None when the reference has no ORDER BY, won't parse, or orders by
+    something that isn't a plain column/alias — callers then skip the ordering
+    check rather than penalising the model for a harness limitation.
+    """
+    if not ref_sql.strip():
+        return None
+    try:
+        tree = sqlglot.parse_one(ref_sql, dialect="postgres")
+    except Exception as e:
+        logger.debug("Failed to parse reference SQL for ORDER BY spec: %s", e)
+        return None
+    if tree is None:
+        return None
+    order = tree.args.get("order")
+    if order is None:
+        return None
+
+    spec = []
+    for item in order.expressions:
+        node = item.this
+        name = node.name if isinstance(node, exp.Column) else node.alias_or_name
+        if not name:
+            logger.debug("ORDER BY key %r is not a plain column; skipping order check", node)
+            return None
+        spec.append((name, bool(item.args.get("desc"))))
+    return spec or None
+
+
+def _is_sorted_by(df: pd.DataFrame, spec: list[tuple[str, bool]]) -> bool | None:
+    """Whether df's rows honour the ORDER BY spec. None when not checkable.
+
+    Rows tied on the key columns may appear in any order, which is exactly the
+    freedom SQL leaves undetermined.
+    """
+    absent = [name for name, _ in spec if name not in df.columns]
+    if absent:
+        logger.warning("ORDER BY keys %s absent from result columns; skipping order check", absent)
+        return None
+    if len(df) < 2:
+        return True
+
+    names = [name for name, _ in spec]
+    keys = df[names]
+    # ponytail: pandas sorts NaN to one end for every column, while Postgres
+    # puts NULLs last for ASC and first for DESC — not expressible in a single
+    # na_position. No TPC-H reference orders by a nullable column, so skip the
+    # check rather than emulate it. Revisit if a Spec B variant introduces one.
+    if keys.isna().any().any():
+        logger.warning("NULL present in ORDER BY key column(s) %s; skipping order check", names)
+        return None
+
+    expected = keys.sort_values(
+        by=names,
+        ascending=[not desc for _, desc in spec],
+        kind="mergesort",
+    )
+    return keys.reset_index(drop=True).equals(expected.reset_index(drop=True))
+
+
 def _num_eq(a, b, eps: float) -> bool:
     """Two numeric cells match when both are NaN or within eps of each other."""
     if pd.isna(a) or pd.isna(b):

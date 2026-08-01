@@ -32,7 +32,7 @@ METRIC_LABELS = {
     "ast_similarity_normalized": "AST sim (norm)",
 }
 
-_LABEL_WIDTH = 17
+_LABEL_WIDTH = 19  # fits "Execution accuracy" (18 chars) plus >=1 space, like every other label
 
 
 def _field(label: str, value: str) -> str:

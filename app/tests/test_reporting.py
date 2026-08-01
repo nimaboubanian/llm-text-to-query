@@ -1,4 +1,5 @@
 import csv
+import re
 from pathlib import Path
 
 from text2query.benchmark.reporting import (
@@ -242,6 +243,26 @@ def test_format_run_summary_single_model():
     assert "postgresql" not in summary
     # Verify normalized metric is properly formatted with space between label and value
     assert _field("AST sim (norm)", "0.7500") in summary
+
+
+def test_format_run_summary_metric_labels_never_run_into_their_value():
+    """Regression: METRIC_LABELS["execution_accuracy"] is 18 chars, one longer than
+    the old _LABEL_WIDTH=17, so the label ran straight into its value with no
+    separating space ("Execution accuracy0.5000..."). Every metric label must have
+    at least one space of separation from its value, regardless of label length."""
+    precomputed = {
+        "m1": [
+            {"query_id": 1, "seed": 1, "status": "ok", "execution_accuracy": 1,
+             "result_f1": 1.0, "ast_similarity": 0.9, "ast_similarity_normalized": 0.85},
+            {"query_id": 2, "seed": 1, "status": "ok", "execution_accuracy": 0,
+             "result_f1": 0.5, "ast_similarity": 0.7, "ast_similarity_normalized": 0.65},
+        ]
+    }
+    summary = format_run_summary(precomputed, ["m1"], Path("benchmark/results/x"), elapsed=5.0)
+    for label in METRIC_LABELS.values():
+        assert re.search(rf"{re.escape(label)}\s+\S", summary), (
+            f"label {label!r} is not separated from its value by whitespace"
+        )
 
 
 def test_format_run_summary_multi_model_shows_per_model_row():

@@ -140,6 +140,24 @@ def _compute_stats(values: list[float]) -> dict:
     }
 
 
+def _wilson_interval(
+    successes: int, n: int, z: float = 1.96,
+) -> tuple[float, float] | tuple[None, None]:
+    """95% Wilson score interval for a proportion.
+
+    Used for the binary EX rate instead of the normal approximation, which at
+    small n produces degenerate [0, 0] bounds at a 0% rate and can run outside
+    [0, 1] — exactly the regime local models sit in.
+    """
+    if n == 0:
+        return None, None
+    p = successes / n
+    denominator = 1 + z**2 / n
+    centre = (p + z**2 / (2 * n)) / denominator
+    margin = z * math.sqrt(p * (1 - p) / n + z**2 / (4 * n**2)) / denominator
+    return max(0.0, centre - margin), min(1.0, centre + margin)
+
+
 def _format_per_query(seed_results: list[dict]) -> str:
     """Per-query report: every seed, then aggregates. Std/CI omitted at n=1 — see _compute_stats."""
     lines = [

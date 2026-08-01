@@ -4,7 +4,7 @@ from pathlib import Path
 from text2query.benchmark.reporting import (
     _compute_stats, generate_reports, format_run_summary,
     METRICS, METRIC_LABELS, _field, format_session_header,
-    _aggregate_model_results, _LABEL_WIDTH,
+    _aggregate_model_results, _LABEL_WIDTH, _wilson_interval,
 )
 
 
@@ -340,3 +340,32 @@ def test_format_session_header_empty_query_ids_list():
     assert _field("Queries", "0 of 22 ()") in header
     # Evaluations must show 0, not fall back to total_available (22)
     assert _field("Evaluations", "0  (0 queries × 2 seeds × 1 model)") in header
+
+
+def test_wilson_interval_zero_successes_stays_in_range():
+    """The normal approximation gives [0, 0] here, hiding all uncertainty;
+    Wilson gives a real upper bound and never leaves [0, 1] (spec §4)."""
+    lo, hi = _wilson_interval(0, 10)
+    assert lo == 0.0
+    assert 0.0 < hi < 1.0
+
+
+def test_wilson_interval_all_successes_stays_in_range():
+    lo, hi = _wilson_interval(10, 10)
+    assert 0.0 < lo < 1.0
+    assert hi == 1.0
+
+
+def test_wilson_interval_brackets_the_point_estimate():
+    lo, hi = _wilson_interval(5, 22)
+    assert lo < 5 / 22 < hi
+
+
+def test_wilson_interval_narrows_as_n_grows():
+    _, hi_small = _wilson_interval(1, 4)
+    _, hi_large = _wilson_interval(25, 100)
+    assert (hi_large - 0.25) < (hi_small - 0.25)
+
+
+def test_wilson_interval_no_samples():
+    assert _wilson_interval(0, 0) == (None, None)

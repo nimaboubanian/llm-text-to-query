@@ -31,6 +31,10 @@ def evaluate_query(
         gt_csv, llm_csv, ref_sql=gt_sql_text,
     )
 
+    execution_accuracy = _execution_accuracy(
+        status, precision, recall, gt_csv, llm_csv, gt_sql_text,
+    )
+
     error_category = None
     if status == "exec_error" and error_detail:
         error_category = _classify_error(llm_sql_text, error_detail)
@@ -42,6 +46,7 @@ def evaluate_query(
     return {
         "query_id": query_id,
         "status": status,
+        "execution_accuracy": execution_accuracy,
         "result_precision": _round(precision),
         "result_recall": _round(recall),
         "result_f1": _round(f1),
@@ -127,15 +132,6 @@ def _align_columns(ref_df: pd.DataFrame, gen_df: pd.DataFrame) -> pd.DataFrame:
     aligned = gen_df.iloc[:, best_perm].copy()
     aligned.columns = ref_df.columns
     return aligned
-
-
-def _has_top_level_order_limit(sql: str) -> bool:
-    try:
-        tree = sqlglot.parse_one(sql, dialect="postgres")
-        return tree.args.get("order") is not None and tree.args.get("limit") is not None
-    except Exception as e:
-        logger.debug("Failed to parse SQL for order/limit check, falling back to keyword search: %s", e)
-        return "ORDER BY" in sql.upper() and "LIMIT" in sql.upper()
 
 
 def _order_spec(ref_sql: str) -> list[tuple[str, bool]] | None:
@@ -249,6 +245,7 @@ def _bag_match(
 def _result_set_comparison(
     gt_csv: Path, llm_csv: Path, ref_sql: str = "", eps: float = BENCHMARK_FLOAT_EPSILON,
 ) -> tuple[str, float | None, float | None, float | None, str | None]:
+    """ref_sql is retained for signature stability; ordering is scored by _execution_accuracy."""
     error_file = llm_csv.with_suffix(".error")
     if error_file.exists():
         return "exec_error", 0.0, 0.0, 0.0, error_file.read_text().strip()
@@ -274,20 +271,54 @@ def _result_set_comparison(
     ]
     other_cols = [c for c in gt_df.columns if c not in num_cols]
 
-    if _has_top_level_order_limit(ref_sql):
-        matched = sum(
-            1 for i in range(min(len(gt_df), len(llm_df)))
-            if all(_num_eq(gt_df[c].iat[i], llm_df[c].iat[i], eps) for c in num_cols)
-            and all(str(gt_df[c].iat[i]) == str(llm_df[c].iat[i]) for c in other_cols)
-        )
-    else:
-        matched = _bag_match(gt_df, llm_df, num_cols, other_cols, eps)
+    # Bag semantics for every query: precision/recall/F1 are order-insensitive
+    # diagnostics. The ordering requirement is enforced by _execution_accuracy.
+    matched = _bag_match(gt_df, llm_df, num_cols, other_cols, eps)
 
     precision = matched / len(llm_df) if len(llm_df) > 0 else 0.0
     recall = matched / len(gt_df) if len(gt_df) > 0 else 0.0
 
     f1 = (2 * precision * recall / (precision + recall)) if (precision + recall) > 0 else 0.0
     return "ok", precision, recall, f1, None
+
+
+def _execution_accuracy(
+    status: str,
+    precision: float | None,
+    recall: float | None,
+    gt_csv: Path,
+    llm_csv: Path,
+    ref_sql: str,
+) -> int:
+    """Binary correctness: exact multiset match plus the reference's row ordering.
+
+    Only a perfect multiset match reaches the ordering check, so the extra CSV
+    read is paid on the rare correct answers, not on every evaluation.
+
+    ponytail: a tie spanning a LIMIT boundary — where the model cuts a
+    different tied row than the reference did — reads as EX=0 for a defensibly
+    correct answer. Unreachable today: no TPC-H ground truth at SF1 has any tie
+    at all (measured, all 18 ordered queries, max group size 1). Spec B will
+    reject parameter variants whose ground truth ties across the LIMIT cut,
+    which is cheaper than detecting it here.
+    """
+    if status != "ok" or precision != 1.0 or recall != 1.0:
+        return 0
+
+    spec = _order_spec(ref_sql)
+    if spec is None:
+        return 1
+
+    try:
+        gt_df = pd.read_csv(gt_csv)
+        llm_df = _align_columns(gt_df, pd.read_csv(llm_csv))
+    except Exception as e:
+        logger.debug("Could not re-read result sets for the order check: %s", e)
+        return 1
+
+    ordered = _is_sorted_by(llm_df, spec)
+    # None means "not checkable" -> do not penalise.
+    return 0 if ordered is False else 1
 
 
 @lru_cache(maxsize=1)

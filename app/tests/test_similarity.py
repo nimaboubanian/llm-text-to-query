@@ -5,6 +5,7 @@ from pathlib import Path
 from text2query.benchmark.similarity import (
     _ast_similarity, _ast_similarity_normalized, _classify_error,
     _result_set_comparison, _tpch_schema, _order_spec, _is_sorted_by,
+    _execution_accuracy, evaluate_query,
 )
 
 
@@ -225,6 +226,7 @@ class TestResultSetComparison:
         assert f1 == 1.0
 
     def test_ordered_comparison_wrong_order(self, tmp_path):
+        """Order is no longer folded into F1 — it is carried by EX (spec §1)."""
         gt = tmp_path / "gt.csv"
         llm = tmp_path / "llm.csv"
         gt.write_text("id\n1\n2\n3\n")
@@ -234,7 +236,10 @@ class TestResultSetComparison:
             gt, llm, ref_sql="SELECT id FROM t ORDER BY id LIMIT 3",
         )
         assert status == "ok"
-        assert f1 < 1.0
+        assert f1 == 1.0
+        assert _execution_accuracy(
+            status, prec, rec, gt, llm, "SELECT id FROM t ORDER BY id LIMIT 3",
+        ) == 0
 
     def test_column_reorder_alignment(self, tmp_path):
         gt = tmp_path / "gt.csv"
@@ -432,3 +437,64 @@ def test_order_spec_resolves_for_every_tpch_reference():
     }
     # Q03's key is table-qualified in the SQL and must arrive unqualified.
     assert ("o_orderdate", False) in ordered["03"]
+
+
+class TestExecutionAccuracy:
+    def _files(self, tmp_path, gt_text, llm_text):
+        gt = tmp_path / "gt.csv"
+        llm = tmp_path / "llm.csv"
+        gt.write_text(gt_text)
+        llm.write_text(llm_text)
+        return gt, llm
+
+    def test_perfect_match_unordered_reference_scores_one(self, tmp_path):
+        gt, llm = self._files(tmp_path, "id\n1\n2\n", "id\n1\n2\n")
+        assert _execution_accuracy("ok", 1.0, 1.0, gt, llm, "SELECT id FROM t") == 1
+
+    def test_superset_scores_zero(self, tmp_path):
+        # The Q20 failure mode: recall 1.0 but extra rows -> not correct.
+        gt, llm = self._files(tmp_path, "id\n1\n2\n", "id\n1\n2\n3\n")
+        status, prec, rec, f1, _ = _result_set_comparison(gt, llm)
+        assert rec == 1.0 and prec < 1.0
+        assert _execution_accuracy(status, prec, rec, gt, llm, "SELECT id FROM t") == 0
+
+    def test_right_rows_wrong_order_scores_zero(self, tmp_path):
+        gt, llm = self._files(tmp_path, "id\n1\n2\n3\n", "id\n3\n2\n1\n")
+        status, prec, rec, f1, _ = _result_set_comparison(gt, llm)
+        assert f1 == 1.0  # bag-based F1 is blind to order, by design
+        assert _execution_accuracy(
+            status, prec, rec, gt, llm, "SELECT id FROM t ORDER BY id",
+        ) == 0
+
+    def test_right_rows_right_order_scores_one(self, tmp_path):
+        gt, llm = self._files(tmp_path, "id\n1\n2\n3\n", "id\n1\n2\n3\n")
+        assert _execution_accuracy(
+            "ok", 1.0, 1.0, gt, llm, "SELECT id FROM t ORDER BY id",
+        ) == 1
+
+    def test_exec_error_scores_zero(self, tmp_path):
+        gt, llm = self._files(tmp_path, "id\n1\n", "id\n1\n")
+        assert _execution_accuracy("exec_error", 0.0, 0.0, gt, llm, "SELECT id FROM t") == 0
+
+    def test_unmappable_order_key_does_not_penalise(self, tmp_path):
+        # Harness limitation must never zero a correct-looking answer.
+        gt, llm = self._files(tmp_path, "id\n1\n2\n", "id\n1\n2\n")
+        assert _execution_accuracy(
+            "ok", 1.0, 1.0, gt, llm, "SELECT id FROM t ORDER BY some_other_col",
+        ) == 1
+
+
+class TestEvaluateQueryReportsEX:
+    def test_evaluate_query_includes_execution_accuracy(self, tmp_path):
+        gt_csv = tmp_path / "gt.csv"
+        llm_csv = tmp_path / "llm.csv"
+        gt_csv.write_text("id\n1\n2\n")
+        llm_csv.write_text("id\n1\n2\n")
+        gt_sql = tmp_path / "gt.sql"
+        llm_sql = tmp_path / "llm.sql"
+        gt_sql.write_text("SELECT id FROM t ORDER BY id")
+        llm_sql.write_text("SELECT id FROM t ORDER BY id")
+
+        result = evaluate_query(1, gt_csv, llm_csv, gt_sql, llm_sql)
+        assert result["execution_accuracy"] == 1
+        assert result["result_f1"] == 1.0

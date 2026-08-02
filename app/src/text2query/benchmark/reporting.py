@@ -32,13 +32,18 @@ METRIC_LABELS = {
     "ast_similarity_normalized": "AST sim (norm)",
 }
 
-_LABEL_WIDTH = 19  # fits "Execution accuracy" (18 chars) plus >=1 space, like every other label
+_LABEL_WIDTH = 21  # fits "Correct on all seeds" (20 chars) plus >=1 space, like every other label
+# Value column budget, kept independent of _LABEL_WIDTH: tying it to "60 - label width" made every
+# past label-column widening (17->30, reverted; 17->19; 19->21) silently re-wrap unrelated fields
+# whose values happened to sit right at the old boundary. 41 comfortably fits the longest known
+# non-Metrics value (39 chars, "LLM params"/"Result F1" mean-annotation) with headroom.
+_VALUE_WIDTH = 41
 
 
 def _field(label: str, value: str) -> str:
     """Render one aligned 'Label   value' row, wrapping long values under the value column."""
     indent = " " * (2 + _LABEL_WIDTH)
-    wrapped = textwrap.wrap(value, width=60 - len(indent), break_long_words=False) or [""]
+    wrapped = textwrap.wrap(value, width=_VALUE_WIDTH, break_long_words=False) or [""]
     rows = [f"  {label:<{_LABEL_WIDTH}}{wrapped[0]}"]
     rows.extend(f"{indent}{cont}" for cont in wrapped[1:])
     return "\n".join(rows)

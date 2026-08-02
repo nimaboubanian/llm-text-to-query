@@ -269,7 +269,10 @@ def test_format_run_summary_metric_labels_never_run_into_their_value():
         ]
     }
     summary = format_run_summary(precomputed, ["m1"], Path("benchmark/results/x"), elapsed=5.0)
-    for label in METRIC_LABELS.values():
+    # Non-METRICS labels are just as exposed to _LABEL_WIDTH regressions (e.g.
+    # "Correct on all seeds" at 20 chars overran the old width of 19) — cover them too.
+    other_labels = ["Correct on all seeds", "Failures", "Session"]
+    for label in [*METRIC_LABELS.values(), *other_labels]:
         assert re.search(rf"{re.escape(label)}\s+\S", summary), (
             f"label {label!r} is not separated from its value by whitespace"
         )

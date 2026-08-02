@@ -563,7 +563,16 @@ def format_run_summary(
 
     if len(models) == 1:
         agg = aggregates[models[0]]
-        for i, metric in enumerate(METRICS):
+        lo, hi = _wilson_interval(agg["ex_successes"], agg["ex_total"])
+        ci_text = f"   95% CI [{lo:.4f}, {hi:.4f}]" if lo is not None else ""
+        lines.append(_field(
+            "Execution accuracy",
+            f"{agg['ex_successes']} / {agg['ex_total']}{ci_text}",
+        ))
+        # execution_accuracy already reported above as a fraction+CI; the loop over
+        # the remaining METRICS covers the diagnostic mean-score metrics only.
+        diagnostic_metrics = [m for m in METRICS if m != "execution_accuracy"]
+        for i, metric in enumerate(diagnostic_metrics):
             stats = agg["metrics"][metric]
             value = f"{stats['mean']:.4f}" if stats["mean"] is not None else "—"
             if i == 0:
@@ -573,12 +582,6 @@ def format_run_summary(
                     f"{agg['num_seeds']} {_plural(agg['num_seeds'], 'seed')})"
                 )
             lines.append(_field(METRIC_LABELS[metric], value))
-        lo, hi = _wilson_interval(agg["ex_successes"], agg["ex_total"])
-        ci_text = f"   95% CI [{lo:.4f}, {hi:.4f}]" if lo is not None else ""
-        lines.append(_field(
-            "Execution accuracy",
-            f"{agg['ex_successes']} / {agg['ex_total']}{ci_text}",
-        ))
         lines.append(_field("Correct on all seeds", f"{agg['exact_matches']} / {agg['total_queries']}"))
         lines.append(_field("Failures", str(agg["failures"])))
     else:

@@ -244,6 +244,9 @@ def test_format_run_summary_single_model():
     summary = format_run_summary(precomputed, ["m1"], Path("benchmark/results/x"), elapsed=252.0)
     assert "elapsed 4m 12s" in summary
     assert _field("Correct on all seeds", "1 / 3") in summary
+    # Regression guard: EX must appear exactly once (fraction+CI), not once from
+    # the generic METRICS loop and again from the dedicated EX-rate line.
+    assert summary.count("Execution accuracy") == 1
     assert "Execution accuracy" in summary
     assert _field("Failures", "1") in summary
     assert _field("Session", "benchmark/results/x") in summary

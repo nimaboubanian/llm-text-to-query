@@ -6,7 +6,7 @@ from text2query.benchmark.reporting import (
     _compute_stats, generate_reports, format_run_summary,
     METRICS, METRIC_LABELS, _field, format_session_header,
     _aggregate_model_results, _LABEL_WIDTH, _wilson_interval,
-    CSV_FIELDNAMES,
+    CSV_FIELDNAMES, _format_summary,
 )
 
 
@@ -185,9 +185,13 @@ def test_summary_omits_variance_columns_at_one_seed(tmp_path):
 
     summary = (report_dir / "summary.md").read_text()
     assert "±" not in summary
-    assert "95% CI" not in summary
-    assert "| Query | SQL ran | F1 | AST | AST norm |" in summary
+    assert "| Query | SQL ran | EX | F1 | AST | AST norm |" in summary
     assert "1.0000" in summary  # the real score still shows
+
+    # The aggregate EX rate may carry a Wilson interval, but no zero-width CI
+    # may appear anywhere — that was the original defect.
+    for zero_width in ("[1.0000, 1.0000]", "[0.0000, 0.0000]"):
+        assert zero_width not in summary
 
     per_query = (report_dir / "per_query" / "01.md").read_text()
     assert "±" not in per_query
@@ -229,19 +233,22 @@ def test_aggregate_model_results_exact_match_requires_perfect_mean_across_seeds(
 def test_format_run_summary_single_model():
     precomputed = {
         "m1": [
-            {"query_id": 1, "seed": 1, "status": "ok", "execution_accuracy": 1, "result_f1": 1.0, "ast_similarity": 0.9, "ast_similarity_normalized": 0.85},
-            {"query_id": 2, "seed": 1, "status": "ok", "execution_accuracy": 0, "result_f1": 0.5, "ast_similarity": 0.7, "ast_similarity_normalized": 0.65},
-            {"query_id": 3, "seed": 1, "status": "exec_error", "execution_accuracy": 0, "result_f1": 0.0, "ast_similarity": 0.0, "ast_similarity_normalized": None},
+            {"query_id": 1, "seed": 1, "status": "ok", "execution_accuracy": 1,
+             "result_f1": 1.0, "ast_similarity": 0.9, "ast_similarity_normalized": 0.85},
+            {"query_id": 2, "seed": 1, "status": "ok", "execution_accuracy": 0,
+             "result_f1": 0.5, "ast_similarity": 0.7, "ast_similarity_normalized": 0.65},
+            {"query_id": 3, "seed": 1, "status": "exec_error", "execution_accuracy": 0,
+             "result_f1": 0.0, "ast_similarity": 0.0, "ast_similarity_normalized": None},
         ]
     }
     summary = format_run_summary(precomputed, ["m1"], Path("benchmark/results/x"), elapsed=252.0)
     assert "elapsed 4m 12s" in summary
-    assert _field("Exact matches", "1 / 3") in summary
+    assert _field("Correct on all seeds", "1 / 3") in summary
+    assert "Execution accuracy" in summary
     assert _field("Failures", "1") in summary
     assert _field("Session", "benchmark/results/x") in summary
     assert "password" not in summary
     assert "postgresql" not in summary
-    # Verify normalized metric is properly formatted with space between label and value
     assert _field("AST sim (norm)", "0.7500") in summary
 
 
@@ -442,3 +449,27 @@ def test_exact_matches_counted_from_ex_not_f1():
     agg = _aggregate_model_results(rows)
     assert agg["exact_matches"] == 0
     assert agg["ex_successes"] == 0
+
+
+def test_summary_leads_with_execution_accuracy(tmp_path):
+    aggregated = [
+        {"query_id": 1,
+         "execution_accuracy": {"mean": 1.0, "std": None, "ci_lower": None, "ci_upper": None},
+         "result_f1": {"mean": 1.0, "std": None, "ci_lower": None, "ci_upper": None},
+         "ast_similarity": {"mean": 0.7, "std": None, "ci_lower": None, "ci_upper": None},
+         "ast_similarity_normalized": {"mean": 0.7, "std": None, "ci_lower": None, "ci_upper": None},
+         "per_seed": [{"status": "ok", "execution_accuracy": 1}]},
+        {"query_id": 20,
+         "execution_accuracy": {"mean": 0.0, "std": None, "ci_lower": None, "ci_upper": None},
+         "result_f1": {"mean": 0.8878, "std": None, "ci_lower": None, "ci_upper": None},
+         "ast_similarity": {"mean": 0.14, "std": None, "ci_lower": None, "ci_upper": None},
+         "ast_similarity_normalized": {"mean": 0.3, "std": None, "ci_lower": None, "ci_upper": None},
+         "per_seed": [{"status": "ok", "execution_accuracy": 0}]},
+    ]
+    table = _format_summary(aggregated, num_seeds=1)
+    header = table.splitlines()[0]
+    assert "EX" in header
+    # EX must appear before F1 in the column order
+    assert header.index("EX") < header.index("F1")
+    # Q20's per-query EX is 0/1 even though its F1 is high
+    assert "0/1" in table

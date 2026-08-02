@@ -198,10 +198,10 @@ def _format_per_query(seed_results: list[dict]) -> str:
 
 
 def _format_summary(aggregated: list[dict], num_seeds: int) -> str:
-    """Per-query summary. Std/CI columns omitted at num_seeds=1 — see _compute_stats."""
+    """Per-query summary, led by EX. Std/CI columns omitted at num_seeds=1."""
     multi = num_seeds > 1
     sfx = " (mean±std)" if multi else ""
-    head = ["Query", "SQL ran", f"F1{sfx}", f"AST{sfx}", f"AST norm{sfx}"] + (["F1 95% CI"] if multi else [])
+    head = ["Query", "SQL ran", "EX", f"F1{sfx}", f"AST{sfx}", f"AST norm{sfx}"]
     lines = ["| " + " | ".join(head) + " |", "|" + "---|" * len(head)]
 
     def cell(s: dict) -> str:
@@ -210,14 +210,16 @@ def _format_summary(aggregated: list[dict], num_seeds: int) -> str:
         return f"{s['mean']:.4f} ± {s['std']:.4f}" if multi else f"{s['mean']:.4f}"
 
     for q in aggregated:
-        f1 = q["result_f1"]
-        ok_count = sum(1 for r in q["per_seed"] if r["status"] == "ok")
+        per_seed = q["per_seed"]
+        ok_count = sum(1 for r in per_seed if r["status"] == "ok")
+        ex_count = sum(1 for r in per_seed if r.get("execution_accuracy") == 1)
         row = [
-            f"{q['query_id']:02d}", f"{ok_count}/{num_seeds}",
-            cell(f1), cell(q["ast_similarity"]), cell(q["ast_similarity_normalized"]),
+            f"{q['query_id']:02d}",
+            f"{ok_count}/{num_seeds}",
+            f"{ex_count}/{num_seeds}",
+            cell(q["result_f1"]), cell(q["ast_similarity"]),
+            cell(q["ast_similarity_normalized"]),
         ]
-        if multi:
-            row.append(f"[{f1['ci_lower']:.4f}, {f1['ci_upper']:.4f}]" if f1["mean"] is not None else "—")
         lines.append("| " + " | ".join(row) + " |")
 
     return "\n".join(lines) + "\n"
@@ -319,10 +321,16 @@ def generate_reports(
         print(f"  [{qid}] evaluated across {len(seeds)} seed{'s' if len(seeds) > 1 else ''}")
 
     total = len(query_ids)
-    exact_matches = sum(
-        1 for q in aggregated
-        if q["execution_accuracy"]["mean"] is not None and q["execution_accuracy"]["mean"] == 1.0
+    ex_values = [r.get("execution_accuracy") for r in all_flat_results
+                 if r.get("execution_accuracy") is not None]
+    ex_successes, ex_total = sum(ex_values), len(ex_values)
+    first_attempt = sum(r.get("first_attempt_ex") or 0 for r in all_flat_results)
+    all_seeds_correct = sum(
+        1 for q in aggregated if q["execution_accuracy"]["mean"] == 1.0
     )
+    lo, hi = _wilson_interval(ex_successes, ex_total)
+    ci_text = f" (95% CI [{lo:.4f}, {hi:.4f}])" if lo is not None else ""
+    rate = ex_successes / ex_total if ex_total else 0.0
 
     model_line = f"| Model | {model} |\n" if model else ""
     summary = (
@@ -334,7 +342,9 @@ def generate_reports(
         f"| Total queries | {total} |\n"
         f"| Seeds per query | {len(seeds)} |\n"
         f"| Total evaluations | {total * len(seeds)} |\n"
-        f"| Exact matches (EX = 1.0 mean) | {exact_matches} |\n\n"
+        f"| **Execution accuracy** | **{ex_successes}/{ex_total} = {rate:.4f}**{ci_text} |\n"
+        f"| Correct on all seeds | {all_seeds_correct} / {total} |\n"
+        f"| First-attempt EX | {first_attempt}/{ex_total} |\n\n"
         + _format_summary(aggregated, len(seeds))
     )
     (report_dir / "summary.md").write_text(summary)
@@ -403,9 +413,8 @@ def generate_cross_model_report(
     sep = "|---|" + "|".join("---" for _ in models) + "|"
 
     for title, metric, show_status in [
-        ("F1", "result_f1", True),
-        ("AST Similarity", "ast_similarity", False),
-        ("AST Similarity (normalized)", "ast_similarity_normalized", False),
+        ("Execution Accuracy", "execution_accuracy", True),
+        ("F1 (diagnostic)", "result_f1", False),
     ]:
         lines += ["", f"## {title}\n", header, sep]
         for qid in query_ids:
@@ -564,24 +573,30 @@ def format_run_summary(
                     f"{agg['num_seeds']} {_plural(agg['num_seeds'], 'seed')})"
                 )
             lines.append(_field(METRIC_LABELS[metric], value))
-        lines.append(_field("Exact matches", f"{agg['exact_matches']} / {agg['total_queries']}"))
+        lo, hi = _wilson_interval(agg["ex_successes"], agg["ex_total"])
+        ci_text = f"   95% CI [{lo:.4f}, {hi:.4f}]" if lo is not None else ""
+        lines.append(_field(
+            "Execution accuracy",
+            f"{agg['ex_successes']} / {agg['ex_total']}{ci_text}",
+        ))
+        lines.append(_field("Correct on all seeds", f"{agg['exact_matches']} / {agg['total_queries']}"))
         lines.append(_field("Failures", str(agg["failures"])))
     else:
         name_width = max(len("Model"), max(len(m) for m in models))
         lines.append(
-            f"  {'Model':<{name_width}}   {'Result F1':>9}   {'AST sim':>7}   {'AST norm':>8}   {'Exact':>7}   {'Fail':>4}"
+            f"  {'Model':<{name_width}}   {'EX':>9}   {'F1':>7}   {'AST sim':>8}   {'All seeds':>9}   {'Fail':>4}"
         )
         for model in models:
             agg = aggregates[model]
+            ex = agg["metrics"]["execution_accuracy"]["mean"]
             f1 = agg["metrics"]["result_f1"]["mean"]
             ast = agg["metrics"]["ast_similarity"]["mean"]
-            norm = agg["metrics"]["ast_similarity_normalized"]["mean"]
+            ex_str = f"{ex:.4f}" if ex is not None else "—"
             f1_str = f"{f1:.4f}" if f1 is not None else "—"
             ast_str = f"{ast:.4f}" if ast is not None else "—"
-            norm_str = f"{norm:.4f}" if norm is not None else "—"
-            exact_str = f"{agg['exact_matches']} / {agg['total_queries']}"
+            seeds_str = f"{agg['exact_matches']} / {agg['total_queries']}"
             lines.append(
-                f"  {model:<{name_width}}   {f1_str:>9}   {ast_str:>7}   {norm_str:>8}   {exact_str:>7}   {agg['failures']:>4}"
+                f"  {model:<{name_width}}   {ex_str:>9}   {f1_str:>7}   {ast_str:>8}   {seeds_str:>9}   {agg['failures']:>4}"
             )
 
     lines.append("")

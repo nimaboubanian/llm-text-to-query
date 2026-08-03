@@ -27,9 +27,7 @@ def evaluate_query(
     gt_sql_text = gt_sql.read_text() if gt_sql.exists() else ""
     llm_sql_text = llm_sql.read_text() if llm_sql.exists() else ""
 
-    status, precision, recall, f1, error_detail = _result_set_comparison(
-        gt_csv, llm_csv, ref_sql=gt_sql_text,
-    )
+    status, precision, recall, f1, error_detail = _result_set_comparison(gt_csv, llm_csv)
 
     execution_accuracy = _execution_accuracy(
         status, precision, recall, gt_csv, llm_csv, gt_sql_text,
@@ -148,8 +146,6 @@ def _order_spec(ref_sql: str) -> list[tuple[str, bool]] | None:
     except Exception as e:
         logger.debug("Failed to parse reference SQL for ORDER BY spec: %s", e)
         return None
-    if tree is None:
-        return None
     order = tree.args.get("order")
     if order is None:
         return None
@@ -165,8 +161,9 @@ def _order_spec(ref_sql: str) -> list[tuple[str, bool]] | None:
     return spec or None
 
 
-def _is_sorted_by(df: pd.DataFrame, spec: list[tuple[str, bool]]) -> bool | None:
-    """Whether df's rows honour the ORDER BY spec. None when not checkable.
+def _is_sorted_by(df: pd.DataFrame, spec: list[tuple[str, bool]]) -> bool:
+    """Whether df's rows honour the ORDER BY spec. True when not checkable —
+    callers must not penalise a model for a harness limitation.
 
     Rows tied on the key columns may appear in any order, which is exactly the
     freedom SQL leaves undetermined.
@@ -174,7 +171,7 @@ def _is_sorted_by(df: pd.DataFrame, spec: list[tuple[str, bool]]) -> bool | None
     absent = [name for name, _ in spec if name not in df.columns]
     if absent:
         logger.warning("ORDER BY keys %s absent from result columns; skipping order check", absent)
-        return None
+        return True
     if len(df) < 2:
         return True
 
@@ -186,14 +183,17 @@ def _is_sorted_by(df: pd.DataFrame, spec: list[tuple[str, bool]]) -> bool | None
     # check rather than emulate it. Revisit if a Spec B variant introduces one.
     if keys.isna().any().any():
         logger.warning("NULL present in ORDER BY key column(s) %s; skipping order check", names)
-        return None
+        return True
 
-    expected = keys.sort_values(
+    # A stable sort leaves an already-sorted sequence's row order untouched,
+    # ties included — so comparing the resulting index to the original one
+    # is equivalent to comparing the reordered values, without doing so.
+    sorted_index = keys.sort_values(
         by=names,
         ascending=[not desc for _, desc in spec],
         kind="mergesort",
-    )
-    return keys.reset_index(drop=True).equals(expected.reset_index(drop=True))
+    ).index
+    return sorted_index.equals(keys.index)
 
 
 def _num_eq(a, b, eps: float) -> bool:
@@ -243,9 +243,8 @@ def _bag_match(
 
 
 def _result_set_comparison(
-    gt_csv: Path, llm_csv: Path, ref_sql: str = "", eps: float = BENCHMARK_FLOAT_EPSILON,
+    gt_csv: Path, llm_csv: Path, eps: float = BENCHMARK_FLOAT_EPSILON,
 ) -> tuple[str, float | None, float | None, float | None, str | None]:
-    """ref_sql is retained for signature stability; ordering is scored by _execution_accuracy."""
     error_file = llm_csv.with_suffix(".error")
     if error_file.exists():
         return "exec_error", 0.0, 0.0, 0.0, error_file.read_text().strip()
@@ -295,9 +294,6 @@ def _execution_accuracy(
 ) -> int:
     """Binary correctness: exact multiset match plus the reference's row ordering.
 
-    Only a perfect multiset match reaches the ordering check, so the extra CSV
-    read is paid on the rare correct answers, not on every evaluation.
-
     ponytail: a tie spanning a LIMIT boundary — where the model cuts a
     different tied row than the reference did — reads as EX=0 for a defensibly
     correct answer. Unreachable today: no TPC-H ground truth at SF1 has any tie
@@ -312,16 +308,9 @@ def _execution_accuracy(
     if spec is None:
         return 1
 
-    try:
-        gt_df = pd.read_csv(gt_csv)
-        llm_df = _align_columns(gt_df, pd.read_csv(llm_csv))
-        ordered = _is_sorted_by(llm_df, spec)
-    except Exception as e:
-        logger.debug("Could not re-read result sets for the order check: %s", e)
-        return 1
-
-    # None means "not checkable" -> do not penalise.
-    return 0 if ordered is False else 1
+    gt_df = pd.read_csv(gt_csv)
+    llm_df = _align_columns(gt_df, pd.read_csv(llm_csv))
+    return int(_is_sorted_by(llm_df, spec))
 
 
 @lru_cache(maxsize=1)

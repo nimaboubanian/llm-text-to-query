@@ -33,11 +33,7 @@ METRIC_LABELS = {
 }
 
 _LABEL_WIDTH = 21  # fits "Correct on all seeds" (20 chars) plus >=1 space, like every other label
-# Value column budget, kept independent of _LABEL_WIDTH: tying it to "60 - label width" made every
-# past label-column widening (17->30, reverted; 17->19; 19->21) silently re-wrap unrelated fields
-# whose values happened to sit right at the old boundary. 41 comfortably fits the longest known
-# non-Metrics value (39 chars, "LLM params"/"Result F1" mean-annotation) with headroom.
-_VALUE_WIDTH = 41
+_VALUE_WIDTH = 41  # independent of _LABEL_WIDTH so widening the label column never re-wraps values
 
 
 def _field(label: str, value: str) -> str:
@@ -147,9 +143,7 @@ def _compute_stats(values: list[float]) -> dict:
     }
 
 
-def _wilson_interval(
-    successes: int, n: int, z: float = 1.96,
-) -> tuple[float, float] | tuple[None, None]:
+def _wilson_interval(successes: int, n: int) -> tuple[float, float] | tuple[None, None]:
     """95% Wilson score interval for a proportion.
 
     Used for the binary EX rate instead of the normal approximation, which at
@@ -158,6 +152,7 @@ def _wilson_interval(
     """
     if n == 0:
         return None, None
+    z = 1.96
     p = successes / n
     denominator = 1 + z**2 / n
     centre = (p + z**2 / (2 * n)) / denominator
@@ -197,14 +192,13 @@ def _format_per_query(seed_results: list[dict]) -> str:
             continue
         cells = [METRIC_LABELS[metric], f"{s['mean']:.4f}"]
         if s["std"] is not None:
-            if metric == "execution_accuracy":
-                # Binary proportion: the normal-approximation CI (ci_lower/ci_upper)
-                # can go negative at small n. Use the Wilson interval, as everywhere
-                # else EX's aggregate CI is reported.
-                present = [v for v in vals if v is not None]
-                lo, hi = _wilson_interval(sum(present), len(present))
-            else:
-                lo, hi = s["ci_lower"], s["ci_upper"]
+            # execution_accuracy is a binary proportion: the normal-approximation
+            # CI (ci_lower/ci_upper) can go negative at small n, so use Wilson.
+            present = [v for v in vals if v is not None]
+            lo, hi = (
+                _wilson_interval(sum(present), len(present))
+                if metric == "execution_accuracy" else (s["ci_lower"], s["ci_upper"])
+            )
             cells += [f"{s['std']:.4f}", f"[{lo:.4f}, {hi:.4f}]"]
         lines.append("| " + " | ".join(cells) + " |")
 
@@ -335,13 +329,10 @@ def generate_reports(
         print(f"  [{qid}] evaluated across {len(seeds)} seed{'s' if len(seeds) > 1 else ''}")
 
     total = len(query_ids)
-    ex_values = [r.get("execution_accuracy") for r in all_flat_results
-                 if r.get("execution_accuracy") is not None]
-    ex_successes, ex_total = sum(ex_values), len(ex_values)
-    first_attempt = sum(r.get("first_attempt_ex") or 0 for r in all_flat_results)
-    all_seeds_correct = sum(
-        1 for q in aggregated if q["execution_accuracy"]["mean"] == 1.0
-    )
+    agg = _aggregate_model_results(all_flat_results)
+    ex_successes, ex_total = agg["ex_successes"], agg["ex_total"]
+    all_seeds_correct = agg["exact_matches"]
+    first_attempt = sum(r["first_attempt_ex"] for r in all_flat_results)
     lo, hi = _wilson_interval(ex_successes, ex_total)
     ci_text = f" (95% CI [{lo:.4f}, {hi:.4f}])" if lo is not None else ""
     rate = ex_successes / ex_total if ex_total else 0.0

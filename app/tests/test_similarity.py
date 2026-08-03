@@ -224,9 +224,7 @@ class TestResultSetComparison:
         gt.write_text("id\n1\n2\n3\n")
         llm.write_text("id\n1\n2\n3\n")
 
-        status, prec, rec, f1, err = _result_set_comparison(
-            gt, llm, ref_sql="SELECT id FROM t ORDER BY id LIMIT 3",
-        )
+        status, prec, rec, f1, err = _result_set_comparison(gt, llm)
         assert status == "ok"
         assert f1 == 1.0
 
@@ -237,9 +235,7 @@ class TestResultSetComparison:
         gt.write_text("id\n1\n2\n3\n")
         llm.write_text("id\n3\n2\n1\n")
 
-        status, prec, rec, f1, err = _result_set_comparison(
-            gt, llm, ref_sql="SELECT id FROM t ORDER BY id LIMIT 3",
-        )
+        status, prec, rec, f1, err = _result_set_comparison(gt, llm)
         assert status == "ok"
         assert f1 == 1.0
         assert _execution_accuracy(
@@ -303,15 +299,13 @@ class TestResultSetComparison:
         assert status == "ok"
         assert f1 == 1.0
 
-    def test_ordered_mode_uses_epsilon(self, tmp_path):
+    def test_uses_epsilon(self, tmp_path):
         gt = tmp_path / "gt.csv"
         llm = tmp_path / "llm.csv"
         gt.write_text("val\n1.00001\n2.0\n")
         llm.write_text("val\n1.00002\n2.0\n")
 
-        status, _, _, f1, _ = _result_set_comparison(
-            gt, llm, ref_sql="SELECT val FROM t ORDER BY val LIMIT 2",
-        )
+        status, _, _, f1, _ = _result_set_comparison(gt, llm)
         assert status == "ok"
         assert f1 == 1.0
 
@@ -405,15 +399,15 @@ class TestIsSortedBy:
         df = pd.DataFrame({"k": [1, 1, 2], "other": ["z", "a", "m"]})
         assert _is_sorted_by(df, [("k", False)]) is True
 
-    def test_missing_key_column_returns_none(self):
+    def test_missing_key_column_is_not_checkable_so_not_penalised(self):
         df = pd.DataFrame({"a": [1, 2]})
-        assert _is_sorted_by(df, [("nope", False)]) is None
+        assert _is_sorted_by(df, [("nope", False)]) is True
 
-    def test_nan_in_key_column_returns_none(self):
+    def test_nan_in_key_column_is_not_checkable_so_not_penalised(self):
         # Postgres and pandas disagree on NULL placement for DESC; rather than
         # emulate it, skip the check so a model is never wrongly penalised.
         df = pd.DataFrame({"a": [1.0, float("nan"), 2.0]})
-        assert _is_sorted_by(df, [("a", False)]) is None
+        assert _is_sorted_by(df, [("a", False)]) is True
 
     def test_single_row_is_trivially_sorted(self):
         df = pd.DataFrame({"a": [42]})

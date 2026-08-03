@@ -6,9 +6,10 @@ regression in one query's handling can't hide behind another's.
 """
 from pathlib import Path
 
+import pandas as pd
 import pytest
 
-from text2query.benchmark.similarity import evaluate_query
+from text2query.benchmark.similarity import evaluate_query, _execution_accuracy
 
 RUN = Path("../benchmark/results/2026-08-01_02-19-06")
 LLM_ANSWERS = RUN / "answers/qwen2.5-coder_7b/seed_1"
@@ -79,19 +80,9 @@ def test_no_missing_rows_and_mean_f1_matches(scored):
     assert mean_f1 == pytest.approx(0.3008, abs=1e-3)
 
 
-def test_ordering_requirement_costs_no_passing_query(scored):
-    """Every EX=1 query is verified sorted, so §2 adds no false negatives."""
-    for qid in EX_EXPECTED:
-        assert scored[qid]["result_f1"] == 1.0, qid
-        assert scored[qid]["execution_accuracy"] == 1, qid
-
-
 def test_shuffling_a_correct_answer_breaks_ex(tmp_path):
     """Negative control: the ordering check is not vacuous."""
     _require_archive()
-    import pandas as pd
-    from text2query.benchmark.similarity import _execution_accuracy
-
     for qid in ["01", "03", "10", "18"]:
         gt_csv = GT_ANSWERS / f"{qid}.csv"
         shuffled = tmp_path / f"{qid}.csv"

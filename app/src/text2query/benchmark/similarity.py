@@ -315,11 +315,11 @@ def _execution_accuracy(
     try:
         gt_df = pd.read_csv(gt_csv)
         llm_df = _align_columns(gt_df, pd.read_csv(llm_csv))
+        ordered = _is_sorted_by(llm_df, spec)
     except Exception as e:
         logger.debug("Could not re-read result sets for the order check: %s", e)
         return 1
 
-    ordered = _is_sorted_by(llm_df, spec)
     # None means "not checkable" -> do not penalise.
     return 0 if ordered is False else 1
 

@@ -6,7 +6,7 @@ from text2query.benchmark.reporting import (
     _compute_stats, generate_reports, format_run_summary,
     METRICS, METRIC_LABELS, _field, format_session_header,
     _aggregate_model_results, _LABEL_WIDTH, _wilson_interval,
-    CSV_FIELDNAMES, _format_summary,
+    CSV_FIELDNAMES, _format_summary, _format_per_query,
 )
 
 
@@ -161,6 +161,14 @@ def test_results_csv_marks_retried_rows(tmp_path):
     assert rows["01"]["retried"] == "False"
     assert rows["02"]["retried"] == "True"
 
+    # 02 eventually matched (execution_accuracy == 1) but only after a retry,
+    # so its first attempt was never correct: first_attempt_ex must be 0
+    # even though the eventual execution_accuracy is 1.
+    assert rows["02"]["execution_accuracy"] == "1"
+    assert rows["02"]["first_attempt_ex"] == "0"
+    # 01 was never retried: first_attempt_ex must equal execution_accuracy.
+    assert rows["01"]["first_attempt_ex"] == rows["01"]["execution_accuracy"]
+
 
 def test_summary_omits_variance_columns_at_one_seed(tmp_path):
     """At 1 seed there is no spread to report: summary.md must not print '± 0.0000'
@@ -188,6 +196,11 @@ def test_summary_omits_variance_columns_at_one_seed(tmp_path):
     assert "| Query | SQL ran | EX | F1 | AST | AST norm |" in summary
     assert "1.0000" in summary  # the real score still shows
 
+    # The headline EX block: a single perfect match -> 1/1 = 1.0000.
+    assert "**Execution accuracy** | **1/1 = 1.0000**" in summary
+    assert "| Correct on all seeds | 1 / 1 |" in summary
+    assert "| First-attempt EX | 1/1 |" in summary
+
     # The aggregate EX rate may carry a Wilson interval, but no zero-width CI
     # may appear anywhere — that was the original defect.
     for zero_width in ("[1.0000, 1.0000]", "[0.0000, 0.0000]"):
@@ -196,6 +209,26 @@ def test_summary_omits_variance_columns_at_one_seed(tmp_path):
     per_query = (report_dir / "per_query" / "01.md").read_text()
     assert "±" not in per_query
     assert "95% CI" not in per_query
+
+
+def test_format_per_query_ex_row_uses_wilson_interval_not_negative():
+    """Execution accuracy is a binary proportion: its CI must come from the
+    Wilson interval, not the normal approximation (mean ± 1.96*std/sqrt(n)),
+    which produces a nonsensical negative lower bound at small n (e.g. 1/3
+    successes -> [-0.3200, 0.9867])."""
+    seed_results = [
+        {"seed": 1, "status": "ok", "execution_accuracy": 1, "result_f1": 1.0,
+         "ast_similarity": 1.0, "ast_similarity_normalized": 1.0},
+        {"seed": 2, "status": "ok", "execution_accuracy": 0, "result_f1": 0.0,
+         "ast_similarity": 0.0, "ast_similarity_normalized": 0.0},
+        {"seed": 3, "status": "ok", "execution_accuracy": 0, "result_f1": 0.0,
+         "ast_similarity": 0.0, "ast_similarity_normalized": 0.0},
+    ]
+    report = _format_per_query(seed_results)
+    ex_line = next(line for line in report.splitlines() if line.startswith("| Execution accuracy"))
+    ci_text = ex_line.split("|")[-2].strip()
+    lo, hi = (float(x) for x in ci_text.strip("[]").split(","))
+    assert 0.0 <= lo <= hi <= 1.0
 
 
 def test_aggregate_model_results_counts_exact_matches_and_failures():

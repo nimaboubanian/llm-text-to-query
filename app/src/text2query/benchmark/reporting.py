@@ -191,12 +191,21 @@ def _format_per_query(seed_results: list[dict]) -> str:
     lines.append("|---|---|---|---|" if multi else "|---|---|")
 
     for metric in METRICS:
-        s = _compute_stats([r.get(metric) for r in seed_results])
+        vals = [r.get(metric) for r in seed_results]
+        s = _compute_stats(vals)
         if s["mean"] is None:
             continue
         cells = [METRIC_LABELS[metric], f"{s['mean']:.4f}"]
         if s["std"] is not None:
-            cells += [f"{s['std']:.4f}", f"[{s['ci_lower']:.4f}, {s['ci_upper']:.4f}]"]
+            if metric == "execution_accuracy":
+                # Binary proportion: the normal-approximation CI (ci_lower/ci_upper)
+                # can go negative at small n. Use the Wilson interval, as everywhere
+                # else EX's aggregate CI is reported.
+                present = [v for v in vals if v is not None]
+                lo, hi = _wilson_interval(sum(present), len(present))
+            else:
+                lo, hi = s["ci_lower"], s["ci_upper"]
+            cells += [f"{s['std']:.4f}", f"[{lo:.4f}, {hi:.4f}]"]
         lines.append("| " + " | ".join(cells) + " |")
 
     return "\n".join(lines) + "\n"

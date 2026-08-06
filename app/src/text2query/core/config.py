@@ -35,8 +35,7 @@ BENCHMARK_NUM_SEEDS = _env("BENCHMARK_NUM_SEEDS", 1, int)
 BENCHMARK_DATA_PATH = os.getenv("BENCHMARK_DATA_PATH")
 BENCHMARK_FLOAT_EPSILON = _env("BENCHMARK_FLOAT_EPSILON", 1e-4, float)
 
-_models_raw = os.getenv("BENCHMARK_MODELS", "")
-BENCHMARK_MODELS = [m.strip() for m in _models_raw.split(",") if m.strip()]
+BENCHMARK_MODELS = [m.strip() for m in os.getenv("BENCHMARK_MODELS", "").split(",") if m.strip()]
 
 _query_ids_raw = os.getenv("BENCHMARK_QUERY_IDS", "all").strip().lower()
 BENCHMARK_QUERY_IDS: list[str] | None = (

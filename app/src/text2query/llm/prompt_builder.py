@@ -43,15 +43,12 @@ FEW_SHOT_EXAMPLES: list[tuple[str, str]] = [
 
 
 def _examples_section(n: int) -> str:
-    pairs = FEW_SHOT_EXAMPLES[:n]
-    blocks = [f"Question: {q}\nSQL: {sql}" for q, sql in pairs]
+    blocks = (f"Question: {q}\nSQL: {sql}" for q, sql in FEW_SHOT_EXAMPLES[:n])
     return "Example question-to-SQL conversions (from other databases):\n\n" + "\n\n".join(blocks)
 
 
 def _wrap(tag: str | None, body: str, xml: bool) -> str:
-    if xml and tag:
-        return f"<{tag}>\n{body}\n</{tag}>"
-    return body
+    return f"<{tag}>\n{body}\n</{tag}>" if xml and tag else body
 
 
 def build_prompt(flags: PromptFlags, schema_str: str, question: str) -> str:

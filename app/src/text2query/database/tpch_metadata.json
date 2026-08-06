@@ -1,12 +1,12 @@
 {
   "region": {
     "r_regionkey": {"desc": "unique region identifier"},
-    "r_name": {"desc": "region name", "samples": ["'AFRICA'", "'AMERICA'", "'ASIA'"]},
+    "r_name": {"desc": "region name; all 5 values listed", "samples": ["'AFRICA'", "'AMERICA'", "'ASIA'", "'EUROPE'", "'MIDDLE EAST'"]},
     "r_comment": {"desc": "free-text comment"}
   },
   "nation": {
     "n_nationkey": {"desc": "unique nation identifier"},
-    "n_name": {"desc": "nation name", "samples": ["'FRANCE'", "'GERMANY'", "'CHINA'"]},
+    "n_name": {"desc": "nation name (25 total, uppercase)", "samples": ["'FRANCE'", "'GERMANY'", "'CHINA'", "'UNITED STATES'", "'SAUDI ARABIA'"]},
     "n_regionkey": {"desc": "region this nation belongs to (joins region)"},
     "n_comment": {"desc": "free-text comment"}
   },
@@ -26,17 +26,17 @@
     "c_nationkey": {"desc": "customer's nation (joins nation)"},
     "c_phone": {"desc": "customer phone number"},
     "c_acctbal": {"desc": "customer account balance"},
-    "c_mktsegment": {"desc": "market segment", "samples": ["'BUILDING'", "'AUTOMOBILE'", "'MACHINERY'"]},
+    "c_mktsegment": {"desc": "market segment; all 5 values listed", "samples": ["'AUTOMOBILE'", "'BUILDING'", "'FURNITURE'", "'HOUSEHOLD'", "'MACHINERY'"]},
     "c_comment": {"desc": "free-text comment"}
   },
   "part": {
     "p_partkey": {"desc": "unique part identifier"},
     "p_name": {"desc": "part name (color/material words)"},
-    "p_mfgr": {"desc": "manufacturer", "samples": ["'Manufacturer#1'", "'Manufacturer#5'"]},
-    "p_brand": {"desc": "brand", "samples": ["'Brand#13'", "'Brand#42'"]},
-    "p_type": {"desc": "part type string", "samples": ["'ECONOMY ANODIZED STEEL'", "'STANDARD POLISHED COPPER'"]},
-    "p_size": {"desc": "part size (integer)"},
-    "p_container": {"desc": "container type", "samples": ["'SM CASE'", "'JUMBO PKG'", "'MED BOX'"]},
+    "p_mfgr": {"desc": "manufacturer, 'Manufacturer#N' for N in 1-5", "samples": ["'Manufacturer#1'", "'Manufacturer#5'"]},
+    "p_brand": {"desc": "brand, 'Brand#MN' where M is the manufacturer 1-5 and N is 1-5 (25 total)", "samples": ["'Brand#13'", "'Brand#42'"]},
+    "p_type": {"desc": "part type, 3 words 'SYLLABLE1 SYLLABLE2 SYLLABLE3' (150 combinations): [STANDARD|SMALL|MEDIUM|LARGE|ECONOMY|PROMO] [ANODIZED|BURNISHED|PLATED|POLISHED|BRUSHED] [TIN|NICKEL|BRASS|STEEL|COPPER]; match prefixes/suffixes with LIKE", "samples": ["'ECONOMY ANODIZED STEEL'", "'STANDARD POLISHED COPPER'"]},
+    "p_size": {"desc": "part size, integer 1 to 50"},
+    "p_container": {"desc": "container, 2 words 'SIZE TYPE' (40 combinations): [SM|LG|MED|JUMBO|WRAP] [CASE|BOX|BAG|JAR|PKG|PACK|CAN|DRUM]", "samples": ["'SM CASE'", "'JUMBO PKG'", "'MED BOX'"]},
     "p_retailprice": {"desc": "suggested retail price"},
     "p_comment": {"desc": "free-text comment"}
   },
@@ -50,12 +50,12 @@
   "orders": {
     "o_orderkey": {"desc": "unique order identifier"},
     "o_custkey": {"desc": "ordering customer (joins customer)"},
-    "o_orderstatus": {"desc": "order status flag", "samples": ["'O' (open)", "'F' (fulfilled)", "'P' (partial)"]},
+    "o_orderstatus": {"desc": "order status flag; all 3 values listed", "samples": ["'O' (open)", "'F' (fulfilled)", "'P' (partial)"]},
     "o_totalprice": {"desc": "total order price"},
     "o_orderdate": {"desc": "date the order was placed"},
-    "o_orderpriority": {"desc": "order priority", "samples": ["'1-URGENT'", "'3-MEDIUM'", "'5-LOW'"]},
+    "o_orderpriority": {"desc": "order priority; all 5 values listed", "samples": ["'1-URGENT'", "'2-HIGH'", "'3-MEDIUM'", "'4-NOT SPECIFIED'", "'5-LOW'"]},
     "o_clerk": {"desc": "clerk who processed the order"},
-    "o_shippriority": {"desc": "shipping priority (integer)"},
+    "o_shippriority": {"desc": "shipping priority (integer); always 0 in this dataset, so it never discriminates in a filter"},
     "o_comment": {"desc": "free-text comment"}
   },
   "lineitem": {
@@ -65,15 +65,15 @@
     "l_linenumber": {"desc": "line number within the order"},
     "l_quantity": {"desc": "quantity ordered"},
     "l_extendedprice": {"desc": "extended price (quantity * part price)"},
-    "l_discount": {"desc": "discount fraction", "samples": ["0.00", "0.05", "0.10"]},
-    "l_tax": {"desc": "tax fraction"},
-    "l_returnflag": {"desc": "return flag", "samples": ["'R' (returned)", "'A' (accepted)", "'N' (none)"]},
-    "l_linestatus": {"desc": "line status flag", "samples": ["'O' (open)", "'F' (fulfilled)"]},
+    "l_discount": {"desc": "discount fraction, 0.00 to 0.10 in 0.01 steps (not a percentage)", "samples": ["0.00", "0.05", "0.10"]},
+    "l_tax": {"desc": "tax fraction, 0.00 to 0.08 in 0.01 steps (not a percentage)"},
+    "l_returnflag": {"desc": "return flag; all 3 values listed", "samples": ["'R' (returned)", "'A' (accepted)", "'N' (none)"]},
+    "l_linestatus": {"desc": "line status flag; both values listed", "samples": ["'O' (open)", "'F' (fulfilled)"]},
     "l_shipdate": {"desc": "date the line shipped"},
     "l_commitdate": {"desc": "committed delivery date"},
     "l_receiptdate": {"desc": "date the customer received the line"},
-    "l_shipinstruct": {"desc": "shipping instructions", "samples": ["'DELIVER IN PERSON'", "'COLLECT COD'", "'NONE'"]},
-    "l_shipmode": {"desc": "shipping mode", "samples": ["'AIR'", "'RAIL'", "'TRUCK'"]},
+    "l_shipinstruct": {"desc": "shipping instructions; all 4 values listed", "samples": ["'DELIVER IN PERSON'", "'COLLECT COD'", "'NONE'", "'TAKE BACK RETURN'"]},
+    "l_shipmode": {"desc": "shipping mode; all 7 values listed ('AIR' and 'REG AIR' are distinct modes)", "samples": ["'AIR'", "'REG AIR'", "'RAIL'", "'SHIP'", "'TRUCK'", "'MAIL'", "'FOB'"]},
     "l_comment": {"desc": "free-text comment"}
   }
 }

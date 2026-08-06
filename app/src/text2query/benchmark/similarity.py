@@ -37,9 +37,8 @@ def evaluate_query(
     if status == "exec_error" and error_detail:
         error_category = _classify_error(llm_sql_text, error_detail)
 
-    trees = _parse_pair(gt_sql_text, llm_sql_text)
-    ast_sim = _diff_score(*trees) if trees else None
-    ast_sim_norm = _diff_score(_normalize(trees[0]), _normalize(trees[1])) if trees else None
+    ast_sim = _ast_similarity(gt_sql_text, llm_sql_text)
+    ast_sim_norm = _ast_similarity_normalized(gt_sql_text, llm_sql_text)
 
     return {
         "query_id": query_id,
@@ -56,8 +55,6 @@ def evaluate_query(
 
 def _round(value: float | None) -> float | None:
     return round(value, 4) if value is not None else None
-
-
 
 
 def _classify_error(sql: str, error_text: str) -> str:
@@ -114,22 +111,13 @@ def _align_columns(ref_df: pd.DataFrame, gen_df: pd.DataFrame) -> pd.DataFrame:
         # positionally so callers can index gen_df by ref_df's column names.
         return gen_df.set_axis(ref_df.columns, axis=1)
 
-    best_perm = list(range(n))
-    best_score = -1
-    for perm in permutations(range(n)):
-        reordered = gen_df.iloc[:, list(perm)]
-        reordered.columns = ref_df.columns
-        score = sum(
-            len(set(ref_df[c].astype(str)) & set(reordered[c].astype(str)))
-            for c in ref_df.columns
-        )
-        if score > best_score:
-            best_score = score
-            best_perm = list(perm)
-
-    aligned = gen_df.iloc[:, best_perm].copy()
-    aligned.columns = ref_df.columns
-    return aligned
+    ref_sets = [set(ref_df.iloc[:, i].astype(str)) for i in range(n)]
+    gen_sets = [set(gen_df.iloc[:, j].astype(str)) for j in range(n)]
+    best = max(
+        permutations(range(n)),
+        key=lambda perm: sum(len(ref_sets[i] & gen_sets[j]) for i, j in enumerate(perm)),
+    )
+    return gen_df.iloc[:, list(best)].set_axis(ref_df.columns, axis=1)
 
 
 def _order_spec(ref_sql: str) -> list[tuple[str, bool]] | None:
@@ -363,14 +351,13 @@ def _normalize(tree: exp.Expression) -> exp.Expression:
 
 def _parse_pair(gt_sql: str, llm_sql: str) -> tuple | None:
     try:
-        gt_tree = sqlglot.parse(gt_sql, dialect="postgres")[0]
-        llm_tree = sqlglot.parse(llm_sql, dialect="postgres")[0]
+        return (
+            sqlglot.parse_one(gt_sql, dialect="postgres"),
+            sqlglot.parse_one(llm_sql, dialect="postgres"),
+        )
     except Exception as e:
         logger.debug("Failed to parse SQL for AST similarity: %s", e)
         return None
-    if gt_tree is None or llm_tree is None:
-        return None
-    return gt_tree, llm_tree
 
 
 def _diff_score(gt_tree, llm_tree) -> float | None:

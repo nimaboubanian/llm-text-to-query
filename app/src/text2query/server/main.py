@@ -11,7 +11,7 @@ from text2query.core.config import (
     INTERACTIVE_APP_DATABASE_URL, INTERACTIVE_APP_MODEL, LOG_LEVEL, PROMPT_FLAGS, SERVER_PORT,
 )
 from text2query.database.executor import execute_sql_query, explain_error
-from text2query.database.schema import create_engine_for_database, load_tpch_metadata, render_schema
+from text2query.database.schema import create_engine_for_database, render_schema
 from text2query.llm import ollama
 
 logger = logging.getLogger(__name__)
@@ -142,7 +142,7 @@ def main():
     )
 
     engine = create_engine_for_database(INTERACTIVE_APP_DATABASE_URL)
-    schema = render_schema(engine, PROMPT_FLAGS, metadata=load_tpch_metadata())
+    schema = render_schema(engine, PROMPT_FLAGS)
     ollama.warmup(INTERACTIVE_APP_MODEL)
     handler_cls = _make_handler(engine, schema)
     server = ThreadingHTTPServer(("0.0.0.0", SERVER_PORT), handler_cls)

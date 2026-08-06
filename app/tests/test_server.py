@@ -157,3 +157,41 @@ def test_handler_serves_health_and_query_end_to_end(monkeypatch):
         assert payload["row_count"] == 1
     finally:
         server.shutdown()
+
+
+def test_main_renders_the_connected_schema_without_tpch_metadata(monkeypatch):
+    """App mode introspects whatever database it is pointed at.
+
+    Curated TPC-H metadata is benchmark-only — injecting it here would describe
+    tables that do not exist in a user's database.
+    """
+    from text2query.core.config import INTERACTIVE_APP_DATABASE_URL
+    from text2query.server import main as main_mod
+
+    calls = {}
+
+    def _fake_engine(url):
+        calls["url"] = url
+        return object()
+
+    def _fake_render(engine, flags, **kwargs):
+        calls["render_kwargs"] = kwargs
+        return "schema"
+
+    class _FakeServer:
+        def __init__(self, address, handler_cls):
+            pass
+
+        def serve_forever(self):
+            calls["served"] = True
+
+    monkeypatch.setattr(main_mod, "create_engine_for_database", _fake_engine)
+    monkeypatch.setattr(main_mod, "render_schema", _fake_render)
+    monkeypatch.setattr(main_mod.ollama, "warmup", lambda model: None)
+    monkeypatch.setattr(main_mod, "ThreadingHTTPServer", _FakeServer)
+
+    main_mod.main()
+
+    assert calls["served"] is True
+    assert calls["url"] == INTERACTIVE_APP_DATABASE_URL
+    assert calls["render_kwargs"].get("metadata") is None

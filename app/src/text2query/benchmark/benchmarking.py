@@ -132,12 +132,10 @@ def main():
     data_dir = Path(BENCHMARK_DATA_PATH) if BENCHMARK_DATA_PATH else Path(f"benchmark/.tpch/data/sf{BENCHMARK_SCALE_FACTOR}")
 
     seeds = list(range(1, BENCHMARK_NUM_SEEDS + 1))
-    if BENCHMARK_MODELS:
-        models = BENCHMARK_MODELS
-        fallback_warning = None
-    else:
-        models = [DEFAULT_MODEL]
-        fallback_warning = f"BENCHMARK_MODELS is empty — falling back to DEFAULT_MODEL ({DEFAULT_MODEL})."
+    models = BENCHMARK_MODELS or [DEFAULT_MODEL]
+    fallback_warning = None if BENCHMARK_MODELS else (
+        f"BENCHMARK_MODELS is empty — falling back to DEFAULT_MODEL ({DEFAULT_MODEL})."
+    )
     multi_model = len(models) > 1
 
     start_time = time.monotonic()
@@ -177,14 +175,12 @@ def main():
         print(_banner("Setup"))
         if BENCHMARK_DATA_PATH:
             print(f"  Using existing data: {BENCHMARK_DATA_PATH}")
-            data_dir = Path(BENCHMARK_DATA_PATH)
         else:
             data_dir = generate_data(BENCHMARK_SCALE_FACTOR, data_dir)
 
         validate_directories(paths.questions_dir, paths.queries_dir)
 
-        is_ready = check_database_readiness(db_url=DATABASE_URL, scale_factor=BENCHMARK_SCALE_FACTOR)
-        if not is_ready:
+        if not check_database_readiness(db_url=DATABASE_URL, scale_factor=BENCHMARK_SCALE_FACTOR):
             setup_database(
                 schema_file=paths.schema_file,
                 data_dir=data_dir,

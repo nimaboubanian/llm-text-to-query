@@ -81,14 +81,15 @@ The two modes never share a database.
 | Mode | Database | Owner |
 |---|---|---|
 | Interactive App | `appdb` | Seeded from `db/init`; yours to replace |
-| Benchmark | `tpch` | Created and rebuilt by the benchmark; not configurable |
+| Benchmark | `tpch` | Created and managed by the benchmark; not configurable |
 
 `appdb` holds a small e-commerce dataset (customers, products, orders) that
 loads automatically, so a fresh deploy always has something to query. Try:
 *"Top 3 best-selling products"*. Reset it with `docker compose down -v`.
 
-Benchmark runs drop and rebuild `tpch` and never touch `appdb` — or whatever
-database you point app mode at.
+Benchmark runs drop and recreate `tpch`'s TPC-H tables when the schema isn't
+already correct, and never touch `appdb` — or whatever database you point
+app mode at.
 
 **Upgrading from a pre-`appdb` deployment:** Postgres init scripts only run on a
 fresh data volume, so `appdb` will be missing on an existing one. Run

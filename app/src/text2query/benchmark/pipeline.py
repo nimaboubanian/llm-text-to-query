@@ -39,14 +39,19 @@ def ensure_database_exists(db_url: str) -> bool:
     # CREATE DATABASE cannot run inside a transaction, nor from a connection to
     # the database being created — go through the `postgres` maintenance database.
     admin = create_engine(url.set(database="postgres"), isolation_level="AUTOCOMMIT")
-    with admin.connect() as conn:
-        exists = conn.execute(
-            text("SELECT 1 FROM pg_database WHERE datname = :name"), {"name": url.database}
-        ).fetchone()
-        if exists:
-            return False
-        conn.execute(text(f'CREATE DATABASE "{url.database}"'))
-    return True
+    try:
+        with admin.connect() as conn:
+            exists = conn.execute(
+                text("SELECT 1 FROM pg_database WHERE datname = :name"), {"name": url.database}
+            ).fetchone()
+            if exists:
+                return False
+            # db_url is fully generic here, but this is only ever called with the
+            # pinned BENCHMARK_DATABASE_URL constant, never user input — safe to interpolate.
+            conn.execute(text(f'CREATE DATABASE "{url.database}"'))
+        return True
+    finally:
+        admin.dispose()
 
 
 def _check_data_cache(data_dir: Path) -> bool:

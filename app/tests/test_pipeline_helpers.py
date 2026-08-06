@@ -163,6 +163,9 @@ class TestEnsureDatabaseExists:
         def connect(self):
             return self._conn
 
+        def dispose(self):
+            pass
+
     def _patch(self, monkeypatch, exists: bool, seen: dict | None = None):
         executed = []
         conn = self._Conn(exists, executed)

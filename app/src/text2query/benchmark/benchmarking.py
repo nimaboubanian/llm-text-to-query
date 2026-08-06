@@ -163,6 +163,9 @@ def main():
         if query_ids is not None and not query_ids:
             print("  ✗ No valid query IDs remain after filtering — aborting")
             sys.exit(1)
+        if not models:
+            print("  ✗ No models configured (BENCHMARK_MODELS is empty) — aborting")
+            sys.exit(1)
         if skipped or BENCHMARK_SCALE_FACTOR != 1:
             print()
 

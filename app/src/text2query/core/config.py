@@ -39,8 +39,9 @@ INTERACTIVE_APP_DATABASE_URL = os.getenv(
 )
 
 # ─── Benchmark mode ─────────────────────────────────────────────────────
-# Deliberately a constant, not an env read: the benchmark pipeline drops and
-# rebuilds this database, so no configuration may aim it at a user's data.
+# Deliberately a constant, not an env read: the benchmark drops and recreates
+# its TPC-H tables when the schema isn't already correct (never the database
+# itself, and never appdb), so no configuration may aim it at a user's data.
 BENCHMARK_DATABASE_URL = "postgresql://user:password@postgres:5432/tpch"
 
 BENCHMARK_SCALE_FACTOR = _env("BENCHMARK_SCALE_FACTOR", 1, int)

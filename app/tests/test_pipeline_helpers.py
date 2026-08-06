@@ -4,6 +4,7 @@ from sqlalchemy.pool import StaticPool
 from text2query.benchmark.data_loader import TPCH_TABLES
 from text2query.benchmark.pipeline import (
     check_database_readiness,
+    ensure_database_exists,
     execute_queries_to_csv,
     read_business_question,
 )
@@ -128,3 +129,72 @@ class TestReadBusinessQuestion:
         qfile = tmp_path / "does-not-exist.md"
 
         assert read_business_question(qfile) is None
+
+
+class TestEnsureDatabaseExists:
+    """The benchmark provisions its own database on a pre-existing pg_data volume."""
+
+    class _Result:
+        def __init__(self, row):
+            self._row = row
+
+        def fetchone(self):
+            return self._row
+
+    class _Conn:
+        def __init__(self, exists: bool, executed: list):
+            self._exists = exists
+            self.executed = executed
+
+        def execute(self, stmt, params=None):
+            self.executed.append(str(stmt))
+            return TestEnsureDatabaseExists._Result((1,) if self._exists else None)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    class _Engine:
+        def __init__(self, conn):
+            self._conn = conn
+
+        def connect(self):
+            return self._conn
+
+    def _patch(self, monkeypatch, exists: bool, seen: dict | None = None):
+        executed = []
+        conn = self._Conn(exists, executed)
+
+        def _fake_create_engine(url, **kwargs):
+            if seen is not None:
+                seen["database"] = url.database
+                seen["isolation_level"] = kwargs.get("isolation_level")
+            return self._Engine(conn)
+
+        monkeypatch.setattr(
+            "text2query.benchmark.pipeline.create_engine", _fake_create_engine
+        )
+        return executed
+
+    def test_creates_the_database_when_missing(self, monkeypatch):
+        executed = self._patch(monkeypatch, exists=False)
+        created = ensure_database_exists("postgresql://user:password@postgres:5432/tpch")
+        assert created is True
+        assert any('CREATE DATABASE "tpch"' in stmt for stmt in executed)
+
+    def test_is_a_noop_when_the_database_is_present(self, monkeypatch):
+        executed = self._patch(monkeypatch, exists=True)
+        created = ensure_database_exists("postgresql://user:password@postgres:5432/tpch")
+        assert created is False
+        assert not any("CREATE DATABASE" in stmt for stmt in executed)
+
+    def test_connects_to_the_maintenance_database_in_autocommit(self, monkeypatch):
+        # CREATE DATABASE cannot run inside a transaction block, and it cannot run
+        # while connected to the database being created.
+        seen = {}
+        self._patch(monkeypatch, exists=False, seen=seen)
+        ensure_database_exists("postgresql://user:password@postgres:5432/tpch")
+        assert seen["database"] == "postgres"
+        assert seen["isolation_level"] == "AUTOCOMMIT"

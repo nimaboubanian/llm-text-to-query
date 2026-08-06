@@ -6,7 +6,8 @@ import re
 import subprocess
 from pathlib import Path
 
-from sqlalchemy import inspect, text
+from sqlalchemy import create_engine, inspect, text
+from sqlalchemy.engine import make_url
 
 from text2query.database.schema import create_engine_for_database
 from text2query.database.executor import execute_sql_query
@@ -24,6 +25,28 @@ def read_business_question(qfile: Path) -> str | None:
         return None
     match = re.search(r'# Business Question:\s*\n\s*"(.+)"', qfile.read_text(), re.DOTALL)
     return match.group(1) if match else None
+
+
+def ensure_database_exists(db_url: str) -> bool:
+    """Create the benchmark's database if it does not exist yet.
+
+    Returns True when it was created. Postgres init scripts only run against a
+    fresh data volume, so an upgraded deployment has a volume where this
+    database never existed — provisioning it here keeps db/init free of any
+    TPC-H knowledge.
+    """
+    url = make_url(db_url)
+    # CREATE DATABASE cannot run inside a transaction, nor from a connection to
+    # the database being created — go through the `postgres` maintenance database.
+    admin = create_engine(url.set(database="postgres"), isolation_level="AUTOCOMMIT")
+    with admin.connect() as conn:
+        exists = conn.execute(
+            text("SELECT 1 FROM pg_database WHERE datname = :name"), {"name": url.database}
+        ).fetchone()
+        if exists:
+            return False
+        conn.execute(text(f'CREATE DATABASE "{url.database}"'))
+    return True
 
 
 def _check_data_cache(data_dir: Path) -> bool:

@@ -8,6 +8,7 @@ from pathlib import Path
 import sys
 
 from text2query.benchmark.pipeline import (
+    ensure_database_exists,
     generate_data,
     validate_directories,
     check_database_readiness,
@@ -167,6 +168,9 @@ def main():
 
         # === Phase 1: Setup (shared across all models) ===
         print(_banner("Setup"))
+        if ensure_database_exists(BENCHMARK_DATABASE_URL):
+            print("  ✓ Created benchmark database")
+
         if BENCHMARK_DATA_PATH:
             print(f"  Using existing data: {BENCHMARK_DATA_PATH}")
         else:

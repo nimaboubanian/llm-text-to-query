@@ -1,43 +1,37 @@
 # ─── User Configuration ────────────────────────────────────────
-# Edit these values to customize your setup, then `docker compose up -d`.
+# Edit these values to customize your setup, then `docker compose up -d` to run the server in interactive mode, or 'docker compose --profile benchmark up --build --no-log-prefix --attach benchmark benchmark' to run the server in benchmark.
 
 x-config: &config
   # --- Shared: LLM backend and sampling -----------------------------------
-  OLLAMA_URL: "http://ollama:11434"         # LLM backend endpoint
-  LOG_LEVEL: "WARNING"                      # DEBUG/INFO/WARNING/ERROR
   LLM_TEMPERATURE: "0.1"                    # Sampling temperature
   LLM_NUM_CTX: "4096"                       # Context window (tokens)
   LLM_MAX_TOKENS: "2048"                    # Max tokens generated per query
   LLM_TIMEOUT: "600"                        # Whole-generation timeout (s) — raise on slow CPU-only setups
+  OLLAMA_URL: "http://ollama:11434"         # LLM backend endpoint
+  LOG_LEVEL: "ERROR"                        # DEBUG/INFO/WARNING/ERROR
 
-  # --- Shared: prompt features (all default "false"/"0" = research baseline) --
-  PROMPT_SCHEMA_DDL: "false"                # Schema as CREATE TABLE DDL instead of prose
-  PROMPT_SCHEMA_FK: "false"                 # Explicit FK annotations (REFERENCES in DDL, FK() notation in prose)
-  PROMPT_STRICT_OUTPUT: "false"             # Emphatic "Return ONLY the SQL query" rules block
-  PROMPT_SCHEMA_DESCRIPTIONS: "false"       # NL column descriptions from curated metadata (benchmark only)
-  PROMPT_SCHEMA_SAMPLES: "false"            # Inline sample values for categorical columns
-  PROMPT_XML_STRUCTURE: "false"             # Wrap prompt sections in XML tags (<schema>, <rules>, ...)
-  PROMPT_FEW_SHOT: "0"                      # Static few-shot examples: 0=off, max 3 (values above 3 clamp)
-  PROMPT_PLANNING: "false"                  # Ask model to plan tables/joins as SQL comments before the query (avoid combining with PROMPT_STRICT_OUTPUT)
-  RETRY_ON_ERROR: "false"                   # One retry with the Postgres error fed back (EXPLAIN probe)
+  # --- Shared: prompt features --------------------------------------------
+  PROMPT_STRICT_OUTPUT: "true"              # Emphatic "Return ONLY the SQL query" rules block
+  PROMPT_SCHEMA_DDL: "true"                 # Schema as CREATE TABLE DDL instead of prose
+  PROMPT_SCHEMA_FK: "true"                  # Explicit FK annotations (REFERENCES in DDL, FK() notation in prose)
+  PROMPT_SCHEMA_DESCRIPTIONS: "true"        # NL column descriptions from curated metadata (benchmark only)
+  PROMPT_SCHEMA_SAMPLES: "true"             # Inline sample values for categorical columns
+  PROMPT_XML_STRUCTURE: "true"              # Wrap prompt sections in XML tags (<schema>, <rules>, ...)
+  PROMPT_PLANNING: "true"                   # Ask model to plan tables/joins as SQL comments before the query
+  RETRY_ON_ERROR: "true"                    # One retry with the Postgres error fed back (EXPLAIN probe)
+  PROMPT_FEW_SHOT: "1"                      # Static few-shot examples: 0=off, max 3 (values above 3 clamp)
 
   # --- Interactive App mode -----------------------------------------------
-  # Used by `docker compose exec app text2query '...'` and the HTTP server it
-  # talks to (POSTed to over the Docker network). Queries the `appdb` database
-  # by default — see INTERACTIVE_APP_DATABASE_URL on the `app` service below.
   INTERACTIVE_APP_MODEL: "qwen2.5-coder:7b" # Model used for SQL generation in app mode
-  SERVER_PORT: "8000"                       # Internal HTTP port (Docker network only, not host-exposed)
+  SERVER_PORT: "8000"                       # Internal HTTP port
 
   # --- Benchmark mode -----------------------------------------------------
-  # Used by `docker compose --profile benchmark up benchmark`.
-  # Inherits the LLM sampling parameters above (temperature, num_ctx, max_tokens).
   # Benchmark mode owns its own `tpch` database and takes no database setting:
   # it drops and rebuilds that database on every run.
-  BENCHMARK_MODELS: "qwen2.5-coder:7b,a-kore/Arctic-Text2SQL-R1-7B"  # Comma-separated models to compare
-  BENCHMARK_NUM_SEEDS: "2"                  # Repetitions per query, for statistical robustness
-  BENCHMARK_QUERY_IDS: "1,3,7"              # Comma-separated query IDs to run, or "all"
+  BENCHMARK_MODELS: "qwen2.5-coder:7b"      # Comma-separated models
+  BENCHMARK_NUM_SEEDS: "3"                  # Repetitions per query
+  BENCHMARK_QUERY_IDS: "all"                # Comma-separated query IDs to run, or "all"
   BENCHMARK_SCALE_FACTOR: "1"               # TPC-H data scale factor
-  BENCHMARK_FLOAT_EPSILON: "1e-4"           # Absolute float tolerance in result comparison; loosen to 1e-2 for money-heavy queries
   # BENCHMARK_DATA_PATH: ""                 # Optional: reuse existing generated TPC-H data instead of regenerating
 
 # Bundled Postgres server. `db/init` seeds POSTGRES_DB with the mini test
@@ -82,11 +76,7 @@ services:
       timeout: 5s
       retries: 5
 
-  # The single App-mode interface: an HTTP server (image default command).
-  # `docker compose exec app text2query '<question>'` talks to it over
-  # localhost inside this container; other containers on the Docker network
-  # can POST to it directly at http://app:8000/query. Not exposed to the
-  # host by default — uncomment the `ports:` line below to opt in.
+  # The single App-mode interface.
   app:
     build: ./app
     container_name: text2query-app
@@ -104,10 +94,7 @@ services:
     #   - "8000:8000"
     restart: unless-stopped
     healthcheck:
-      # Keep the port here in sync with SERVER_PORT above if you change it.
       test: [ "CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3)\"" ]
-      # The server warms up the model before it starts listening, so a cold
-      # model load must fit inside start_period or the container reads unhealthy.
       start_period: 300s
       interval: 10s
       timeout: 5s

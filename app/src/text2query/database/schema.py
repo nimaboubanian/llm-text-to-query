@@ -1,5 +1,5 @@
 import json
-from functools import lru_cache
+from functools import cache
 from pathlib import Path
 
 from sqlalchemy import create_engine, inspect
@@ -7,7 +7,7 @@ from sqlalchemy import create_engine, inspect
 from text2query.core.config import PromptFlags
 
 
-@lru_cache(maxsize=1)
+@cache
 def load_tpch_metadata() -> dict:
     """Curated TPC-H column descriptions/samples, packaged with the app."""
     return json.loads(Path(__file__).with_name("tpch_metadata.json").read_text(encoding="utf-8"))
@@ -23,9 +23,7 @@ def render_schema(engine, flags: PromptFlags, metadata: dict | None = None,
     meta = metadata or {}
     tables = [t for t in inspector.get_table_names()
               if include_tables is None or t in include_tables]
-    if flags.schema_ddl:
-        return _render_ddl(inspector, flags, meta, tables)
-    return _render_prose(inspector, flags, meta, tables)
+    return (_render_ddl if flags.schema_ddl else _render_prose)(inspector, flags, meta, tables)
 
 
 def _column_comment(table_meta: dict, col_name: str, flags: PromptFlags) -> str:
@@ -45,11 +43,8 @@ def _render_prose(inspector, flags: PromptFlags, meta: dict, tables: list[str]) 
         table_meta = meta.get(table, {})
         cols = []
         for c in inspector.get_columns(table):
-            part = f"{c['name']} ({c['type']})"
             comment = _column_comment(table_meta, c["name"], flags)
-            if comment:
-                part += f" [{comment}]"
-            cols.append(part)
+            cols.append(f"{c['name']} ({c['type']})" + (f" [{comment}]" if comment else ""))
         line = f"Table '{table}': {', '.join(cols)}"
         if flags.schema_fk:
             fks = [f"FK({','.join(fk['constrained_columns'])}) -> {fk['referred_table']}"
@@ -75,7 +70,7 @@ def _render_ddl(inspector, flags: PromptFlags, meta: dict, tables: list[str]) ->
             if c["name"] in fk_targets:
                 decl += f" REFERENCES {fk_targets[c['name']]}"
             entries.append((decl, _column_comment(table_meta, c["name"], flags)))
-        pk = inspector.get_pk_constraint(table).get("constrained_columns") or []
+        pk = inspector.get_pk_constraint(table).get("constrained_columns")
         if pk:
             entries.append((f"PRIMARY KEY ({', '.join(pk)})", ""))
         lines = []

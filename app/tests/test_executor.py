@@ -2,18 +2,21 @@ import pytest
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import OperationalError
 
-from text2query.core.config import DATABASE_URL
+from text2query.core.config import INTERACTIVE_APP_DATABASE_URL
 from text2query.database.executor import execute_sql_query
 import text2query.database.executor as ex
 
 
 def _live_engine():
-    engine = create_engine(DATABASE_URL, pool_pre_ping=True)
+    engine = create_engine(INTERACTIVE_APP_DATABASE_URL, pool_pre_ping=True)
     try:
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
     except OperationalError:
-        pytest.skip(f"PostgreSQL not reachable at {DATABASE_URL} — run inside the app container or set DATABASE_URL")
+        pytest.skip(
+            f"PostgreSQL not reachable at {INTERACTIVE_APP_DATABASE_URL} — "
+            "run inside the app container or set INTERACTIVE_APP_DATABASE_URL"
+        )
     return engine
 
 

@@ -9,7 +9,7 @@ import sqlglot
 from sqlglot import exp
 
 from text2query.core.config import (
-    DEFAULT_MODEL, LLM_MAX_TOKENS, LLM_NUM_CTX, LLM_TEMPERATURE, LLM_TIMEOUT, OLLAMA_URL,
+    INTERACTIVE_APP_MODEL, LLM_MAX_TOKENS, LLM_NUM_CTX, LLM_TEMPERATURE, LLM_TIMEOUT, OLLAMA_URL,
     PROMPT_FLAGS,
 )
 from text2query.llm.prompt_builder import build_prompt
@@ -129,7 +129,7 @@ def generate_sql(
     flags=None,
 ) -> GenerationResult:
     prompt = build_prompt(flags or PROMPT_FLAGS, schema_str, user_query)
-    return _generate(prompt, model or DEFAULT_MODEL, seed)
+    return _generate(prompt, model or INTERACTIVE_APP_MODEL, seed)
 
 
 def _generate(prompt: str, selected_model: str, seed: int | None) -> GenerationResult:
@@ -221,7 +221,7 @@ def generate_sql_with_retry(
         "using only tables and columns that appear in it. "
         "Return ONLY the corrected SQL query, no explanation, no markdown."
     )
-    retried = _generate(retry_prompt, model or DEFAULT_MODEL, seed)
+    retried = _generate(retry_prompt, model or INTERACTIVE_APP_MODEL, seed)
     retried.retried = True
     retried.first_prompt = result.prompt
     return retried

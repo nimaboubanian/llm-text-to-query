@@ -3,8 +3,8 @@ set -e
 
 case "$1" in
   chat)
-    echo "Pulling default model: $DEFAULT_MODEL"
-    ollama pull "$DEFAULT_MODEL"
+    echo "Pulling interactive-app model: $INTERACTIVE_APP_MODEL"
+    ollama pull "$INTERACTIVE_APP_MODEL"
     ;;
   benchmark)
     if [ -z "$BENCHMARK_MODELS" ]; then

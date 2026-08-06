@@ -13,6 +13,7 @@ def _env(name: str, default, cast):
         return default
 
 
+# ─── Shared: LLM backend and sampling ───────────────────────────────────
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://ollama:11434")
 
 LOG_LEVEL = os.getenv("LOG_LEVEL", "WARNING")
@@ -26,24 +27,36 @@ LLM_MAX_TOKENS = _env("LLM_MAX_TOKENS", 2048, int)
 # so it needs to be generous on CPU-only setups where a 7B model is slow.
 LLM_TIMEOUT = _env("LLM_TIMEOUT", 600, int)
 
-DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "qwen2.5-coder:7b")
+# ─── Interactive App mode ───────────────────────────────────────────────
+INTERACTIVE_APP_MODEL = os.getenv("INTERACTIVE_APP_MODEL", "qwen2.5-coder:7b")
 
 SERVER_PORT = _env("SERVER_PORT", 8000, int)
+
+# The one database knob a user edits. Defaults to the bundled mini-database so
+# a fresh deploy always has something to query.
+INTERACTIVE_APP_DATABASE_URL = os.getenv(
+    "INTERACTIVE_APP_DATABASE_URL", "postgresql://user:password@postgres:5432/appdb"
+)
+
+# ─── Benchmark mode ─────────────────────────────────────────────────────
+# Deliberately a constant, not an env read: the benchmark pipeline drops and
+# rebuilds this database, so no configuration may aim it at a user's data.
+BENCHMARK_DATABASE_URL = "postgresql://user:password@postgres:5432/tpch"
 
 BENCHMARK_SCALE_FACTOR = _env("BENCHMARK_SCALE_FACTOR", 1, int)
 BENCHMARK_NUM_SEEDS = _env("BENCHMARK_NUM_SEEDS", 1, int)
 BENCHMARK_DATA_PATH = os.getenv("BENCHMARK_DATA_PATH")
 BENCHMARK_FLOAT_EPSILON = _env("BENCHMARK_FLOAT_EPSILON", 1e-4, float)
 
-BENCHMARK_MODELS = [m.strip() for m in os.getenv("BENCHMARK_MODELS", "").split(",") if m.strip()]
+BENCHMARK_MODELS = [
+    m.strip() for m in os.getenv("BENCHMARK_MODELS", "qwen2.5-coder:7b").split(",") if m.strip()
+]
 
 _query_ids_raw = os.getenv("BENCHMARK_QUERY_IDS", "all").strip().lower()
 BENCHMARK_QUERY_IDS: list[str] | None = (
     None if _query_ids_raw in ("all", "")
     else [f"{int(q.strip()):02d}" for q in _query_ids_raw.split(",") if q.strip().isdigit()]
 )
-
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://user:password@postgres:5432/testdb")
 
 
 def _bool(raw: str) -> bool:

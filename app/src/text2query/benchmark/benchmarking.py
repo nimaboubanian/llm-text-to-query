@@ -109,8 +109,7 @@ def _resolve_query_id_filter(
 
 def main():
     from text2query.core.config import (
-        DATABASE_URL,
-        DEFAULT_MODEL,
+        BENCHMARK_DATABASE_URL,
         BENCHMARK_SCALE_FACTOR,
         BENCHMARK_DATA_PATH,
         BENCHMARK_NUM_SEEDS,
@@ -132,10 +131,7 @@ def main():
     data_dir = Path(BENCHMARK_DATA_PATH) if BENCHMARK_DATA_PATH else Path(f"benchmark/.tpch/data/sf{BENCHMARK_SCALE_FACTOR}")
 
     seeds = list(range(1, BENCHMARK_NUM_SEEDS + 1))
-    models = BENCHMARK_MODELS or [DEFAULT_MODEL]
-    fallback_warning = None if BENCHMARK_MODELS else (
-        f"BENCHMARK_MODELS is empty — falling back to DEFAULT_MODEL ({DEFAULT_MODEL})."
-    )
+    models = BENCHMARK_MODELS
     multi_model = len(models) > 1
 
     start_time = time.monotonic()
@@ -155,11 +151,9 @@ def main():
             max_tokens=LLM_MAX_TOKENS,
             num_ctx=LLM_NUM_CTX,
             prompt_flags=asdict(PROMPT_FLAGS),
-            database_url=DATABASE_URL,
+            database_url=BENCHMARK_DATABASE_URL,
         ))
 
-        if fallback_warning:
-            print(f"  ⚠ {fallback_warning}")
         if skipped:
             print(f"  ⚠ Unknown query IDs (skipped): {', '.join(skipped)}")
         if BENCHMARK_SCALE_FACTOR != 1:
@@ -168,7 +162,7 @@ def main():
         if query_ids is not None and not query_ids:
             print("  ✗ No valid query IDs remain after filtering — aborting")
             sys.exit(1)
-        if fallback_warning or skipped or BENCHMARK_SCALE_FACTOR != 1:
+        if skipped or BENCHMARK_SCALE_FACTOR != 1:
             print()
 
         # === Phase 1: Setup (shared across all models) ===
@@ -180,16 +174,16 @@ def main():
 
         validate_directories(paths.questions_dir, paths.queries_dir)
 
-        if not check_database_readiness(db_url=DATABASE_URL, scale_factor=BENCHMARK_SCALE_FACTOR):
+        if not check_database_readiness(db_url=BENCHMARK_DATABASE_URL, scale_factor=BENCHMARK_SCALE_FACTOR):
             setup_database(
                 schema_file=paths.schema_file,
                 data_dir=data_dir,
-                db_url=DATABASE_URL,
+                db_url=BENCHMARK_DATABASE_URL,
             )
 
         generate_answers(
             queries_dir=paths.queries_dir, answers_dir=paths.answers_dir,
-            db_url=DATABASE_URL, scale_factor=BENCHMARK_SCALE_FACTOR,
+            db_url=BENCHMARK_DATABASE_URL, scale_factor=BENCHMARK_SCALE_FACTOR,
         )
         print()
 
@@ -205,7 +199,7 @@ def main():
             results = _run_single_model_benchmark(
                 model=model,
                 paths=paths,
-                db_url=DATABASE_URL,
+                db_url=BENCHMARK_DATABASE_URL,
                 seeds=seeds,
                 query_ids=query_ids,
             )
@@ -247,7 +241,7 @@ def main():
             },
             prompt_flags=asdict(PROMPT_FLAGS),
             fingerprints=fingerprints,
-            database_url=DATABASE_URL,
+            database_url=BENCHMARK_DATABASE_URL,
         )
         print("  ✓ Archived")
         print()

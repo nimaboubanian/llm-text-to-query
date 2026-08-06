@@ -7,7 +7,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pandas as pd
 
-from text2query.core.config import DATABASE_URL, DEFAULT_MODEL, LOG_LEVEL, PROMPT_FLAGS, SERVER_PORT
+from text2query.core.config import (
+    INTERACTIVE_APP_DATABASE_URL, INTERACTIVE_APP_MODEL, LOG_LEVEL, PROMPT_FLAGS, SERVER_PORT,
+)
 from text2query.database.executor import execute_sql_query, explain_error
 from text2query.database.schema import create_engine_for_database, load_tpch_metadata, render_schema
 from text2query.llm import ollama
@@ -119,7 +121,7 @@ def _make_handler(engine, schema: str, llm=ollama) -> type[BaseHTTPRequestHandle
 
             try:
                 question = parse_question(raw)
-                payload = handle_query(llm, engine, schema, DEFAULT_MODEL, question)
+                payload = handle_query(llm, engine, schema, INTERACTIVE_APP_MODEL, question)
                 self._write_json(200, payload)
             except RequestError as e:
                 self._write_json(e.status, {"error": e.message})
@@ -139,12 +141,12 @@ def main():
         format="%(levelname)s %(name)s: %(message)s",
     )
 
-    engine = create_engine_for_database(DATABASE_URL)
+    engine = create_engine_for_database(INTERACTIVE_APP_DATABASE_URL)
     schema = render_schema(engine, PROMPT_FLAGS, metadata=load_tpch_metadata())
-    ollama.warmup(DEFAULT_MODEL)
+    ollama.warmup(INTERACTIVE_APP_MODEL)
     handler_cls = _make_handler(engine, schema)
     server = ThreadingHTTPServer(("0.0.0.0", SERVER_PORT), handler_cls)
-    logger.warning("text2query server listening on port %s (model=%s)", SERVER_PORT, DEFAULT_MODEL)
+    logger.warning("text2query server listening on port %s (model=%s)", SERVER_PORT, INTERACTIVE_APP_MODEL)
     server.serve_forever()
 
 

@@ -24,10 +24,8 @@ def _json_safe(value):
     DATE/TIMESTAMP -> date/datetime, and NULLs in numeric columns -> NaN.
     Left unhandled these raise inside json.dumps and surface as a bare 500.
     """
-    if value is None:
-        return None
     try:
-        if pd.isna(value):  # NaN, NaT, pd.NA — all become null
+        if pd.isna(value):  # None, NaN, NaT, pd.NA — all become null
             return None
     except (TypeError, ValueError):
         pass  # non-scalar (e.g. array/list cell) — leave for json.dumps
@@ -117,8 +115,7 @@ def _make_handler(engine, schema: str, llm=ollama) -> type[BaseHTTPRequestHandle
                 self._write_json(404, {"error": "not found"})
                 return
 
-            length = int(self.headers.get("Content-Length", 0))
-            raw = self.rfile.read(length) if length else b""
+            raw = self.rfile.read(int(self.headers.get("Content-Length", 0)))
 
             try:
                 question = parse_question(raw)
@@ -147,9 +144,7 @@ def main():
     ollama.warmup(DEFAULT_MODEL)
     handler_cls = _make_handler(engine, schema)
     server = ThreadingHTTPServer(("0.0.0.0", SERVER_PORT), handler_cls)
-    logger.warning(
-        "text2query server listening on port %s (model=%s)", SERVER_PORT, DEFAULT_MODEL,
-    )
+    logger.warning("text2query server listening on port %s (model=%s)", SERVER_PORT, DEFAULT_MODEL)
     server.serve_forever()
 
 

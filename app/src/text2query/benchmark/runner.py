@@ -48,14 +48,12 @@ def _run_single_generation(
     # Digest is over the FULL question set, independent of query_ids filtering below —
     # otherwise a --query-ids re-run (e.g. resuming just the failed queries after an
     # interrupted run) would change the fingerprint and wipe the entire generation cache.
+    all_questions = sorted(questions_dir.glob("*.md"))
     questions_digest = hashlib.sha256(
-        "\n".join(f.read_text() for f in sorted(questions_dir.glob("*.md"))).encode()
+        "\n".join(f.read_text() for f in all_questions).encode()
     ).hexdigest()[:16]
 
-    question_files = sorted(questions_dir.glob("*.md"))
-    if query_ids is not None:
-        question_files = [q for q in question_files if q.stem in query_ids]
-    total = len(question_files)
+    question_files = [q for q in all_questions if query_ids is None or q.stem in query_ids]
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -87,7 +85,7 @@ def _run_single_generation(
     to_process = [q for q in question_files if q.stem not in existing]
 
     if not to_process:
-        print(f"  ✓ All {total} queries already generated")
+        print(f"  ✓ All {len(question_files)} queries already generated")
         return
 
     seed_label = f" (seed={seed})" if seed is not None else ""
@@ -100,34 +98,27 @@ def _run_single_generation(
     success = 0
     retries = 0
     errors = []
-    process_total = len(to_process)
 
     for i, qfile in enumerate(to_process, 1):
         query_id = qfile.stem
+        on_item_start(i, len(to_process), f"Q{query_id}")
+
         question = read_business_question(qfile)
         if not question:
-            on_item_start(i, process_total, f"Q{query_id}")
             on_item_done(" ⚠ no question found, skipping")
             continue
-
-        on_item_start(i, process_total, f"Q{query_id}")
 
         result = ollama.generate_sql_with_retry(
             question, schema, model, seed=seed,
             validate=lambda sql: explain_error(engine, sql),
         )
-        generated_sql = result.sql
-        raw_response = result.raw_response
-        prompt = result.prompt
-        error = result.error
-        if result.retried:
-            retries += 1
+        retries += result.retried
 
         if result.retried and result.first_prompt is not None:
             (output_dir / f"{query_id}.prompt").write_text(result.first_prompt)
-            (output_dir / f"{query_id}.retry.prompt").write_text(prompt)
-        elif prompt is not None:
-            (output_dir / f"{query_id}.prompt").write_text(prompt)
+            (output_dir / f"{query_id}.retry.prompt").write_text(result.prompt)
+        elif result.prompt is not None:
+            (output_dir / f"{query_id}.prompt").write_text(result.prompt)
 
         if result.duration_seconds is not None:
             (output_dir / f"{query_id}.timing.json").write_text(json.dumps({
@@ -136,19 +127,17 @@ def _run_single_generation(
                 "duration_seconds": result.duration_seconds,
             }))
 
-        if generated_sql:
-            output_file = output_dir / f"{query_id}.sql"
-            output_file.write_text(generated_sql)
+        if result.sql:
+            (output_dir / f"{query_id}.sql").write_text(result.sql)
             on_item_done(" ✓")
             success += 1
         else:
-            raw_file = output_dir / f"{query_id}.raw"
-            if error:
-                raw_file.write_text(f"ERROR: {error}\n")
-            elif raw_response:
-                raw_file.write_text(raw_response)
+            if result.error or result.raw_response:
+                (output_dir / f"{query_id}.raw").write_text(
+                    f"ERROR: {result.error}\n" if result.error else result.raw_response
+                )
             on_item_done(" ✗")
-            errors.append((query_id, error or "No SQL extracted"))
+            errors.append((query_id, result.error or "No SQL extracted"))
 
     print(f"  ✓ Generated {success} queries")
     if retries:
@@ -181,10 +170,9 @@ def _execute_single(
     db_url: str,
     query_ids: list[str] | None = None,
 ) -> None:
-    query_files = sorted(queries_dir.glob("*.sql"))
-    if query_ids is not None:
-        query_files = [q for q in query_files if q.stem in query_ids]
-    total = len(query_files)
+    query_files = [
+        q for q in sorted(queries_dir.glob("*.sql")) if query_ids is None or q.stem in query_ids
+    ]
 
     answers_dir.mkdir(parents=True, exist_ok=True)
 
@@ -207,7 +195,7 @@ def _execute_single(
     to_process = [q for q in query_files if q.stem not in existing]
 
     if not to_process:
-        print(f"  ✓ All {total} answer files already exist")
+        print(f"  ✓ All {len(query_files)} answer files already exist")
         return
 
     cache_label = f", {len(existing)} cached" if existing else ""

@@ -27,12 +27,8 @@ def read_business_question(qfile: Path) -> str | None:
 
 
 def _check_data_cache(data_dir: Path) -> bool:
-    if not data_dir.exists():
-        return False
-    return all(
-        (data_dir / f"{t}.tbl").exists() and (data_dir / f"{t}.tbl").stat().st_size > 0
-        for t in TPCH_TABLES
-    )
+    paths = (data_dir / f"{t}.tbl" for t in TPCH_TABLES)
+    return data_dir.exists() and all(p.exists() and p.stat().st_size > 0 for p in paths)
 
 
 def generate_data(scale_factor: int, output_dir: Path) -> Path:
@@ -42,8 +38,6 @@ def generate_data(scale_factor: int, output_dir: Path) -> Path:
 
     print(f"  Generating TPC-H data (scale factor: {scale_factor})...")
     output_dir.mkdir(parents=True, exist_ok=True)
-
-    print(f"  Running: uvx tpchgen-cli -s {scale_factor} --output-dir {output_dir}")
 
     result = subprocess.run(
         ["uvx", "tpchgen-cli>=2.0.1", "-s", str(scale_factor), "--output-dir", str(output_dir.resolve())],
@@ -70,10 +64,7 @@ def _check_directory(directory: Path, extension: str, expected_count: int) -> No
         )
 
 
-def validate_directories(
-    questions_dir: Path,
-    queries_dir: Path
-) -> None:
+def validate_directories(questions_dir: Path, queries_dir: Path) -> None:
     print("  Validating directories...")
     _check_directory(questions_dir, "md", 22)
     print(f"  ✓ Questions: {questions_dir}")
@@ -88,7 +79,7 @@ def check_database_readiness(db_url: str, scale_factor: int = 1) -> bool:
     try:
         inspector = inspect(engine)
         actual = {t.lower() for t in inspector.get_table_names()}
-        expected = {t.lower() for t in TPCH_TABLES}
+        expected = set(TPCH_TABLES)
 
         if expected.issubset(actual):
             # Fast non-empty check (avoid COUNT(*) on multi-million row tables), plus
@@ -114,14 +105,9 @@ def _parse_schema_sql(schema_file: Path) -> list[str]:
     if not schema_file.exists():
         raise FileNotFoundError(f"Schema file not found: {schema_file}")
 
-    raw_statements = schema_file.read_text().split(";")
     statements = []
-    for stmt in raw_statements:
-        stmt = stmt.strip()
-        if not stmt:
-            continue
-        lines = [line for line in stmt.split("\n")
-                 if not line.strip().startswith("--")]
+    for stmt in schema_file.read_text().split(";"):
+        lines = (line for line in stmt.splitlines() if not line.strip().startswith("--"))
         cleaned = "\n".join(lines).strip()
         if cleaned:
             statements.append(cleaned)
@@ -168,8 +154,7 @@ def build_indexes(schema_file: Path, db_url: str) -> bool:
         return False
 
     engine = create_engine_for_database(db_url)
-    indexes_sql = indexes_file.read_text()
-    statements = [s.strip() for s in indexes_sql.split(";") if s.strip()]
+    statements = _parse_schema_sql(indexes_file)
     with engine.begin() as conn:
         for stmt in statements:
             conn.execute(text(stmt))
@@ -296,15 +281,11 @@ def execute_queries_to_csv(
             on_item_done(" ✗ (error)")
             results.append({"query_id": query_id, "status": "error", "error": str(e)})
 
-    success = sum(1 for r in results if r["status"] == "success")
-    errors = sum(1 for r in results if r["status"] == "error")
-    print(f"  ✓ Executed {success} queries")
-    if errors > 0:
-        print(f"  ⚠ {errors} failed:")
-        for r in results:
-            if r["status"] == "error":
-                print(f"    - Q{r['query_id']}: {r.get('error', 'Unknown')[:60]}")
+    failed = [r for r in results if r["status"] == "error"]
+    print(f"  ✓ Executed {len(results) - len(failed)} queries")
+    if failed:
+        print(f"  ⚠ {len(failed)} failed:")
+        for r in failed:
+            print(f"    - Q{r['query_id']}: {r.get('error', 'Unknown')[:60]}")
 
     return results
-
-

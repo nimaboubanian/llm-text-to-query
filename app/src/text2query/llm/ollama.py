@@ -19,8 +19,7 @@ logger = logging.getLogger(__name__)
 
 def _is_single_statement(sql: str) -> bool:
     """Reject multi-statement SQL to prevent piggyback attacks."""
-    stripped = sql.strip().rstrip(";")
-    return ";" not in stripped
+    return ";" not in sql.strip().rstrip(";")
 
 
 def _is_select_only(sql: str) -> bool:
@@ -30,12 +29,11 @@ def _is_select_only(sql: str) -> bool:
     except Exception:
         parsed = None
 
-    if parsed is not None:
-        return isinstance(parsed, (exp.Select, exp.Union))
-
-    # sqlglot couldn't parse it (e.g. dialect quirks) — fall back to a conservative
-    # keyword-prefix check so valid SELECTs aren't unfairly rejected.
-    return bool(re.match(r"(?i)^\s*(SELECT|WITH)\b", sql))
+    if parsed is None:
+        # sqlglot couldn't parse it (e.g. dialect quirks) — fall back to a conservative
+        # keyword-prefix check so valid SELECTs aren't unfairly rejected.
+        return bool(re.match(r"(?i)^\s*(SELECT|WITH)\b", sql))
+    return isinstance(parsed, (exp.Select, exp.Union))
 
 
 def _is_safe_sql(sql: str) -> bool:
@@ -130,9 +128,8 @@ def generate_sql(
     seed: int | None = None,
     flags=None,
 ) -> GenerationResult:
-    selected_model = model or DEFAULT_MODEL
     prompt = build_prompt(flags or PROMPT_FLAGS, schema_str, user_query)
-    return _generate(prompt, selected_model, seed)
+    return _generate(prompt, model or DEFAULT_MODEL, seed)
 
 
 def _generate(prompt: str, selected_model: str, seed: int | None) -> GenerationResult:

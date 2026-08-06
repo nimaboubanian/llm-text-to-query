@@ -119,9 +119,7 @@ def _write_results_csv(results: list[dict], csv_path: Path) -> None:
 
 
 def _v(val: float | None) -> str:
-    if val is None:
-        return "—"
-    return f"{val:.4f}"
+    return "—" if val is None else f"{val:.4f}"
 
 
 def _compute_stats(values: list[float]) -> dict:
@@ -213,9 +211,7 @@ def _format_summary(aggregated: list[dict], num_seeds: int) -> str:
     lines = ["| " + " | ".join(head) + " |", "|" + "---|" * len(head)]
 
     def cell(s: dict) -> str:
-        if s["mean"] is None:
-            return "—"
-        return f"{s['mean']:.4f} ± {s['std']:.4f}" if multi else f"{s['mean']:.4f}"
+        return f"{s['mean']:.4f} ± {s['std']:.4f}" if multi and s["mean"] is not None else _v(s["mean"])
 
     for q in aggregated:
         per_seed = q["per_seed"]
@@ -293,11 +289,11 @@ def generate_reports(
         all_flat_results.extend(seed_results)
 
         # Aggregate statistics across seeds
-        query_agg = {"query_id": int(qid)}
-        for metric in METRICS:
-            query_agg[metric] = _compute_stats([r.get(metric) for r in seed_results])
-
-        query_agg["per_seed"] = seed_results
+        query_agg = {
+            "query_id": int(qid),
+            **{m: _compute_stats([r.get(m) for r in seed_results]) for m in METRICS},
+            "per_seed": seed_results,
+        }
         aggregated.append(query_agg)
 
         seed_sql_sections = "\n## LLM-Generated SQL by Seed\n\n"
@@ -318,7 +314,7 @@ def generate_reports(
 
         meta = f"- **Model:** {model}\n" if model else ""
         report = (
-            f"# Query {qid} — Report ({len(seeds)} seed{'s' if len(seeds) > 1 else ''})\n\n"
+            f"# Query {qid} — Report ({len(seeds)} {_plural(len(seeds), 'seed')})\n\n"
             f"{meta}"
             f"- **Benchmark:** TPC-H\n\n"
             f"## Reference SQL\n\n```sql\n{ref_sql}\n```\n\n"
@@ -326,7 +322,7 @@ def generate_reports(
             + seed_sql_sections
         )
         (per_query_dir / f"{qid}.md").write_text(report)
-        print(f"  [{qid}] evaluated across {len(seeds)} seed{'s' if len(seeds) > 1 else ''}")
+        print(f"  [{qid}] evaluated across {len(seeds)} {_plural(len(seeds), 'seed')}")
 
     total = len(query_ids)
     agg = _aggregate_model_results(all_flat_results)
@@ -393,28 +389,23 @@ def generate_cross_model_report(
                 seed_results.append(sim)
                 all_rows.append(sim)
 
-            agg = {}
-            for metric in METRICS:
-                agg[metric] = _compute_stats([r.get(metric) for r in seed_results])
+            agg = {m: _compute_stats([r.get(m) for r in seed_results]) for m in METRICS}
             ok_count = sum(1 for r in seed_results if r["status"] == "ok")
             n = len(seed_results)
-            if n == 1:
-                agg["status_summary"] = seed_results[0]["status"]
-            else:
-                agg["status_summary"] = f"{ok_count}/{n} ok"
+            agg["status_summary"] = seed_results[0]["status"] if n == 1 else f"{ok_count}/{n} ok"
             model_aggregated[model][qid] = agg
 
     # Write CSV
     _write_results_csv(all_rows, report_dir / "results.csv")
 
     # Write comparison.md
-    num_seeds = len(seeds) if seeds else 1
+    num_seeds = len(seeds_list)
 
     lines = [
-        f"# Cross-Model Comparison ({len(models)} models, {num_seeds} seed{'s' if num_seeds > 1 else ''})\n",
+        f"# Cross-Model Comparison ({len(models)} models, {num_seeds} {_plural(num_seeds, 'seed')})\n",
     ]
 
-    header = "| Query | " + " | ".join(m for m in models) + " |"
+    header = "| Query | " + " | ".join(models) + " |"
     sep = "|---|" + "|".join("---" for _ in models) + "|"
 
     for title, metric, show_status in [
@@ -477,8 +468,7 @@ def _move_contents(src_dir: Path, dst_dir: Path) -> None:
     if not src_dir.exists():
         return
 
-    subdirs = sorted(d for d in src_dir.iterdir() if d.is_dir())
-    for sd in subdirs:
+    for sd in sorted(d for d in src_dir.iterdir() if d.is_dir()):
         shutil.move(str(sd), str(dst_dir))
 
 
@@ -579,7 +569,7 @@ def format_run_summary(
         diagnostic_metrics = [m for m in METRICS if m != "execution_accuracy"]
         for i, metric in enumerate(diagnostic_metrics):
             stats = agg["metrics"][metric]
-            value = f"{stats['mean']:.4f}" if stats["mean"] is not None else "—"
+            value = _v(stats["mean"])
             if i == 0:
                 value += (
                     f"   (mean over {agg['total_queries']} "
@@ -596,12 +586,9 @@ def format_run_summary(
         )
         for model in models:
             agg = aggregates[model]
-            ex = agg["metrics"]["execution_accuracy"]["mean"]
-            f1 = agg["metrics"]["result_f1"]["mean"]
-            ast = agg["metrics"]["ast_similarity"]["mean"]
-            ex_str = f"{ex:.4f}" if ex is not None else "—"
-            f1_str = f"{f1:.4f}" if f1 is not None else "—"
-            ast_str = f"{ast:.4f}" if ast is not None else "—"
+            ex_str = _v(agg["metrics"]["execution_accuracy"]["mean"])
+            f1_str = _v(agg["metrics"]["result_f1"]["mean"])
+            ast_str = _v(agg["metrics"]["ast_similarity"]["mean"])
             seeds_str = f"{agg['exact_matches']} / {agg['total_queries']}"
             lines.append(
                 f"  {model:<{name_width}}   {ex_str:>9}   {f1_str:>7}   {ast_str:>8}   {seeds_str:>9}   {agg['failures']:>4}"

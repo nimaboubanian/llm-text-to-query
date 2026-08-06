@@ -356,7 +356,7 @@ def test_session_header_fields_stay_on_one_line():
         query_ids=["01", "07", "16"], num_seeds=1,
         temperature=0.1, max_tokens=2048, num_ctx=4096,
         prompt_flags={"schema_ddl": True, "few_shot": 1, "planning": False},
-        database_url="postgresql://user:password@postgres:5432/testdb",
+        database_url="postgresql://user:password@postgres:5432/tpch",
     )
     # "Metrics" is excluded: with 4 metrics (EX added), its joined label list now
     # legitimately exceeds one line — see test_field_pads_label_and_wraps_long_values
@@ -383,7 +383,7 @@ def test_format_session_header_single_model_filtered_queries():
         query_ids=["01", "07", "16"], num_seeds=1,
         temperature=0.1, max_tokens=2048, num_ctx=4096,
         prompt_flags={"schema_ddl": True, "few_shot": 1, "planning": False},
-        database_url="postgresql://user:password@postgres:5432/testdb",
+        database_url="postgresql://user:password@postgres:5432/tpch",
     )
     assert "TPC-H (scale factor 1)" in header
     assert _field("Model", "qwen2.5-coder:7b") in header
@@ -394,7 +394,7 @@ def test_format_session_header_single_model_filtered_queries():
     assert "schema_ddl, few_shot=1" in header
     assert "planning" not in header  # False flags are omitted, not printed as planning=False
     assert "password" not in header
-    assert _field("Database", "postgresql://***:***@postgres:5432/testdb") in header
+    assert _field("Database", "postgresql://***:***@postgres:5432/tpch") in header
 
 
 def test_format_session_header_multi_model_all_queries_no_flags():

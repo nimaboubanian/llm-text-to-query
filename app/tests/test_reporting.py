@@ -170,6 +170,34 @@ def test_results_csv_marks_retried_rows(tmp_path):
     assert rows["01"]["first_attempt_ex"] == rows["01"]["execution_accuracy"]
 
 
+def test_empty_raw_classified_and_rendered(tmp_path):
+    """A zero-byte .raw refines 'missing' to 'empty_response' and the per-query
+    report says so instead of '*(not generated)*'."""
+    ref_queries, ref_answers, gen_queries, gen_answers, questions, report_dir = _report_dirs(tmp_path)
+
+    (ref_queries / "01.sql").write_text("SELECT name FROM customers;")
+    (ref_answers / "01.csv").write_text("name\nAlice\n")
+    (gen_queries / "01.raw").write_text("")
+    (gen_queries / "01.timing.json").write_text('{"prompt_eval_count": 2400, "eval_count": 1, "duration_seconds": 3.4}')
+    (questions / "01.md").write_text('# Business Question:\n  "What are the customer names?"\n')
+
+    results = generate_reports(
+        generated_queries_dir=gen_queries.parent,
+        reference_queries_dir=ref_queries,
+        generated_answers_dir=gen_answers.parent,
+        reference_answers_dir=ref_answers,
+        report_dir=report_dir,
+        model="m1",
+        questions_dir=questions,
+    )
+
+    assert results[0]["status"] == "empty_response"
+    per_query = (report_dir / "per_query" / "01.md").read_text()
+    assert "model returned an empty response" in per_query
+    assert "eval_count 1" in per_query
+    assert "*(not generated)*" not in per_query
+
+
 def test_summary_omits_variance_columns_at_one_seed(tmp_path):
     """At 1 seed there is no spread to report: summary.md must not print '± 0.0000'
     or a zero-width '[x, x]' CI, which claimed a measurement that was never made."""

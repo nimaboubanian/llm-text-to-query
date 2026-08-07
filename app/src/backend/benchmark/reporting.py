@@ -229,6 +229,19 @@ def _format_summary(aggregated: list[dict], num_seeds: int) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _refine_missing_status(status: str, raw_path: Path) -> str:
+    """Refine a bare 'missing' into the generation-failure reason recorded in .raw.
+
+    Old sessions have no .raw for empty responses — they keep 'missing'.
+    """
+    if status != "missing" or not raw_path.exists():
+        return status
+    raw = raw_path.read_text()
+    if raw.startswith("ERROR:"):
+        return "gen_error"
+    return "empty_response" if not raw.strip() else "no_sql_extracted"
+
+
 def generate_reports(
     generated_queries_dir: Path,
     reference_queries_dir: Path,
@@ -268,6 +281,9 @@ def generate_reports(
                 llm_sql=seed_queries / f"{qid}.sql",
             )
             sim_result["seed"] = seed
+            sim_result["status"] = _refine_missing_status(
+                sim_result["status"], seed_queries / f"{qid}.raw"
+            )
             sim_result["model"] = model
             sim_result["nl_query"] = nl_query
             prompt_path = seed_queries / f"{qid}.prompt"
@@ -306,6 +322,14 @@ def generate_reports(
                 raw_content = seed_raw_path.read_text().strip()
                 if raw_content.startswith("ERROR:"):
                     seed_sql_sections += f"### Seed {seed}\n\n*(generation failed — {raw_content})*\n\n"
+                elif not raw_content:
+                    timing_path = generated_queries_dir / f"seed_{seed}" / f"{qid}.timing.json"
+                    eval_count = (
+                        json.loads(timing_path.read_text()).get("eval_count")
+                        if timing_path.exists() else None
+                    )
+                    detail = f" — eval_count {eval_count}" if eval_count is not None else ""
+                    seed_sql_sections += f"### Seed {seed}\n\n*(model returned an empty response{detail})*\n\n"
                 else:
                     snippet = raw_content[:800] + ("\n\n*[truncated]*" if len(raw_content) > 800 else "")
                     seed_sql_sections += f"### Seed {seed}\n\n*(SQL extraction failed — model output:)*\n\n```\n{snippet}\n```\n\n"

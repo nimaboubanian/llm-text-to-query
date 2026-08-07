@@ -77,7 +77,7 @@ def test_run_single_model_benchmark_builds_per_model_subdirs():
          patch("backend.benchmark.benchmarking.execute_generated_queries", fake_execute_generated_queries), \
          patch("backend.benchmark.benchmarking.generate_reports", fake_generate_reports):
 
-        results = _run_single_model_benchmark(
+        results, aborted = _run_single_model_benchmark(
             model="qwen2.5-coder:7b", paths=paths, db_url="db://url", seeds=[1],
         )
 
@@ -85,3 +85,4 @@ def test_run_single_model_benchmark_builds_per_model_subdirs():
     assert captured["execute_answers_dir"] == Path("ga/qwen2.5-coder_7b")
     assert captured["report_dir"] == Path("rep/qwen2.5-coder_7b")
     assert results == [{"query_id": 1}]
+    assert aborted is False

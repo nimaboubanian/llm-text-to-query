@@ -578,8 +578,13 @@ def write_session_manifest(
     prompt_flags: dict,
     fingerprints: dict[str, str],
     database_url: str,
+    skipped_models: list[str] | None = None,
 ) -> Path:
-    """Write a self-describing provenance manifest for an archived benchmark session."""
+    """Write a self-describing provenance manifest for an archived benchmark session.
+
+    `models` is the full configured set; `skipped_models` names any a quota abort cut
+    before they ran, which is not derivable from the results on disk.
+    """
     try:
         package_version = version("text2query")
     except PackageNotFoundError:
@@ -589,6 +594,7 @@ def write_session_manifest(
         "timestamp": datetime.now().isoformat(),
         "package_version": package_version,
         "models": models,
+        "skipped_models": skipped_models or [],
         "seeds": seeds,
         "query_ids": query_ids,
         "scale_factor": scale_factor,

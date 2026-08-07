@@ -267,3 +267,69 @@ def test_a_rate_limited_query_is_retried_on_the_next_run(tmp_path):
     # Only the skipped query was re-sent; 01's cached .sql was kept.
     assert len(resumed) == 1
     assert (output_dir / "seed_1" / "02.sql").read_text() == "SELECT 2;"
+
+
+def test_abort_propagates_from_generation_to_the_model_result(tmp_path):
+    """A quota abort during generation must not stop this model from being executed
+    and reported — its completed work is still real."""
+    from backend.benchmark.benchmarking import BenchmarkPaths, _run_single_model_benchmark
+
+    paths = BenchmarkPaths(
+        schema_file=Path("s"), questions_dir=Path("q"), queries_dir=Path("qq"),
+        answers_dir=Path("a"), output_dir=Path("out"), generated_answers_dir=Path("ga"),
+        report_dir=Path("rep"), results_base=Path("res"),
+    )
+    ran = []
+
+    with patch("backend.benchmark.benchmarking.run_llm_generation", lambda **kw: True), \
+         patch("backend.benchmark.benchmarking.execute_generated_queries",
+               lambda **kw: ran.append("execute")), \
+         patch("backend.benchmark.benchmarking.generate_reports",
+               lambda **kw: ran.append("report") or [{"query_id": 1}]):
+        results, aborted = _run_single_model_benchmark(
+            model="big-cloud", paths=paths, db_url="db://url", seeds=[1],
+        )
+
+    assert aborted is True
+    assert results == [{"query_id": 1}]
+    # Reports for completed work are written before the run exits.
+    assert ran == ["execute", "report"]
+
+
+def test_session_manifest_records_models_cut_by_the_abort(tmp_path):
+    from backend.benchmark.reporting import write_session_manifest
+    import json
+
+    session_dir = tmp_path / "session"
+    session_dir.mkdir()
+    path = write_session_manifest(
+        session_dir,
+        models=["local:7b", "a-cloud", "b-cloud"],
+        seeds=[1],
+        query_ids=None,
+        scale_factor=1,
+        generation_parameters={},
+        prompt_flags={},
+        fingerprints={},
+        database_url="postgresql://u:p@h/db",
+        skipped_models=["b-cloud"],
+    )
+    manifest = json.loads(path.read_text())
+    # The configured set is provenance and stays intact...
+    assert manifest["models"] == ["local:7b", "a-cloud", "b-cloud"]
+    # ...with what was cut recorded alongside it.
+    assert manifest["skipped_models"] == ["b-cloud"]
+
+
+def test_session_manifest_omits_skipped_models_on_a_clean_run(tmp_path):
+    from backend.benchmark.reporting import write_session_manifest
+    import json
+
+    session_dir = tmp_path / "session"
+    session_dir.mkdir()
+    path = write_session_manifest(
+        session_dir, models=["local:7b"], seeds=[1], query_ids=None, scale_factor=1,
+        generation_parameters={}, prompt_flags={}, fingerprints={},
+        database_url="postgresql://u:p@h/db",
+    )
+    assert json.loads(path.read_text())["skipped_models"] == []

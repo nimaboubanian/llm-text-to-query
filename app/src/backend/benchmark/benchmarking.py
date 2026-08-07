@@ -69,19 +69,24 @@ def _run_single_model_benchmark(
     db_url: str,
     seeds: list[int] | None,
     query_ids: list[str] | None = None,
-) -> list[dict]:
-    """Run the full benchmark (generate + execute + report) for one model."""
+) -> tuple[list[dict], bool]:
+    """Run the full benchmark (generate + execute + report) for one model.
+
+    Returns (results, aborted). `aborted` is True when an Ollama Cloud quota abort cut
+    generation short — execution and reporting still run, so the completed work is
+    scored and written before the caller stops the session.
+    """
     slug = model.replace(":", "_").replace("/", "_")
     output_dir = paths.output_dir / slug
     generated_answers_dir = paths.generated_answers_dir / slug
     report_dir = paths.report_dir / slug
 
     print(_banner("SQL Generation"))
-    run_llm_generation(
+    aborted = bool(run_llm_generation(
         questions_dir=paths.questions_dir, output_dir=output_dir,
         db_url=db_url, model=model,
         seeds=seeds, query_ids=query_ids,
-    )
+    ))
     print()
 
     print(_banner("Execution"))
@@ -103,7 +108,7 @@ def _run_single_model_benchmark(
     )
     print()
 
-    return results
+    return results, aborted
 
 
 def _resolve_query_id_filter(
@@ -210,6 +215,7 @@ def main():
 
         # === Phase 2+3: Per-model benchmark ===
         precomputed = {}
+        skipped_models: list[str] = []
         for i, model in enumerate(models, 1):
             if multi_model:
                 print("═" * 60)
@@ -217,7 +223,7 @@ def main():
                 print("═" * 60)
                 print()
 
-            results = _run_single_model_benchmark(
+            results, aborted = _run_single_model_benchmark(
                 model=model,
                 paths=paths,
                 db_url=BENCHMARK_DATABASE_URL,
@@ -226,11 +232,21 @@ def main():
             )
             precomputed[model] = results
 
-        # === Cross-model comparison (if multi-model) ===
-        if multi_model:
+            if aborted:
+                # Quota windows are hourly, so there is nothing to wait for. Locals ran
+                # first, so everything still queued is a cloud model that would 429 too.
+                skipped_models = models[i:]
+                if skipped_models:
+                    print(f"  ⊘ Not run (rate-limited): {', '.join(skipped_models)}")
+                    print()
+                break
+
+        # === Cross-model comparison (models that produced results) ===
+        ran_models = list(precomputed)
+        if len(ran_models) > 1:
             print(_banner("Cross-Model Comparison"))
             generate_cross_model_report(
-                models=models,
+                models=ran_models,
                 reference_queries_dir=paths.queries_dir,
                 report_dir=paths.report_dir,
                 precomputed=precomputed,
@@ -263,12 +279,15 @@ def main():
             prompt_flags=asdict(PROMPT_FLAGS),
             fingerprints=fingerprints,
             database_url=BENCHMARK_DATABASE_URL,
+            skipped_models=skipped_models,
         )
         print("  ✓ Archived")
         print()
 
         elapsed = time.monotonic() - start_time
-        print(format_run_summary(precomputed, models, session_dir, elapsed))
+        print(format_run_summary(
+            precomputed, ran_models, session_dir, elapsed, skipped_models=skipped_models,
+        ))
 
         return 0
 

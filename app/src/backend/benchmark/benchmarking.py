@@ -28,12 +28,24 @@ from backend.benchmark.reporting import (
     format_session_header,
 )
 from backend.benchmark.fingerprint import collect_fingerprints
+from backend.llm.ollama import is_cloud_model
 
 
 def _banner(title: str) -> str:
     """Render a light section divider padded to 60 columns, matching the header/footer width."""
     prefix = f"─── {title} "
     return prefix + "─" * max(3, 60 - len(prefix))
+
+
+def _sort_locals_first(models: list[str]) -> list[str]:
+    """Order local models ahead of Ollama Cloud ones, stable within each group.
+
+    A cloud quota abort ends the run wherever it lands, so anything queued after
+    the exhausted model is lost. Running locals first makes that loss provably
+    cloud-only, and `sorted` is stable so the user's ordering still decides which
+    local — and which cloud — model goes first.
+    """
+    return sorted(models, key=is_cloud_model)
 
 
 @dataclass(frozen=True)
@@ -134,7 +146,7 @@ def main():
     data_dir = Path(BENCHMARK_DATA_PATH) if BENCHMARK_DATA_PATH else Path(f"tpch/data/sf{BENCHMARK_SCALE_FACTOR}")
 
     seeds = list(range(1, BENCHMARK_NUM_SEEDS + 1))
-    models = BENCHMARK_MODELS
+    models = _sort_locals_first(BENCHMARK_MODELS)
     multi_model = len(models) > 1
 
     start_time = time.monotonic()

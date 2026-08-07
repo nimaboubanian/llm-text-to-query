@@ -39,6 +39,8 @@ def _banner(title: str) -> str:
 @dataclass(frozen=True)
 class BenchmarkPaths:
     """Filesystem layout for a benchmark run."""
+    # tpch/* resolves under app/ and benchmark_results/* under the repo root;
+    # they only coincide because compose mounts both at /app in-container.
     schema_file: Path = Path("tpch/schema.sql")
     questions_dir: Path = Path("tpch/questions")
     queries_dir: Path = Path("tpch/queries")

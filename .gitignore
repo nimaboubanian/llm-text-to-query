@@ -6,6 +6,7 @@ app/.venv/
 app/tpch/data/*
 app/tpch/answers/*
 benchmark_results/*
+!benchmark_results/.gitkeep
 compose.yml
 CLAUDE.md
 tmp/

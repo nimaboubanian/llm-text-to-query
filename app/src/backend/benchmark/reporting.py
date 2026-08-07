@@ -320,7 +320,7 @@ def generate_reports(
         aggregated.append(query_agg)
 
         seed_sql_sections = "\n## LLM-Generated SQL by Seed\n\n"
-        for seed in seeds:
+        for seed, r in zip(seeds, seed_results):
             seed_sql_path = generated_queries_dir / f"seed_{seed}" / f"{qid}.sql"
             seed_raw_path = generated_queries_dir / f"seed_{seed}" / f"{qid}.raw"
             if seed_sql_path.exists():
@@ -330,12 +330,7 @@ def generate_reports(
                 if raw_content.startswith("ERROR:"):
                     seed_sql_sections += f"### Seed {seed}\n\n*(generation failed — {raw_content})*\n\n"
                 elif not raw_content:
-                    timing_path = generated_queries_dir / f"seed_{seed}" / f"{qid}.timing.json"
-                    eval_count = (
-                        json.loads(timing_path.read_text()).get("eval_count")
-                        if timing_path.exists() else None
-                    )
-                    detail = f" — eval_count {eval_count}" if eval_count is not None else ""
+                    detail = f" — eval_count {r['eval_count']}" if r.get("eval_count") is not None else ""
                     seed_sql_sections += f"### Seed {seed}\n\n*(model returned an empty response{detail})*\n\n"
                 else:
                     snippet = raw_content[:800] + ("\n\n*[truncated]*" if len(raw_content) > 800 else "")

@@ -132,7 +132,7 @@ def _run_single_generation(
             on_item_done(" ✓")
             success += 1
         else:
-            if result.error or result.raw_response:
+            if result.error is not None or result.raw_response is not None:
                 (output_dir / f"{query_id}.raw").write_text(
                     f"ERROR: {result.error}\n" if result.error else result.raw_response
                 )

@@ -215,6 +215,28 @@ def test_raw_file_written_on_extraction_failure(tmp_path):
     assert raw.read_text() == raw_model_output
 
 
+def test_raw_file_written_on_empty_response(tmp_path):
+    """An HTTP-200 empty response is still evidence — .raw must exist (empty)."""
+    questions_dir = tmp_path / "questions"
+    output_dir = tmp_path / "output"
+    questions_dir.mkdir()
+    _make_question_file(questions_dir, "01", "What are the totals?")
+
+    def mock_generate(*args, **kwargs):
+        return GenerationResult(sql=None, raw_response="")
+
+    with patch("backend.llm.ollama.generate_sql", side_effect=mock_generate), \
+         patch("backend.benchmark.runner.create_engine_for_database"), \
+         patch("backend.llm.ollama.warmup", return_value=True), \
+         patch("backend.benchmark.runner.render_schema", return_value="schema"):
+        run_llm_generation(questions_dir, output_dir, "db://url", "test-model", seeds=None)
+
+    assert not (output_dir / "seed_1" / "01.sql").exists()
+    raw = output_dir / "seed_1" / "01.raw"
+    assert raw.exists()
+    assert raw.read_text() == ""
+
+
 # --- Multi-model tests ---
 
 def test_cross_model_csv_export(tmp_path):

@@ -13,6 +13,7 @@ from pathlib import Path
 
 from backend.benchmark.similarity import evaluate_query
 from backend.benchmark.pipeline import read_business_question
+from backend.llm.ollama import is_cloud_model
 
 
 CSV_FIELDNAMES = [
@@ -22,6 +23,7 @@ CSV_FIELDNAMES = [
     "result_precision", "result_recall", "result_f1",
     "ast_similarity", "ast_similarity_normalized", "error_category",
     "prompt_eval_count", "eval_count", "generation_seconds", "retried",
+    "cloud",
 ]
 
 METRICS = ("execution_accuracy", "result_f1", "ast_similarity", "ast_similarity_normalized")
@@ -248,6 +250,12 @@ _FAILURE_LABELS = {
     "gen_error": "generation error",
 }
 
+_CLOUD_CAVEAT = (
+    "> ☁ **Ollama Cloud model.** Generation ran on ollama.com hardware, not this\n"
+    "> machine. Durations include network latency and are not comparable to local\n"
+    "> timings; accuracy metrics are unaffected.\n\n"
+)
+
 
 def generate_reports(
     generated_queries_dir: Path,
@@ -292,6 +300,7 @@ def generate_reports(
                 sim_result["status"], seed_queries / f"{qid}.raw"
             )
             sim_result["model"] = model
+            sim_result["cloud"] = bool(model) and is_cloud_model(model)
             sim_result["nl_query"] = nl_query
             prompt_path = seed_queries / f"{qid}.prompt"
             sim_result["prompt"] = prompt_path.read_text() if prompt_path.exists() else None
@@ -338,9 +347,11 @@ def generate_reports(
             else:
                 seed_sql_sections += f"### Seed {seed}\n\n*(not generated)*\n\n"
 
-        meta = f"- **Model:** {model}\n" if model else ""
+        cloud = bool(model) and is_cloud_model(model)
+        meta = f"- **Model:** {model}{' (Ollama Cloud)' if cloud else ''}\n" if model else ""
         report = (
             f"# Query {qid} — Report ({len(seeds)} {_plural(len(seeds), 'seed')})\n\n"
+            f"{_CLOUD_CAVEAT if cloud else ''}"
             f"{meta}"
             f"- **Benchmark:** TPC-H\n\n"
             f"## Reference SQL\n\n```sql\n{ref_sql}\n```\n\n"
@@ -360,9 +371,9 @@ def generate_reports(
     rate = ex_successes / ex_total if ex_total else 0.0
 
     statuses = {r["status"] for r in all_flat_results}
-    warning = ""
+    warning = _CLOUD_CAVEAT if (model and is_cloud_model(model)) else ""
     if ex_successes == 0 and len(statuses) == 1 and (label := _FAILURE_LABELS.get(next(iter(statuses)))):
-        warning = (
+        warning += (
             f"> ⚠ {ex_total}/{ex_total} generations failed: {label} — "
             "model may be incompatible with the prompt format.\n\n"
         )
@@ -438,6 +449,13 @@ def generate_cross_model_report(
     lines = [
         f"# Cross-Model Comparison ({len(models)} models, {num_seeds} {_plural(num_seeds, 'seed')})\n",
     ]
+    cloud_models = [m for m in models if is_cloud_model(m)]
+    if cloud_models:
+        lines.append(
+            "> ☁ **Ran on Ollama Cloud:** " + ", ".join(cloud_models) + ".\n"
+            "> Those durations include network latency and ollama.com hardware, and are\n"
+            "> not comparable to the local models' timings; accuracy metrics are unaffected.\n"
+        )
 
     header = "| Query | " + " | ".join(models) + " |"
     sep = "|---|" + "|".join("---" for _ in models) + "|"

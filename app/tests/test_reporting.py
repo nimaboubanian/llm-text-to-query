@@ -561,3 +561,97 @@ def test_summary_headline_reflects_uniform_vs_mixed_failure(tmp_path, all_fail):
         assert "incompatible with the prompt format" in summary
     else:
         assert "⚠" not in summary
+
+
+def test_cloud_model_is_flagged_in_csv_and_caveated_in_reports(tmp_path):
+    """Cloud timings include network latency and ollama.com hardware — reports must
+    say so, and the flag must survive into results.csv for downstream analysis."""
+    ref_queries, ref_answers, gen_queries, gen_answers, questions, report_dir = _report_dirs(tmp_path)
+
+    (ref_queries / "01.sql").write_text("SELECT name FROM customers;")
+    (ref_answers / "01.csv").write_text("name\nAlice\n")
+    (gen_queries / "01.sql").write_text("SELECT name FROM customers;")
+    (gen_answers / "01.csv").write_text("name\nAlice\n")
+    (questions / "01.md").write_text('# Business Question:\n  "Names?"\n')
+
+    results = generate_reports(
+        generated_queries_dir=gen_queries.parent,
+        reference_queries_dir=ref_queries,
+        generated_answers_dir=gen_answers.parent,
+        reference_answers_dir=ref_answers,
+        report_dir=report_dir,
+        model="qwen3-coder:480b-cloud",
+        questions_dir=questions,
+    )
+
+    assert results[0]["cloud"] is True
+
+    with open(report_dir / "results.csv") as f:
+        rows = list(csv.DictReader(f))
+    assert rows[0]["cloud"] == "True"
+
+    summary = (report_dir / "summary.md").read_text()
+    assert "Ollama Cloud" in summary
+    assert "network latency" in summary
+
+    per_query = (report_dir / "per_query" / "01.md").read_text()
+    assert "Ollama Cloud" in per_query
+
+
+def test_local_model_reports_carry_no_cloud_caveat(tmp_path):
+    ref_queries, ref_answers, gen_queries, gen_answers, questions, report_dir = _report_dirs(tmp_path)
+
+    (ref_queries / "01.sql").write_text("SELECT name FROM customers;")
+    (ref_answers / "01.csv").write_text("name\nAlice\n")
+    (gen_queries / "01.sql").write_text("SELECT name FROM customers;")
+    (gen_answers / "01.csv").write_text("name\nAlice\n")
+    (questions / "01.md").write_text('# Business Question:\n  "Names?"\n')
+
+    results = generate_reports(
+        generated_queries_dir=gen_queries.parent,
+        reference_queries_dir=ref_queries,
+        generated_answers_dir=gen_answers.parent,
+        reference_answers_dir=ref_answers,
+        report_dir=report_dir,
+        model="qwen2.5-coder:7b",
+        questions_dir=questions,
+    )
+
+    assert results[0]["cloud"] is False
+    summary = (report_dir / "summary.md").read_text()
+    assert "Ollama Cloud" not in summary
+    assert "network latency" not in summary
+
+
+def test_comparison_report_caveats_only_the_cloud_models(tmp_path):
+    """A mixed run's comparison table is the one place a reader is most likely to
+    compare a cloud duration against a local one."""
+    from backend.benchmark.reporting import generate_cross_model_report
+
+    ref_queries = tmp_path / "ref_queries"
+    ref_queries.mkdir()
+    (ref_queries / "01.sql").write_text("SELECT 1;")
+    report_dir = tmp_path / "report"
+    report_dir.mkdir()
+
+    def _row(model):
+        return {
+            "query_id": 1, "seed": 1, "status": "ok", "model": model,
+            "execution_accuracy": 1, "result_f1": 1.0, "ast_similarity": 1.0,
+            "ast_similarity_normalized": 1.0, "first_attempt_ex": 1,
+        }
+
+    generate_cross_model_report(
+        models=["qwen2.5-coder:7b", "qwen3-coder:480b-cloud"],
+        reference_queries_dir=ref_queries,
+        report_dir=report_dir,
+        precomputed={
+            "qwen2.5-coder:7b": [_row("qwen2.5-coder:7b")],
+            "qwen3-coder:480b-cloud": [_row("qwen3-coder:480b-cloud")],
+        },
+    )
+
+    comparison = (report_dir / "comparison.md").read_text()
+    assert "qwen3-coder:480b-cloud" in comparison
+    assert "Ollama Cloud" in comparison
+    assert "network latency" in comparison

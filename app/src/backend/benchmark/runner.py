@@ -3,6 +3,7 @@ import hashlib
 import json
 from dataclasses import asdict
 from pathlib import Path
+from time import sleep
 
 from backend.core.config import LLM_MAX_TOKENS, LLM_TEMPERATURE, PROMPT_FLAGS
 from backend.database.executor import explain_error
@@ -15,6 +16,68 @@ from backend.benchmark.fingerprint import (
 )
 from backend.benchmark.pipeline import execute_queries_to_csv, read_business_question
 from backend.benchmark.progress import print_item_done, print_item_start
+from backend.benchmark.reporting import RATE_LIMITED_MARKER
+
+
+# One fixed pause before a single re-attempt on HTTP 429. Ollama Cloud uses that one
+# status for both a spent session/weekly usage budget (5-hour and 7-day windows —
+# nothing worth waiting for) and its per-plan concurrency limit (transient, seconds),
+# and the API does not distinguish them. Re-issuing once decides it empirically.
+RATE_LIMIT_PROBE_SECONDS = 30
+
+
+class QuotaExhausted(Exception):
+    """Ollama Cloud returned HTTP 429 twice, either side of the probe pause.
+
+    Treated as a spent usage budget: a concurrency rejection would have cleared.
+    Raised from inside the per-query loop to unwind both it and the per-seed loop;
+    caught in run_llm_generation, so it never leaves this module. str() is the
+    server's own stated reason, which the skip sentinels record.
+    """
+
+
+def _question_ids(questions_dir: Path, query_ids: list[str] | None) -> list[str]:
+    """The query IDs a run covers, in file order, after the query_ids filter."""
+    return [
+        q.stem for q in sorted(questions_dir.glob("*.md"))
+        if query_ids is None or q.stem in query_ids
+    ]
+
+
+def _mark_rate_limited(seed_dir: Path, query_ids: list[str], reason: str = "") -> None:
+    """Record a skip sentinel for each query a rate-limit abort never attempted.
+
+    A .raw with no .sql is exactly what the generation cache treats as "not done",
+    so a later re-run retries these queries, and reporting classifies them as
+    `rate_limited` from the marker prefix rather than as a model failure.
+    """
+    seed_dir.mkdir(parents=True, exist_ok=True)
+    detail = f" — {reason}" if reason else ""
+    for query_id in query_ids:
+        (seed_dir / f"{query_id}.raw").write_text(
+            f"{RATE_LIMITED_MARKER} — Ollama Cloud returned HTTP 429 before this "
+            f"query ran{detail}\n"
+        )
+
+
+def _generate_with_rate_limit_probe(question, schema, model, seed, validate, on_probe):
+    """Generate once; on HTTP 429, pause and re-issue exactly once.
+
+    Returns the second result when the probe fires, so a caller seeing status_code 429
+    on the returned value knows the limit survived the pause and the budget is spent.
+    `on_probe()` is called just before the pause, to narrate it.
+    """
+    result = ollama.generate_sql_with_retry(
+        question, schema, model, seed=seed, validate=validate,
+    )
+    if result.status_code != 429:
+        return result
+
+    on_probe()
+    sleep(RATE_LIMIT_PROBE_SECONDS)
+    return ollama.generate_sql_with_retry(
+        question, schema, model, seed=seed, validate=validate,
+    )
 
 
 def run_llm_generation(
@@ -24,15 +87,28 @@ def run_llm_generation(
     model: str,
     seeds: list[int] | None = None,
     query_ids: list[str] | None = None,
-) -> None:
+) -> bool:
+    """Generate SQL for every (seed, query). Returns True if a quota abort cut it short."""
     seeds = seeds or [1]
-    for seed in seeds:
+    for i, seed in enumerate(seeds):
         seed_dir = output_dir / f"seed_{seed}"
         if len(seeds) > 1:
             print(f"  --- Seed {seed} ---")
-        _run_single_generation(
-            questions_dir, seed_dir, db_url, model, seed=seed, query_ids=query_ids,
-        )
+        try:
+            _run_single_generation(
+                questions_dir, seed_dir, db_url, model, seed=seed, query_ids=query_ids,
+            )
+        except QuotaExhausted as exc:
+            # The current seed's remaining queries were marked before the raise;
+            # mark every seed that never started, so no (seed, query) is left
+            # indistinguishable from a genuine generation failure.
+            unstarted = _question_ids(questions_dir, query_ids)
+            for remaining_seed in seeds[i + 1:]:
+                _mark_rate_limited(output_dir / f"seed_{remaining_seed}", unstarted, str(exc))
+            if seeds[i + 1:]:
+                print(f"  ⊘ Seeds {', '.join(str(s) for s in seeds[i + 1:])} skipped: rate-limited")
+            return True
+    return False
 
 
 def _run_single_generation(
@@ -114,11 +190,32 @@ def _run_single_generation(
             on_item_done(" ⚠ no question found, skipping")
             continue
 
-        result = ollama.generate_sql_with_retry(
-            question, schema, model, seed=seed,
-            validate=lambda sql: explain_error(engine, sql),
+        def _probe_notice() -> None:
+            on_item_done(f" ⏸ rate-limited — retrying once in {RATE_LIMIT_PROBE_SECONDS}s")
+            on_item_start(i, len(to_process), f"Q{query_id} (retry)")
+
+        result = _generate_with_rate_limit_probe(
+            question, schema, model, seed,
+            lambda sql: explain_error(engine, sql),
+            _probe_notice,
         )
         retries += result.retried
+
+        if result.status_code == 429:
+            # The limit survived the probe pause, so this is a spent session/weekly
+            # usage budget (5-hour and 7-day windows), not the transient concurrency
+            # limit — there is nothing to wait for. Locals-first ordering means
+            # everything still queued is a cloud model that would be refused too.
+            reason = result.error or "HTTP 429"
+            skipped = [q.stem for q in to_process[i - 1:]]
+            _mark_rate_limited(output_dir, skipped, reason)
+            on_item_done(" ⊘ (rate-limited)")
+            print(f"  ✗ Ollama Cloud rate limit still in force after a "
+                  f"{RATE_LIMIT_PROBE_SECONDS}s probe — treating the usage budget as spent. "
+                  f"{success} generated, {len(skipped)} "
+                  f"{'query' if len(skipped) == 1 else 'queries'} marked skipped")
+            print(f"    {reason}")
+            raise QuotaExhausted(reason)
 
         if result.retried and result.first_prompt is not None:
             (output_dir / f"{query_id}.prompt").write_text(result.first_prompt)

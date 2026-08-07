@@ -522,3 +522,57 @@ def test_summary_leads_with_execution_accuracy(tmp_path):
     assert header.index("EX") < header.index("F1")
     # Q20's per-query EX is 0/1 even though its F1 is high
     assert "0/1" in table
+
+
+def test_summary_headline_on_uniform_generation_failure(tmp_path):
+    """All-fail-same-way gets a loud headline naming the reason."""
+    ref_queries, ref_answers, gen_queries, gen_answers, questions, report_dir = _report_dirs(tmp_path)
+
+    for qid in ("01", "02"):
+        (ref_queries / f"{qid}.sql").write_text("SELECT name FROM customers;")
+        (ref_answers / f"{qid}.csv").write_text("name\nAlice\n")
+        (gen_queries / f"{qid}.raw").write_text("")
+        (questions / f"{qid}.md").write_text('# Business Question:\n  "Names?"\n')
+
+    generate_reports(
+        generated_queries_dir=gen_queries.parent,
+        reference_queries_dir=ref_queries,
+        generated_answers_dir=gen_answers.parent,
+        reference_answers_dir=ref_answers,
+        report_dir=report_dir,
+        model="m1",
+        questions_dir=questions,
+    )
+
+    summary = (report_dir / "summary.md").read_text()
+    assert "⚠ 2/2 generations failed: empty response" in summary
+    assert "incompatible with the prompt format" in summary
+
+
+def test_summary_no_headline_on_mixed_outcomes(tmp_path):
+    """One success among failures — no incompatibility headline."""
+    ref_queries, ref_answers, gen_queries, gen_answers, questions, report_dir = _report_dirs(tmp_path)
+
+    (ref_queries / "01.sql").write_text("SELECT name FROM customers;")
+    (ref_answers / "01.csv").write_text("name\nAlice\n")
+    (gen_queries / "01.sql").write_text("SELECT name FROM customers;")
+    (gen_answers / "01.csv").write_text("name\nAlice\n")
+    (questions / "01.md").write_text('# Business Question:\n  "Names?"\n')
+
+    (ref_queries / "02.sql").write_text("SELECT name FROM customers;")
+    (ref_answers / "02.csv").write_text("name\nAlice\n")
+    (gen_queries / "02.raw").write_text("")
+    (questions / "02.md").write_text('# Business Question:\n  "Names?"\n')
+
+    generate_reports(
+        generated_queries_dir=gen_queries.parent,
+        reference_queries_dir=ref_queries,
+        generated_answers_dir=gen_answers.parent,
+        reference_answers_dir=ref_answers,
+        report_dir=report_dir,
+        model="m1",
+        questions_dir=questions,
+    )
+
+    summary = (report_dir / "summary.md").read_text()
+    assert "⚠" not in summary

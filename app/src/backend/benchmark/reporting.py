@@ -242,6 +242,13 @@ def _refine_missing_status(status: str, raw_path: Path) -> str:
     return "empty_response" if not raw.strip() else "no_sql_extracted"
 
 
+_FAILURE_LABELS = {
+    "empty_response": "empty response",
+    "no_sql_extracted": "no SQL extracted",
+    "gen_error": "generation error",
+}
+
+
 def generate_reports(
     generated_queries_dir: Path,
     reference_queries_dir: Path,
@@ -357,9 +364,17 @@ def generate_reports(
     ci_text = f" (95% CI [{lo:.4f}, {hi:.4f}])" if lo is not None else ""
     rate = ex_successes / ex_total if ex_total else 0.0
 
+    statuses = {r["status"] for r in all_flat_results}
+    warning = ""
+    if ex_successes == 0 and len(statuses) == 1 and (label := _FAILURE_LABELS.get(next(iter(statuses)))):
+        warning = (
+            f"> ⚠ {ex_total}/{ex_total} generations failed: {label} — "
+            "model may be incompatible with the prompt format.\n\n"
+        )
+
     model_line = f"| Model | {model} |\n" if model else ""
     summary = (
-        f"# Benchmark Summary\n\n"
+        f"# Benchmark Summary\n\n{warning}"
         f"| Metric | Value |\n"
         f"|---|---|\n"
         f"{model_line}"

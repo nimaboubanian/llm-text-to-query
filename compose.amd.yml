@@ -6,7 +6,8 @@
 
 services:
   ollama:
-    image: ollama/ollama:rocm
+    # Pinned to match compose.yml's daemon version; `rocm` alone floats.
+    image: ollama/ollama:0.32.6-rocm
     devices:
       - /dev/kfd
       - /dev/dri

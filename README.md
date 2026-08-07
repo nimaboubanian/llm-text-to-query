@@ -59,6 +59,49 @@ docker compose up -d --force-recreate ollama
 docker compose logs -f ollama
 ```
 
+### Ollama Cloud models
+
+Any model tag ending `-cloud` runs on Ollama Cloud instead of this machine. The
+local daemon proxies it to ollama.com over the same `OLLAMA_URL`, so there is no
+extra service, port, or setting — write the tag wherever you write a model name:
+
+```yaml
+  INTERACTIVE_APP_MODEL: "qwen3-coder:480b-cloud"
+  BENCHMARK_MODELS: "qwen2.5-coder:7b,qwen3-coder:480b-cloud"
+```
+
+Browse the available tags at <https://ollama.com/search?c=cloud>.
+
+**One-time authentication.** The daemon signs in with an Ed25519 keypair it
+generates in the `ollama_data` volume, so this survives container restarts:
+
+```bash
+# Headless: print the public key, then add it at https://ollama.com/settings/keys
+docker compose exec ollama cat /root/.ollama/id_ed25519.pub
+
+# Or interactive: prints a sign-in URL to open in a browser
+docker compose exec ollama ollama signin
+```
+
+Then pull the tag as usual — `pull-models` handles cloud tags with no special
+casing, creating a local stub that points at ollama.com:
+
+```bash
+docker compose exec ollama pull-models benchmark
+```
+
+Without a registered key, generation fails with `Ollama Cloud auth failed (HTTP 401)`.
+
+**What differs from a local model:**
+
+- No warmup. There is no local memory to preload, so the benchmark skips it.
+- Timings are not comparable. `generation_seconds` includes network latency and
+  ollama.com hardware; reports carry a caveat saying so. Accuracy metrics are
+  unaffected.
+- `seed` may not be honoured. Each seed is treated as one fresh sample of model
+  behaviour — the same policy applied to local models.
+- Usage is metered and finite. See "Cloud rate limits" under Benchmark Mode below.
+
 ### Prompt features
 
 All default off — the all-off state is the experimental baseline. Enable any
@@ -137,6 +180,41 @@ Runs a six-stage evaluation pipeline against TPC-H, scoring generated SQL (Resul
 4. **Answer Generation** — execute the reference SQL to produce ground-truth answers.
 5. **Per-model Generation, Execution & Scoring** — for each model in `BENCHMARK_MODELS`: generate SQL via the LLM, execute it, and score it against the ground truth.
 6. **Cross-Model Comparison & Archiving** — when multiple models are configured, compare them side by side; archive the run to `benchmark_results/<timestamp>/` with a manifest describing the run.
+
+### Cloud rate limits
+
+Ollama Cloud meters GPU time rather than request counts, with **session limits that
+reset every 5 hours** and **weekly limits**, plus a concurrency cap (1 model at a
+time on the free plan). See <https://ollama.com/pricing> for the current tiers.
+
+The benchmark is strictly sequential — one request in flight at any moment — so it
+never exceeds the concurrency cap by itself, and needs no client-side throttling.
+
+Local models are always benchmarked before cloud ones, whatever order
+`BENCHMARK_MODELS` lists them in, so hitting a cloud limit can never cost you a
+local result.
+
+Ollama Cloud returns HTTP 429 both when a usage budget is spent and when the
+concurrency cap is hit, without distinguishing them. So on a 429 the benchmark
+**waits 30 seconds and retries once**:
+
+- If the retry succeeds, it was transient (someone else using the same key) and the
+  run continues.
+- If it returns 429 again, the usage budget really is spent — there is no point
+  waiting out a 5-hour window mid-run, so the run stops.
+
+On stopping:
+
+- Every completed generation is executed, scored, and archived as usual.
+- Queries that never ran are recorded as `rate_limited` and **excluded** from every
+  metric, rather than scored 0 — a skip is not a model failure.
+- Cloud models still queued are listed as `Not run (rate-limited)` in the closing
+  summary and under `skipped_models` in `session_manifest.json`.
+- The server's own explanation (e.g. `session usage limit reached`) is recorded in the
+  per-query report, so you can tell a session limit from a weekly one.
+
+Re-running resumes: the skipped queries have no `.sql` on disk, so the generation
+cache retries exactly those and keeps everything already generated.
 
 ## GPU Acceleration
 

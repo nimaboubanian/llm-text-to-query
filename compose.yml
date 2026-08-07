@@ -1,0 +1,125 @@
+# ─── User Configuration ────────────────────────────────────────
+# Edit these values to customize your setup,
+# then 'docker compose up -d' to run the server and use it in interactive mode,
+# or to run the server in benchmark mode:
+# 'docker compose --profile benchmark up --build --no-log-prefix --attach benchmark benchmark'
+
+x-config: &config
+  # --- LLM backend and sampling -----------------------------------
+  LLM_TEMPERATURE: "0.1"                    # Sampling temperature
+  LLM_NUM_CTX: "4096"                       # Context window (tokens)
+  LLM_MAX_TOKENS: "2048"                    # Max tokens generated per query
+  LLM_TIMEOUT: "600"                        # Whole-generation timeout (s) — raise on slow CPU-only setups
+  OLLAMA_URL: "http://ollama:11434"         # LLM backend endpoint
+  LOG_LEVEL: "ERROR"                        # DEBUG/INFO/WARNING/ERROR
+
+  # --- Prompt features --------------------------------------------
+  PROMPT_STRICT_OUTPUT: "true"              # Emphatic "Return ONLY the SQL query" rules block
+  PROMPT_SCHEMA_DDL: "true"                 # Schema as CREATE TABLE DDL instead of prose
+  PROMPT_SCHEMA_FK: "true"                  # Explicit FK annotations (REFERENCES in DDL, FK() notation in prose)
+  PROMPT_SCHEMA_DESCRIPTIONS: "true"        # NL column descriptions from curated metadata (benchmark only)
+  PROMPT_SCHEMA_SAMPLES: "true"             # Inline sample values for categorical columns
+  PROMPT_XML_STRUCTURE: "true"              # Wrap prompt sections in XML tags (<schema>, <rules>, ...)
+  PROMPT_PLANNING: "true"                   # Ask model to plan tables/joins as SQL comments before the query
+  RETRY_ON_ERROR: "false"                    # One retry with the Postgres error fed back (EXPLAIN probe)
+  PROMPT_FEW_SHOT: "1"                      # Static few-shot examples: 0=off, max 3 (values above 3 clamp)
+
+  # --- Interactive mode -----------------------------------------------
+  INTERACTIVE_APP_MODEL: "qwen2.5-coder:7b" # Model used for SQL generation in interactive mode
+  SERVER_PORT: "8000"                       # Internal HTTP port
+
+  # --- Benchmark mode -----------------------------------------------------
+  # Model names are Ollama tags. A tag ending "-cloud" (e.g. qwen3-coder:480b-cloud)
+  # runs on Ollama Cloud instead of this machine — the local daemon proxies it to
+  # ollama.com over the same OLLAMA_URL. Requires a one-time key registration; see
+  # "Ollama Cloud models" in README.md. Local models always run first, and a cloud
+  # quota exhaustion (HTTP 429) ends the run with every completed result kept.
+  BENCHMARK_MODELS: "qwen2.5-coder:7b,sqlcoder:7b"      # Comma-separated models
+  BENCHMARK_NUM_SEEDS: "1"                  # Repetitions per query
+  BENCHMARK_QUERY_IDS: "all"                # Comma-separated query IDs to run, or "all"
+  BENCHMARK_SCALE_FACTOR: "1"               # TPC-H data scale factor
+  # BENCHMARK_DATA_PATH: ""                 # Optional: reuse existing generated TPC-H data instead of regenerating
+
+  # --- Postgres server secrets -----------------------------------------------------
+x-db: &db-credentials
+  POSTGRES_USER: "user"
+  POSTGRES_PASSWORD: "password"
+  POSTGRES_DB: "appdb"
+
+# ───────────────────────────────────────────────────────────────
+
+services:
+  ollama:
+    image: ollama/ollama:0.32.6
+    container_name: text2query-ollama
+    volumes:
+      - ollama_data:/root/.ollama
+      - ./app/pull-models.sh:/usr/local/bin/pull-models:ro,Z
+    environment:
+      <<: *config
+    restart: always
+    healthcheck:
+      test: [ "CMD", "ollama", "list" ]
+      start_period: 5s
+      interval: 3s
+      timeout: 5s
+      retries: 10
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: text2query-postgres
+    environment:
+      <<: *db-credentials
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - ./app/db/init:/docker-entrypoint-initdb.d:ro,Z
+    restart: always
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U user" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build: ./app
+    container_name: text2query-app
+    depends_on:
+      ollama:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    environment:
+      <<: *config
+      INTERACTIVE_APP_DATABASE_URL: "postgresql://user:password@postgres:5432/appdb"
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3)\"" ]
+      start_period: 300s
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  benchmark:
+    build: ./app
+    container_name: text2query-benchmark
+    depends_on:
+      ollama:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    environment:
+      <<: *config
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      - ./app/tpch:/app/tpch:Z
+      - ./benchmark_results:/app/benchmark_results:Z
+    restart: "no"
+    profiles:
+      - benchmark
+    command: [ "benchmark" ]
+
+volumes:
+  ollama_data:
+    name: text2query_ollama_data
+  pg_data:
+    name: text2query_pg_data

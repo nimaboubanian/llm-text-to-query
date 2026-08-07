@@ -1,6 +1,6 @@
 import json
 
-from text2query.benchmark.reporting import write_session_manifest, _redact_db_url
+from backend.benchmark.reporting import write_session_manifest, _redact_db_url
 
 
 def test_session_manifest_strips_credentials(tmp_path):

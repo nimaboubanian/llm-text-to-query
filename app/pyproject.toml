@@ -18,9 +18,9 @@ dependencies = [
 dev = ["pytest>=8.0"]
 
 [project.scripts]
-benchmark = "text2query.benchmark.benchmarking:main"
-text2query = "text2query.server.cli:main"
-text2query-server = "text2query.server.main:main"
+benchmark = "backend.benchmark.benchmarking:main"
+text2query = "backend.server.cli:main"
+text2query-server = "backend.server.main:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -33,4 +33,4 @@ package-dir = {"" = "src"}
 where = ["src"]
 
 [tool.setuptools.package-data]
-text2query = ["database/*.json"]
+backend = ["database/*.json"]

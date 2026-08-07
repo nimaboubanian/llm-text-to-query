@@ -1,7 +1,7 @@
 import json
 from dataclasses import asdict
 
-from text2query.benchmark.fingerprint import (
+from backend.benchmark.fingerprint import (
     GenerationFingerprint, read_manifest_fingerprint, write_manifest,
 )
 
@@ -74,7 +74,7 @@ def test_corrupt_manifest_returns_none(tmp_path):
 
 
 def test_fingerprint_changes_when_questions_change():
-    from text2query.benchmark.fingerprint import GenerationFingerprint
+    from backend.benchmark.fingerprint import GenerationFingerprint
     base = dict(model="m", prompt_template="t", schema="s",
                 temperature=0.1, max_tokens=10, seed=1)
     a = GenerationFingerprint(**base, questions="hash-a")

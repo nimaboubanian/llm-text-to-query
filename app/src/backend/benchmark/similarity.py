@@ -12,7 +12,7 @@ from sqlglot import exp
 from sqlglot.diff import Keep, diff
 from sqlglot.optimizer import optimize
 
-from text2query.core.config import BENCHMARK_FLOAT_EPSILON
+from backend.core.config import BENCHMARK_FLOAT_EPSILON
 
 logger = logging.getLogger(__name__)
 
@@ -305,10 +305,11 @@ def _execution_accuracy(
 def _tpch_schema() -> dict:
     """Parse the TPC-H DDL into a {table: {column: type}} mapping for the optimizer."""
     # ponytail: cwd-relative like benchmarking.py's schema_file default;
-    # container cwd is /app, pytest cwd is app/ (hence the parent fallback)
-    ddl_path = Path("benchmark/.tpch/schema.sql")
+    # container cwd is /app and pytest cwd is app/ (both hit tpch/ directly),
+    # repo-root runs hit the app/ fallback
+    ddl_path = Path("tpch/schema.sql")
     if not ddl_path.exists():
-        ddl_path = Path("../benchmark/.tpch/schema.sql")
+        ddl_path = Path("app/tpch/schema.sql")
     schema: dict[str, dict[str, str]] = {}
     for stmt in sqlglot.parse(ddl_path.read_text(), dialect="postgres"):
         if isinstance(stmt, exp.Create) and isinstance(stmt.this, exp.Schema):

@@ -7,7 +7,7 @@ import importlib
 
 import pytest
 
-import text2query.core.config as config
+import backend.core.config as config
 
 
 @pytest.fixture

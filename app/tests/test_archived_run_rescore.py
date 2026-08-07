@@ -9,13 +9,13 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from text2query.benchmark.similarity import evaluate_query, _execution_accuracy
+from backend.benchmark.similarity import evaluate_query, _execution_accuracy
 
-RUN = Path("../benchmark/results/2026-08-01_02-19-06")
+RUN = Path("../benchmark_results/2026-08-01_02-19-06")
 LLM_ANSWERS = RUN / "answers/qwen2.5-coder_7b/seed_1"
 LLM_QUERIES = RUN / "queries/qwen2.5-coder_7b/seed_1"
-GT_QUERIES = Path("../benchmark/.tpch/queries")
-GT_ANSWERS = Path("../benchmark/.tpch/answers")
+GT_QUERIES = Path("tpch/queries")
+GT_ANSWERS = Path("tpch/answers")
 
 EX_EXPECTED = {"01", "03", "10", "16", "18"}
 EXEC_ERRORS = {"07", "08", "13"}

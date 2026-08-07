@@ -2,9 +2,9 @@ import pytest
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import OperationalError
 
-from text2query.core.config import INTERACTIVE_APP_DATABASE_URL
-from text2query.database.executor import execute_sql_query
-import text2query.database.executor as ex
+from backend.core.config import INTERACTIVE_APP_DATABASE_URL
+from backend.database.executor import execute_sql_query
+import backend.database.executor as ex
 
 
 def _live_engine():

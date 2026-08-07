@@ -7,12 +7,12 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pandas as pd
 
-from text2query.core.config import (
+from backend.core.config import (
     INTERACTIVE_APP_DATABASE_URL, INTERACTIVE_APP_MODEL, LOG_LEVEL, PROMPT_FLAGS, SERVER_PORT,
 )
-from text2query.database.executor import execute_sql_query, explain_error
-from text2query.database.schema import create_engine_for_database, render_schema
-from text2query.llm import ollama
+from backend.database.executor import execute_sql_query, explain_error
+from backend.database.schema import create_engine_for_database, render_schema
+from backend.llm import ollama
 
 logger = logging.getLogger(__name__)
 

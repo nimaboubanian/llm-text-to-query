@@ -3,13 +3,9 @@
 __pycache__/
 app/.pytest_cache/
 app/.venv/
-benchmark/.tpch/.venv/
-benchmark/.tpch/data/*
-benchmark/.tpch/answers/*
-benchmark/answers/*
-benchmark/queries/*
-benchmark/reports/*
-benchmark/results/*
+app/tpch/data/*
+app/tpch/answers/*
+benchmark_results/*
 compose.yml
 CLAUDE.md
 tmp/

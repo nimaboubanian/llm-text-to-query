@@ -1,7 +1,7 @@
 from dataclasses import replace
 
-from text2query.core.config import PromptFlags
-from text2query.llm.prompt_builder import build_prompt
+from backend.core.config import PromptFlags
+from backend.llm.prompt_builder import build_prompt
 
 BASELINE = PromptFlags()
 
@@ -68,7 +68,7 @@ def test_few_shot_zero_means_no_examples():
 
 
 def test_few_shot_examples_avoid_tpch_tables():
-    from text2query.llm.prompt_builder import FEW_SHOT_EXAMPLES
+    from backend.llm.prompt_builder import FEW_SHOT_EXAMPLES
     tpch = ("lineitem", "orders", "customer", "supplier", "partsupp", "nation", "region")
     assert len(FEW_SHOT_EXAMPLES) == 3
     for _, sql in FEW_SHOT_EXAMPLES:

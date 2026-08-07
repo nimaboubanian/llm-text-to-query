@@ -3,7 +3,7 @@ import os
 import subprocess
 from pathlib import Path
 
-from text2query.benchmark.progress import print_item_done, print_item_start
+from backend.benchmark.progress import print_item_done, print_item_start
 
 TPCH_TABLES = [
     'region', 'nation', 'part', 'supplier',
@@ -29,7 +29,7 @@ def load_tpch_data(
 
     Returns dict mapping table names to row counts.
     """
-    from text2query.database.schema import create_engine_for_database
+    from backend.database.schema import create_engine_for_database
 
     if not data_dir.exists():
         raise FileNotFoundError(f"Data directory not found: {data_dir}")

@@ -41,7 +41,7 @@ x-config: &config
   BENCHMARK_FLOAT_EPSILON: "1e-4"           # Absolute float tolerance in result comparison; loosen to 1e-2 for money-heavy queries
   # BENCHMARK_DATA_PATH: ""                 # Optional: reuse existing generated TPC-H data instead of regenerating
 
-# Bundled Postgres server. `db/init` seeds POSTGRES_DB with the mini test
+# Bundled Postgres server. `app/db/init` seeds POSTGRES_DB with the mini test
 # database used by Interactive App mode. Benchmark mode creates and owns a
 # separate `tpch` database on this same server.
 # Benchmark mode pins these in the BENCHMARK_DATABASE_URL code constant —
@@ -78,7 +78,7 @@ services:
       <<: *db-credentials
     volumes:
       - pg_data:/var/lib/postgresql/data
-      - ./db/init:/docker-entrypoint-initdb.d:ro,Z
+      - ./app/db/init:/docker-entrypoint-initdb.d:ro,Z
     restart: always
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U user" ]
@@ -102,7 +102,7 @@ services:
     environment:
       <<: *config
       # The only database knob. Point it at your own server to query your data;
-      # the default is the bundled mini database seeded from db/init.
+      # the default is the bundled mini database seeded from app/db/init.
       INTERACTIVE_APP_DATABASE_URL: "postgresql://user:password@postgres:5432/appdb"
     # ports:
     #   - "8000:8000"
@@ -129,7 +129,8 @@ services:
       <<: *config
       PYTHONUNBUFFERED: "1"
     volumes:
-      - ./benchmark:/app/benchmark:Z
+      - ./app/tpch:/app/tpch:Z
+      - ./benchmark_results:/app/benchmark_results:Z
     restart: "no"
     profiles:
       - benchmark

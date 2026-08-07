@@ -5,10 +5,10 @@ from unittest.mock import patch
 import pandas as pd
 import pytest
 
-from text2query.benchmark.fingerprint import read_manifest_fingerprint, write_manifest
-from text2query.benchmark.runner import run_llm_generation, execute_generated_queries
-from text2query.database.executor import ExecutionResult
-from text2query.llm.ollama import GenerationResult
+from backend.benchmark.fingerprint import read_manifest_fingerprint, write_manifest
+from backend.benchmark.runner import run_llm_generation, execute_generated_queries
+from backend.database.executor import ExecutionResult
+from backend.llm.ollama import GenerationResult
 
 
 def _make_question_file(questions_dir: Path, qid: str, question: str):
@@ -28,10 +28,10 @@ def test_identical_config_resumes_from_cache(tmp_path):
         call_count["n"] += 1
         return GenerationResult(sql="SELECT name FROM customers;", raw_response="r", prompt="p")
 
-    with patch("text2query.llm.ollama.generate_sql", side_effect=mock_generate), \
-         patch("text2query.llm.ollama.warmup", return_value=True), \
-         patch("text2query.benchmark.runner.create_engine_for_database"), \
-         patch("text2query.benchmark.runner.render_schema", return_value="schema"):
+    with patch("backend.llm.ollama.generate_sql", side_effect=mock_generate), \
+         patch("backend.llm.ollama.warmup", return_value=True), \
+         patch("backend.benchmark.runner.create_engine_for_database"), \
+         patch("backend.benchmark.runner.render_schema", return_value="schema"):
 
         run_llm_generation(questions_dir, output_dir, "db://url", "test-model", seeds=None)
         assert call_count["n"] == 1
@@ -55,10 +55,10 @@ def test_model_change_invalidates_and_regenerates(tmp_path, capsys):
         call_count["n"] += 1
         return GenerationResult(sql="SELECT name FROM customers;", raw_response="r", prompt="p")
 
-    with patch("text2query.llm.ollama.generate_sql", side_effect=mock_generate), \
-         patch("text2query.llm.ollama.warmup", return_value=True), \
-         patch("text2query.benchmark.runner.create_engine_for_database"), \
-         patch("text2query.benchmark.runner.render_schema", return_value="schema"):
+    with patch("backend.llm.ollama.generate_sql", side_effect=mock_generate), \
+         patch("backend.llm.ollama.warmup", return_value=True), \
+         patch("backend.benchmark.runner.create_engine_for_database"), \
+         patch("backend.benchmark.runner.render_schema", return_value="schema"):
 
         run_llm_generation(questions_dir, output_dir, "db://url", "model-a", seeds=None)
         assert call_count["n"] == 1
@@ -83,10 +83,10 @@ def test_schema_change_invalidates_and_regenerates(tmp_path, capsys):
         call_count["n"] += 1
         return GenerationResult(sql="SELECT name FROM customers;", raw_response="r", prompt="p")
 
-    with patch("text2query.llm.ollama.generate_sql", side_effect=mock_generate), \
-         patch("text2query.llm.ollama.warmup", return_value=True), \
-         patch("text2query.benchmark.runner.create_engine_for_database"), \
-         patch("text2query.benchmark.runner.render_schema", side_effect=["schema-v1", "schema-v2"]):
+    with patch("backend.llm.ollama.generate_sql", side_effect=mock_generate), \
+         patch("backend.llm.ollama.warmup", return_value=True), \
+         patch("backend.benchmark.runner.create_engine_for_database"), \
+         patch("backend.benchmark.runner.render_schema", side_effect=["schema-v1", "schema-v2"]):
 
         run_llm_generation(questions_dir, output_dir, "db://url", "test-model", seeds=None)
         assert call_count["n"] == 1
@@ -110,17 +110,17 @@ def test_temperature_change_invalidates_and_regenerates(tmp_path, capsys, monkey
         call_count["n"] += 1
         return GenerationResult(sql="SELECT name FROM customers;", raw_response="r", prompt="p")
 
-    with patch("text2query.llm.ollama.generate_sql", side_effect=mock_generate), \
-         patch("text2query.llm.ollama.warmup", return_value=True), \
-         patch("text2query.benchmark.runner.create_engine_for_database"), \
-         patch("text2query.benchmark.runner.render_schema", return_value="schema"):
+    with patch("backend.llm.ollama.generate_sql", side_effect=mock_generate), \
+         patch("backend.llm.ollama.warmup", return_value=True), \
+         patch("backend.benchmark.runner.create_engine_for_database"), \
+         patch("backend.benchmark.runner.render_schema", return_value="schema"):
 
-        monkeypatch.setattr("text2query.benchmark.runner.LLM_TEMPERATURE", 0.1)
+        monkeypatch.setattr("backend.benchmark.runner.LLM_TEMPERATURE", 0.1)
         run_llm_generation(questions_dir, output_dir, "db://url", "test-model", seeds=None)
         assert call_count["n"] == 1
         capsys.readouterr()
 
-        monkeypatch.setattr("text2query.benchmark.runner.LLM_TEMPERATURE", 0.9)
+        monkeypatch.setattr("backend.benchmark.runner.LLM_TEMPERATURE", 0.9)
         run_llm_generation(questions_dir, output_dir, "db://url", "test-model", seeds=None)
 
     assert call_count["n"] == 2
@@ -143,10 +143,10 @@ def test_query_ids_filter_does_not_invalidate_cache(tmp_path, capsys):
         call_count["n"] += 1
         return GenerationResult(sql="SELECT name FROM customers;", raw_response="r", prompt="p")
 
-    with patch("text2query.llm.ollama.generate_sql", side_effect=mock_generate), \
-         patch("text2query.llm.ollama.warmup", return_value=True), \
-         patch("text2query.benchmark.runner.create_engine_for_database"), \
-         patch("text2query.benchmark.runner.render_schema", return_value="schema"):
+    with patch("backend.llm.ollama.generate_sql", side_effect=mock_generate), \
+         patch("backend.llm.ollama.warmup", return_value=True), \
+         patch("backend.benchmark.runner.create_engine_for_database"), \
+         patch("backend.benchmark.runner.render_schema", return_value="schema"):
 
         run_llm_generation(questions_dir, output_dir, "db://url", "test-model", seeds=None)
         assert call_count["n"] == 2
@@ -177,8 +177,8 @@ def test_stale_answers_cleared_when_queries_manifest_changes(tmp_path, monkeypat
         call_count["n"] += 1
         return ExecutionResult(pd.DataFrame({"x": [1]}), None)
 
-    monkeypatch.setattr("text2query.benchmark.pipeline.create_engine_for_database", lambda url: None)
-    monkeypatch.setattr("text2query.benchmark.pipeline.execute_sql_query", fake_execute)
+    monkeypatch.setattr("backend.benchmark.pipeline.create_engine_for_database", lambda url: None)
+    monkeypatch.setattr("backend.benchmark.pipeline.execute_sql_query", fake_execute)
 
     execute_generated_queries(queries_dir, answers_dir, "db://url", seeds=None)
     assert call_count["n"] == 1
@@ -204,12 +204,12 @@ def test_generate_answers_regenerates_when_query_content_changes(tmp_path, monke
 
     calls = []
     monkeypatch.setattr(
-        "text2query.benchmark.pipeline.execute_queries_to_csv",
+        "backend.benchmark.pipeline.execute_queries_to_csv",
         lambda files, out, db, **kw: calls.append([f.stem for f in files]) or [
             {"query_id": f.stem, "status": "success", "rows": 1} for f in files],
     )
 
-    from text2query.benchmark.pipeline import generate_answers
+    from backend.benchmark.pipeline import generate_answers
     generate_answers(queries, answers, "sqlite://", scale_factor=1)   # first run: manifest written
     generate_answers(queries, answers, "sqlite://", scale_factor=1)   # unchanged: no regeneration
     (queries / "01.sql").write_text("SELECT 2;")                       # content edit, same filename
@@ -230,10 +230,10 @@ def test_generate_answers_raises_on_reference_failure(tmp_path, monkeypatch):
     (queries / "01.sql").write_text("SELECT broken;")
 
     monkeypatch.setattr(
-        "text2query.benchmark.pipeline.execute_queries_to_csv",
+        "backend.benchmark.pipeline.execute_queries_to_csv",
         lambda files, out, db, **kw: [{"query_id": "01", "status": "error", "error": "boom"}],
     )
 
-    from text2query.benchmark.pipeline import generate_answers
+    from backend.benchmark.pipeline import generate_answers
     with pytest.raises(RuntimeError, match="01"):
         generate_answers(queries, answers, "sqlite://", scale_factor=1)

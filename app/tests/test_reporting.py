@@ -2,7 +2,7 @@ import csv
 import re
 from pathlib import Path
 
-from text2query.benchmark.reporting import (
+from backend.benchmark.reporting import (
     _compute_stats, generate_reports, format_run_summary,
     METRICS, METRIC_LABELS, _field, format_session_header,
     _aggregate_model_results, _LABEL_WIDTH, _wilson_interval,
@@ -274,14 +274,14 @@ def test_format_run_summary_single_model():
              "result_f1": 0.0, "ast_similarity": 0.0, "ast_similarity_normalized": None},
         ]
     }
-    summary = format_run_summary(precomputed, ["m1"], Path("benchmark/results/x"), elapsed=252.0)
+    summary = format_run_summary(precomputed, ["m1"], Path("benchmark_results/x"), elapsed=252.0)
     assert "elapsed 4m 12s" in summary
     assert _field("Correct on all seeds", "1 / 3") in summary
     # Regression guard: EX must appear exactly once (fraction+CI), not once from
     # the generic METRICS loop and again from the dedicated EX-rate line.
     assert summary.count("Execution accuracy") == 1
     assert _field("Failures", "1") in summary
-    assert _field("Session", "benchmark/results/x") in summary
+    assert _field("Session", "benchmark_results/x") in summary
     assert "password" not in summary
     assert "postgresql" not in summary
     assert _field("AST sim (norm)", "0.7500") in summary
@@ -300,7 +300,7 @@ def test_format_run_summary_metric_labels_never_run_into_their_value():
              "result_f1": 0.5, "ast_similarity": 0.7, "ast_similarity_normalized": 0.65},
         ]
     }
-    summary = format_run_summary(precomputed, ["m1"], Path("benchmark/results/x"), elapsed=5.0)
+    summary = format_run_summary(precomputed, ["m1"], Path("benchmark_results/x"), elapsed=5.0)
     # Non-METRICS labels are just as exposed to _LABEL_WIDTH regressions (e.g.
     # "Correct on all seeds" at 20 chars overran the old width of 19) — cover them too.
     other_labels = ["Correct on all seeds", "Failures", "Session"]
@@ -315,11 +315,11 @@ def test_format_run_summary_multi_model_shows_per_model_row():
         "m1": [{"query_id": 1, "seed": 1, "status": "ok", "result_f1": 1.0, "ast_similarity": 0.9}],
         "m2": [{"query_id": 1, "seed": 1, "status": "ok", "result_f1": 0.5, "ast_similarity": 0.7}],
     }
-    summary = format_run_summary(precomputed, ["m1", "m2"], Path("benchmark/results/x"), elapsed=5.0)
+    summary = format_run_summary(precomputed, ["m1", "m2"], Path("benchmark_results/x"), elapsed=5.0)
     assert "m1" in summary
     assert "m2" in summary
     assert "0.5000" in summary
-    assert _field("Session", "benchmark/results/x") in summary
+    assert _field("Session", "benchmark_results/x") in summary
 
 
 def test_field_pads_label_and_wraps_long_values():
@@ -373,7 +373,7 @@ def test_run_summary_result_f1_field_stays_on_one_line():
             for q in range(1, 4)
         ]
     }
-    summary = format_run_summary(precomputed, ["m1"], Path("benchmark/results/x"), elapsed=5.0)
+    summary = format_run_summary(precomputed, ["m1"], Path("benchmark_results/x"), elapsed=5.0)
     _assert_field_not_wrapped(summary, "Result F1")
 
 

@@ -2,7 +2,7 @@ import pytest
 import pandas as pd
 from pathlib import Path
 
-from text2query.benchmark.similarity import (
+from backend.benchmark.similarity import (
     _ast_similarity, _ast_similarity_normalized, _classify_error,
     _result_set_comparison, _tpch_schema, _order_spec, _is_sorted_by,
     _execution_accuracy, evaluate_query,
@@ -90,7 +90,7 @@ class TestAstSimilarityNormalized:
         assert _ast_similarity_normalized("", "") is None
 
     def test_optimizer_failure_falls_back_to_raw(self, monkeypatch):
-        import text2query.benchmark.similarity as sim
+        import backend.benchmark.similarity as sim
 
         def boom():
             raise RuntimeError("schema unavailable")
@@ -417,7 +417,7 @@ class TestIsSortedBy:
 def test_order_spec_resolves_for_every_tpch_reference():
     """Every reference query's ORDER BY keys must be extractable; spec §2."""
     import pathlib
-    queries = sorted(pathlib.Path("../benchmark/.tpch/queries").glob("*.sql"))
+    queries = sorted(pathlib.Path("tpch/queries").glob("*.sql"))
     if not queries:
         pytest.skip("TPC-H reference queries not available")
     assert len(queries) == 22

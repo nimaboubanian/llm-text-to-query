@@ -1,7 +1,7 @@
 from sqlalchemy import create_engine, text
 
-from text2query.core.config import PromptFlags
-from text2query.database.schema import render_schema
+from backend.core.config import PromptFlags
+from backend.database.schema import render_schema
 
 
 def _engine():

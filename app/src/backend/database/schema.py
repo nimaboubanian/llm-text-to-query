@@ -4,7 +4,7 @@ from pathlib import Path
 
 from sqlalchemy import create_engine, inspect
 
-from text2query.core.config import PromptFlags
+from backend.core.config import PromptFlags
 
 
 @cache

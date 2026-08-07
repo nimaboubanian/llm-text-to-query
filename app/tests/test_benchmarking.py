@@ -1,7 +1,7 @@
 from pathlib import Path
 from unittest.mock import patch
 
-from text2query.benchmark.benchmarking import (
+from backend.benchmark.benchmarking import (
     BenchmarkPaths,
     _banner,
     _resolve_query_id_filter,
@@ -50,9 +50,9 @@ def test_filter_with_no_matches_returns_empty_list():
 
 def test_benchmark_paths_defaults():
     paths = BenchmarkPaths()
-    assert paths.schema_file == Path("benchmark/.tpch/schema.sql")
-    assert paths.output_dir == Path("benchmark/queries")
-    assert paths.results_base == Path("benchmark/results")
+    assert paths.schema_file == Path("tpch/schema.sql")
+    assert paths.output_dir == Path("benchmark_results/queries")
+    assert paths.results_base == Path("benchmark_results")
 
 
 def test_run_single_model_benchmark_builds_per_model_subdirs():
@@ -73,9 +73,9 @@ def test_run_single_model_benchmark_builds_per_model_subdirs():
         captured["report_dir"] = kwargs["report_dir"]
         return [{"query_id": 1}]
 
-    with patch("text2query.benchmark.benchmarking.run_llm_generation", fake_run_llm_generation), \
-         patch("text2query.benchmark.benchmarking.execute_generated_queries", fake_execute_generated_queries), \
-         patch("text2query.benchmark.benchmarking.generate_reports", fake_generate_reports):
+    with patch("backend.benchmark.benchmarking.run_llm_generation", fake_run_llm_generation), \
+         patch("backend.benchmark.benchmarking.execute_generated_queries", fake_execute_generated_queries), \
+         patch("backend.benchmark.benchmarking.generate_reports", fake_generate_reports):
 
         results = _run_single_model_benchmark(
             model="qwen2.5-coder:7b", paths=paths, db_url="db://url", seeds=[1],

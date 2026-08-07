@@ -4,17 +4,17 @@ import json
 from dataclasses import asdict
 from pathlib import Path
 
-from text2query.core.config import LLM_MAX_TOKENS, LLM_TEMPERATURE, PROMPT_FLAGS
-from text2query.database.executor import explain_error
-from text2query.database.schema import create_engine_for_database, load_tpch_metadata, render_schema
-from text2query.llm import ollama
-from text2query.llm.prompt_builder import build_prompt
-from text2query.benchmark.data_loader import TPCH_TABLES
-from text2query.benchmark.fingerprint import (
+from backend.core.config import LLM_MAX_TOKENS, LLM_TEMPERATURE, PROMPT_FLAGS
+from backend.database.executor import explain_error
+from backend.database.schema import create_engine_for_database, load_tpch_metadata, render_schema
+from backend.llm import ollama
+from backend.llm.prompt_builder import build_prompt
+from backend.benchmark.data_loader import TPCH_TABLES
+from backend.benchmark.fingerprint import (
     MANIFEST_FILENAME, GenerationFingerprint, read_manifest_fingerprint, write_manifest,
 )
-from text2query.benchmark.pipeline import execute_queries_to_csv, read_business_question
-from text2query.benchmark.progress import print_item_done, print_item_start
+from backend.benchmark.pipeline import execute_queries_to_csv, read_business_question
+from backend.benchmark.progress import print_item_done, print_item_start
 
 
 def run_llm_generation(

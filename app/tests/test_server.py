@@ -9,9 +9,9 @@ from unittest.mock import MagicMock
 import pandas as pd
 import pytest
 
-from text2query.database.executor import ExecutionResult
-from text2query.llm.ollama import GenerationResult
-from text2query.server.main import RequestError, _make_handler, handle_query, parse_question
+from backend.database.executor import ExecutionResult
+from backend.llm.ollama import GenerationResult
+from backend.server.main import RequestError, _make_handler, handle_query, parse_question
 
 
 def test_parse_question_rejects_invalid_json():
@@ -68,7 +68,7 @@ def test_handle_query_database_error_maps_to_502(monkeypatch):
     llm.generate_sql_with_retry.return_value = GenerationResult(sql="SELECT 1;")
 
     monkeypatch.setattr(
-        "text2query.server.main.execute_sql_query",
+        "backend.server.main.execute_sql_query",
         lambda engine, sql: ExecutionResult(None, "relation does not exist"),
     )
 
@@ -85,7 +85,7 @@ def test_handle_query_success_returns_response_payload(monkeypatch):
 
     df = pd.DataFrame({"name": ["Alice", "Bob"]})
     monkeypatch.setattr(
-        "text2query.server.main.execute_sql_query",
+        "backend.server.main.execute_sql_query",
         lambda engine, sql: ExecutionResult(df, None),
     )
 
@@ -110,7 +110,7 @@ def test_handle_query_serializes_decimal_date_and_nan(monkeypatch):
         "score": [1.5, float("nan")],        # numeric NULL surfaces as NaN
     })
     monkeypatch.setattr(
-        "text2query.server.main.execute_sql_query",
+        "backend.server.main.execute_sql_query",
         lambda engine, sql: ExecutionResult(df, None),
     )
 
@@ -134,7 +134,7 @@ def test_handler_serves_health_and_query_end_to_end(monkeypatch):
     llm.generate_sql_with_retry.return_value = GenerationResult(sql="SELECT name, price FROM products;")
     df = pd.DataFrame({"name": ["Widget"], "price": [Decimal("9.99")]})
     monkeypatch.setattr(
-        "text2query.server.main.execute_sql_query",
+        "backend.server.main.execute_sql_query",
         lambda engine, sql: ExecutionResult(df, None),
     )
 
@@ -165,8 +165,8 @@ def test_main_renders_the_connected_schema_without_tpch_metadata(monkeypatch):
     Curated TPC-H metadata is benchmark-only — injecting it here would describe
     tables that do not exist in a user's database.
     """
-    from text2query.core.config import INTERACTIVE_APP_DATABASE_URL
-    from text2query.server import main as main_mod
+    from backend.core.config import INTERACTIVE_APP_DATABASE_URL
+    from backend.server import main as main_mod
 
     calls = {}
 

@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from text2query.database.schema import load_tpch_metadata
+from backend.database.schema import load_tpch_metadata
 
 # tbl files are the raw TPC-H dbgen output: pipe-separated, spec column order.
 SF1 = Path(__file__).resolve().parents[2] / "benchmark" / ".tpch" / "data" / "sf1"

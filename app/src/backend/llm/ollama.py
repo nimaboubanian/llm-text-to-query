@@ -8,11 +8,11 @@ from dataclasses import dataclass
 import sqlglot
 from sqlglot import exp
 
-from text2query.core.config import (
+from backend.core.config import (
     INTERACTIVE_APP_MODEL, LLM_MAX_TOKENS, LLM_NUM_CTX, LLM_TEMPERATURE, LLM_TIMEOUT, OLLAMA_URL,
     PROMPT_FLAGS,
 )
-from text2query.llm.prompt_builder import build_prompt
+from backend.llm.prompt_builder import build_prompt
 
 logger = logging.getLogger(__name__)
 

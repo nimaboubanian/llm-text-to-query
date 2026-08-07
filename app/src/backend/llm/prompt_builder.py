@@ -4,7 +4,7 @@ Section order is fixed (salience order from the thesis research): role,
 schema, examples, planning, question, rules. Flags add/remove/reshape
 sections; they never reorder them.
 """
-from text2query.core.config import PromptFlags
+from backend.core.config import PromptFlags
 
 _ROLE = "You are a PostgreSQL query generator used for SQL-generation benchmarking."
 

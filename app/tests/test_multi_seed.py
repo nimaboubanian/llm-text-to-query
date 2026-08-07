@@ -3,11 +3,11 @@ import csv
 from pathlib import Path
 from unittest.mock import patch
 
-from text2query.benchmark.runner import _run_single_generation, run_llm_generation
-from text2query.benchmark.reporting import (
+from backend.benchmark.runner import _run_single_generation, run_llm_generation
+from backend.benchmark.reporting import (
     archive_session, generate_cross_model_report, generate_reports,
 )
-from text2query.llm.ollama import GenerationResult
+from backend.llm.ollama import GenerationResult
 
 
 def _make_question_file(questions_dir: Path, qid: str, question: str):
@@ -29,10 +29,10 @@ def test_run_llm_generation_multi_seed_creates_subdirs(tmp_path, capsys):
         captured_seeds.append(kwargs.get("seed"))
         return GenerationResult(sql=f"SELECT name FROM customers; -- seed={kwargs.get('seed')}")
 
-    with patch("text2query.llm.ollama.generate_sql", side_effect=mock_generate), \
-         patch("text2query.benchmark.runner.create_engine_for_database"), \
-         patch("text2query.llm.ollama.warmup", return_value=True), \
-         patch("text2query.benchmark.runner.render_schema", return_value="schema"):
+    with patch("backend.llm.ollama.generate_sql", side_effect=mock_generate), \
+         patch("backend.benchmark.runner.create_engine_for_database"), \
+         patch("backend.llm.ollama.warmup", return_value=True), \
+         patch("backend.benchmark.runner.render_schema", return_value="schema"):
 
         run_llm_generation(
             questions_dir, output_dir, "db://url", "test-model", seeds=[1, 2, 3],
@@ -59,9 +59,9 @@ def test_run_llm_generation_single_seed_omits_seed_banner(tmp_path, capsys):
     (questions_dir / "01.md").write_text('# Business Question:\n  "test?"\n')
     output_dir = tmp_path / "out"
 
-    import text2query.benchmark.runner as runner_mod
+    import backend.benchmark.runner as runner_mod
     from unittest.mock import patch
-    from text2query.llm.ollama import GenerationResult
+    from backend.llm.ollama import GenerationResult
 
     with patch.object(runner_mod, "create_engine_for_database", lambda url: None), \
          patch.object(runner_mod, "render_schema",
@@ -97,10 +97,10 @@ def test_run_llm_generation_caching_per_seed(tmp_path):
         call_count += 1
         return GenerationResult(sql="SELECT name FROM customers;")
 
-    with patch("text2query.llm.ollama.generate_sql", side_effect=mock_generate), \
-         patch("text2query.benchmark.runner.create_engine_for_database"), \
-         patch("text2query.llm.ollama.warmup", return_value=True), \
-         patch("text2query.benchmark.runner.render_schema", return_value="schema"):
+    with patch("backend.llm.ollama.generate_sql", side_effect=mock_generate), \
+         patch("backend.benchmark.runner.create_engine_for_database"), \
+         patch("backend.llm.ollama.warmup", return_value=True), \
+         patch("backend.benchmark.runner.render_schema", return_value="schema"):
 
         run_llm_generation(
             questions_dir, output_dir, "db://url", "test-model", seeds=[1, 2],
@@ -121,11 +121,11 @@ def test_run_single_generation_invokes_item_callbacks(tmp_path):
     outcomes = []
 
     with patch(
-        "text2query.llm.ollama.generate_sql",
+        "backend.llm.ollama.generate_sql",
         return_value=GenerationResult(sql="SELECT name FROM customers;"),
-    ), patch("text2query.benchmark.runner.create_engine_for_database"), \
-       patch("text2query.llm.ollama.warmup", return_value=True), \
-       patch("text2query.benchmark.runner.render_schema", return_value="schema"):
+    ), patch("backend.benchmark.runner.create_engine_for_database"), \
+       patch("backend.llm.ollama.warmup", return_value=True), \
+       patch("backend.benchmark.runner.render_schema", return_value="schema"):
 
         _run_single_generation(
             questions_dir, output_dir, "db://url", "test-model",
@@ -178,10 +178,10 @@ def test_raw_file_written_on_api_error(tmp_path):
     def mock_generate(*args, **kwargs):
         return GenerationResult(sql=None, error="Model 'bad-model' not found.")
 
-    with patch("text2query.llm.ollama.generate_sql", side_effect=mock_generate), \
-         patch("text2query.benchmark.runner.create_engine_for_database"), \
-         patch("text2query.llm.ollama.warmup", return_value=True), \
-         patch("text2query.benchmark.runner.render_schema", return_value="schema"):
+    with patch("backend.llm.ollama.generate_sql", side_effect=mock_generate), \
+         patch("backend.benchmark.runner.create_engine_for_database"), \
+         patch("backend.llm.ollama.warmup", return_value=True), \
+         patch("backend.benchmark.runner.render_schema", return_value="schema"):
         run_llm_generation(questions_dir, output_dir, "db://url", "bad-model", seeds=None)
 
     assert not (output_dir / "seed_1" / "01.sql").exists()
@@ -203,10 +203,10 @@ def test_raw_file_written_on_extraction_failure(tmp_path):
     def mock_generate(*args, **kwargs):
         return GenerationResult(sql=None, raw_response=raw_model_output)
 
-    with patch("text2query.llm.ollama.generate_sql", side_effect=mock_generate), \
-         patch("text2query.benchmark.runner.create_engine_for_database"), \
-         patch("text2query.llm.ollama.warmup", return_value=True), \
-         patch("text2query.benchmark.runner.render_schema", return_value="schema"):
+    with patch("backend.llm.ollama.generate_sql", side_effect=mock_generate), \
+         patch("backend.benchmark.runner.create_engine_for_database"), \
+         patch("backend.llm.ollama.warmup", return_value=True), \
+         patch("backend.benchmark.runner.render_schema", return_value="schema"):
         run_llm_generation(questions_dir, output_dir, "db://url", "test-model", seeds=None)
 
     assert not (output_dir / "seed_1" / "01.sql").exists()

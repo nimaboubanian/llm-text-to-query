@@ -7,7 +7,7 @@ import time
 from pathlib import Path
 import sys
 
-from text2query.benchmark.pipeline import (
+from backend.benchmark.pipeline import (
     ensure_database_exists,
     generate_data,
     validate_directories,
@@ -15,11 +15,11 @@ from text2query.benchmark.pipeline import (
     setup_database,
     generate_answers,
 )
-from text2query.benchmark.runner import (
+from backend.benchmark.runner import (
     run_llm_generation,
     execute_generated_queries,
 )
-from text2query.benchmark.reporting import (
+from backend.benchmark.reporting import (
     generate_reports,
     generate_cross_model_report,
     archive_session,
@@ -27,7 +27,7 @@ from text2query.benchmark.reporting import (
     format_run_summary,
     format_session_header,
 )
-from text2query.benchmark.fingerprint import collect_fingerprints
+from backend.benchmark.fingerprint import collect_fingerprints
 
 
 def _banner(title: str) -> str:
@@ -39,14 +39,14 @@ def _banner(title: str) -> str:
 @dataclass(frozen=True)
 class BenchmarkPaths:
     """Filesystem layout for a benchmark run."""
-    schema_file: Path = Path("benchmark/.tpch/schema.sql")
-    questions_dir: Path = Path("benchmark/.tpch/questions")
-    queries_dir: Path = Path("benchmark/.tpch/queries")
-    answers_dir: Path = Path("benchmark/.tpch/answers")
-    output_dir: Path = Path("benchmark/queries")
-    generated_answers_dir: Path = Path("benchmark/answers")
-    report_dir: Path = Path("benchmark/reports")
-    results_base: Path = Path("benchmark/results")
+    schema_file: Path = Path("tpch/schema.sql")
+    questions_dir: Path = Path("tpch/questions")
+    queries_dir: Path = Path("tpch/queries")
+    answers_dir: Path = Path("tpch/answers")
+    output_dir: Path = Path("benchmark_results/queries")
+    generated_answers_dir: Path = Path("benchmark_results/answers")
+    report_dir: Path = Path("benchmark_results/reports")
+    results_base: Path = Path("benchmark_results")
 
 
 def _run_single_model_benchmark(
@@ -109,7 +109,7 @@ def _resolve_query_id_filter(
 
 
 def main():
-    from text2query.core.config import (
+    from backend.core.config import (
         BENCHMARK_DATABASE_URL,
         BENCHMARK_SCALE_FACTOR,
         BENCHMARK_DATA_PATH,
@@ -129,7 +129,7 @@ def main():
     )
 
     paths = BenchmarkPaths()
-    data_dir = Path(BENCHMARK_DATA_PATH) if BENCHMARK_DATA_PATH else Path(f"benchmark/.tpch/data/sf{BENCHMARK_SCALE_FACTOR}")
+    data_dir = Path(BENCHMARK_DATA_PATH) if BENCHMARK_DATA_PATH else Path(f"tpch/data/sf{BENCHMARK_SCALE_FACTOR}")
 
     seeds = list(range(1, BENCHMARK_NUM_SEEDS + 1))
     models = BENCHMARK_MODELS

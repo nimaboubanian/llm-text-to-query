@@ -1,4 +1,4 @@
-from text2query.benchmark.progress import print_item_done, print_item_start
+from backend.benchmark.progress import print_item_done, print_item_start
 
 
 def test_print_item_start_writes_label_without_newline(capsys):

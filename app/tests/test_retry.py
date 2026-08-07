@@ -1,5 +1,5 @@
-from text2query.core.config import PromptFlags
-from text2query.llm import ollama
+from backend.core.config import PromptFlags
+from backend.llm import ollama
 
 RETRY_ON = PromptFlags(retry_on_error=True)
 

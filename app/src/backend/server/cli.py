@@ -3,7 +3,7 @@ import sys
 import urllib.error
 import urllib.request
 
-from text2query.core.config import LLM_TIMEOUT, SERVER_PORT
+from backend.core.config import LLM_TIMEOUT, SERVER_PORT
 
 SERVER_URL = f"http://127.0.0.1:{SERVER_PORT}/query"
 

@@ -80,7 +80,7 @@ The two modes never share a database.
 
 | Mode | Database | Owner |
 |---|---|---|
-| Interactive App | `appdb` | Seeded from `db/init`; yours to replace |
+| Interactive App | `appdb` | Seeded from `app/db/init`; yours to replace |
 | Benchmark | `tpch` | Created and managed by the benchmark; not configurable |
 
 `appdb` holds a small e-commerce dataset (customers, products, orders) that
@@ -136,7 +136,7 @@ Runs a six-stage evaluation pipeline against TPC-H, scoring generated SQL (Resul
 3. **Database Setup** — load the schema, data, and indexes if the database isn't already populated.
 4. **Answer Generation** — execute the reference SQL to produce ground-truth answers.
 5. **Per-model Generation, Execution & Scoring** — for each model in `BENCHMARK_MODELS`: generate SQL via the LLM, execute it, and score it against the ground truth.
-6. **Cross-Model Comparison & Archiving** — when multiple models are configured, compare them side by side; archive the run to `benchmark/results/<timestamp>/` with a manifest describing the run.
+6. **Cross-Model Comparison & Archiving** — when multiple models are configured, compare them side by side; archive the run to `benchmark_results/<timestamp>/` with a manifest describing the run.
 
 ## GPU Acceleration
 

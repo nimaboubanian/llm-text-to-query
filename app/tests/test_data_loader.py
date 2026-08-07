@@ -1,6 +1,6 @@
 from unittest.mock import MagicMock, patch
 
-from text2query.benchmark.data_loader import TPCH_TABLES, load_tpch_data
+from backend.benchmark.data_loader import TPCH_TABLES, load_tpch_data
 
 
 def test_load_tpch_data_invokes_item_callbacks(tmp_path):
@@ -19,7 +19,7 @@ def test_load_tpch_data_invokes_item_callbacks(tmp_path):
     outcomes = []
 
     with patch(
-        "text2query.database.schema.create_engine_for_database", return_value=fake_engine
+        "backend.database.schema.create_engine_for_database", return_value=fake_engine
     ), patch("subprocess.Popen") as mock_popen:
         mock_popen.return_value.wait.return_value = None
         mock_popen.return_value.returncode = 0

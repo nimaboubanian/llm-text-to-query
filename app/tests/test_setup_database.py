@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from text2query.benchmark.pipeline import build_indexes, load_data, load_schema
+from backend.benchmark.pipeline import build_indexes, load_data, load_schema
 
 
 class _FakeConn:
@@ -37,7 +37,7 @@ def test_load_schema_executes_each_statement(tmp_path, monkeypatch):
     schema_file.write_text("CREATE TABLE a (id int);\nCREATE TABLE b (id int);")
     executed = []
     monkeypatch.setattr(
-        "text2query.benchmark.pipeline.create_engine_for_database",
+        "backend.benchmark.pipeline.create_engine_for_database",
         lambda url: _FakeEngine(executed),
     )
 
@@ -58,7 +58,7 @@ def test_load_schema_wraps_failures(tmp_path, monkeypatch):
             raise RuntimeError("connection refused")
 
     monkeypatch.setattr(
-        "text2query.benchmark.pipeline.create_engine_for_database", lambda url: FailingEngine()
+        "backend.benchmark.pipeline.create_engine_for_database", lambda url: FailingEngine()
     )
 
     with pytest.raises(RuntimeError, match="Failed to load schema"):
@@ -69,7 +69,7 @@ def test_load_data_wraps_missing_files(tmp_path, monkeypatch):
     def fake_load(data_dir, db_url):
         raise FileNotFoundError("Missing .tbl files: region")
 
-    monkeypatch.setattr("text2query.benchmark.pipeline.load_tpch_data", fake_load)
+    monkeypatch.setattr("backend.benchmark.pipeline.load_tpch_data", fake_load)
 
     with pytest.raises(RuntimeError, match="Failed to load data"):
         load_data(tmp_path, "postgresql://fake")
@@ -77,7 +77,7 @@ def test_load_data_wraps_missing_files(tmp_path, monkeypatch):
 
 def test_load_data_returns_counts(monkeypatch):
     monkeypatch.setattr(
-        "text2query.benchmark.pipeline.load_tpch_data",
+        "backend.benchmark.pipeline.load_tpch_data",
         lambda data_dir, db_url: {"region": 5, "nation": 25},
     )
 
@@ -99,7 +99,7 @@ def test_build_indexes_executes_statements(tmp_path, monkeypatch):
     (tmp_path / "indexes.sql").write_text("CREATE INDEX idx_a ON a (id);")
     executed = []
     monkeypatch.setattr(
-        "text2query.benchmark.pipeline.create_engine_for_database",
+        "backend.benchmark.pipeline.create_engine_for_database",
         lambda url: _FakeEngine(executed),
     )
 

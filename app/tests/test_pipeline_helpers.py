@@ -1,14 +1,14 @@
 from sqlalchemy import create_engine, text
 from sqlalchemy.pool import StaticPool
 
-from text2query.benchmark.data_loader import TPCH_TABLES
-from text2query.benchmark.pipeline import (
+from backend.benchmark.data_loader import TPCH_TABLES
+from backend.benchmark.pipeline import (
     check_database_readiness,
     ensure_database_exists,
     execute_queries_to_csv,
     read_business_question,
 )
-from text2query.database.executor import ExecutionResult
+from backend.database.executor import ExecutionResult
 
 
 def _tpch_sqlite_engine(row_counts: dict[str, int], default_rows: int = 1):
@@ -30,10 +30,10 @@ def _tpch_sqlite_engine(row_counts: dict[str, int], default_rows: int = 1):
 class TestExecuteQueriesToCsv:
     def _patch(self, monkeypatch, result: ExecutionResult):
         monkeypatch.setattr(
-            "text2query.benchmark.pipeline.create_engine_for_database", lambda url: None
+            "backend.benchmark.pipeline.create_engine_for_database", lambda url: None
         )
         monkeypatch.setattr(
-            "text2query.benchmark.pipeline.execute_sql_query", lambda engine, sql: result
+            "backend.benchmark.pipeline.execute_sql_query", lambda engine, sql: result
         )
 
     def test_writes_error_file_on_failure_when_enabled(self, tmp_path, monkeypatch):
@@ -73,7 +73,7 @@ class TestExecuteQueriesToCsv:
 class TestCheckDatabaseReadiness:
     def _patch(self, monkeypatch, engine):
         monkeypatch.setattr(
-            "text2query.benchmark.pipeline.create_engine_for_database", lambda url: engine
+            "backend.benchmark.pipeline.create_engine_for_database", lambda url: engine
         )
 
     def test_ready_when_fixed_tables_have_correct_counts(self, monkeypatch):
@@ -177,7 +177,7 @@ class TestEnsureDatabaseExists:
             return self._Engine(conn)
 
         monkeypatch.setattr(
-            "text2query.benchmark.pipeline.create_engine", _fake_create_engine
+            "backend.benchmark.pipeline.create_engine", _fake_create_engine
         )
         return executed
 

@@ -9,12 +9,12 @@ from pathlib import Path
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.engine import make_url
 
-from text2query.database.schema import create_engine_for_database
-from text2query.database.executor import execute_sql_query
+from backend.database.schema import create_engine_for_database
+from backend.database.executor import execute_sql_query
 
-from text2query.benchmark.data_loader import TPCH_TABLES, load_tpch_data
-from text2query.benchmark.fingerprint import read_manifest_fingerprint, write_manifest
-from text2query.benchmark.progress import print_item_done, print_item_start
+from backend.benchmark.data_loader import TPCH_TABLES, load_tpch_data
+from backend.benchmark.fingerprint import read_manifest_fingerprint, write_manifest
+from backend.benchmark.progress import print_item_done, print_item_start
 
 logger = logging.getLogger(__name__)
 

@@ -11,8 +11,8 @@ from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
 
-from text2query.benchmark.similarity import evaluate_query
-from text2query.benchmark.pipeline import read_business_question
+from backend.benchmark.similarity import evaluate_query
+from backend.benchmark.pipeline import read_business_question
 
 
 CSV_FIELDNAMES = [

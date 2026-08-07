@@ -231,6 +231,13 @@ def _format_summary(aggregated: list[dict], num_seeds: int) -> str:
     return "\n".join(lines) + "\n"
 
 
+# A quota abort writes a .raw sentinel with this exact prefix for every query it
+# never got to. runner.py imports both constants so the writer and the reader can
+# never drift apart.
+RATE_LIMITED_MARKER = "ERROR: rate-limited"
+RATE_LIMITED_STATUS = "rate_limited"
+
+
 def _refine_missing_status(status: str, raw_path: Path) -> str:
     """Refine a bare 'missing' into the generation-failure reason recorded in .raw.
 
@@ -239,11 +246,17 @@ def _refine_missing_status(status: str, raw_path: Path) -> str:
     if status != "missing" or not raw_path.exists():
         return status
     raw = raw_path.read_text()
+    # Checked before the generic "ERROR:" branch, which this prefix also matches.
+    if raw.startswith(RATE_LIMITED_MARKER):
+        return RATE_LIMITED_STATUS
     if raw.startswith("ERROR:"):
         return "gen_error"
     return "empty_response" if not raw.strip() else "no_sql_extracted"
 
 
+# Deliberately excludes RATE_LIMITED_STATUS: this table drives the "model may be
+# incompatible with the prompt format" warning, which is false for a quota abort —
+# the model never saw those prompts.
 _FAILURE_LABELS = {
     "empty_response": "empty response",
     "no_sql_extracted": "no SQL extracted",
@@ -299,6 +312,13 @@ def generate_reports(
             sim_result["status"] = _refine_missing_status(
                 sim_result["status"], seed_queries / f"{qid}.raw"
             )
+            if sim_result["status"] == RATE_LIMITED_STATUS:
+                # evaluate_query floors a missing .sql to 0 — right for a model that
+                # produced nothing, wrong for work a quota abort never attempted.
+                # None drops the row from _compute_stats and from ex_values (both
+                # filter it), so it leaves the numerator and the denominator.
+                for field in (*METRICS, "result_precision", "result_recall"):
+                    sim_result[field] = None
             sim_result["model"] = model
             sim_result["cloud"] = bool(model) and is_cloud_model(model)
             sim_result["nl_query"] = nl_query
@@ -336,7 +356,14 @@ def generate_reports(
                 seed_sql_sections += f"### Seed {seed}\n\n```sql\n{seed_sql_path.read_text().strip()}\n```\n\n"
             elif seed_raw_path.exists():
                 raw_content = seed_raw_path.read_text().strip()
-                if raw_content.startswith("ERROR:"):
+                if raw_content.startswith(RATE_LIMITED_MARKER):
+                    # The sentinel already carries the server's stated reason — surface it
+                    # rather than a generic line, minus the machine-readable prefix.
+                    detail = raw_content[len(RATE_LIMITED_MARKER):].lstrip(" —:") or "HTTP 429"
+                    seed_sql_sections += (
+                        f"### Seed {seed}\n\n*(skipped — rate-limited: {detail})*\n\n"
+                    )
+                elif raw_content.startswith("ERROR:"):
                     seed_sql_sections += f"### Seed {seed}\n\n*(generation failed — {raw_content})*\n\n"
                 elif not raw_content:
                     detail = f" — eval_count {r['eval_count']}" if r.get("eval_count") is not None else ""
@@ -365,13 +392,24 @@ def generate_reports(
     agg = _aggregate_model_results(all_flat_results)
     ex_successes, ex_total = agg["ex_successes"], agg["ex_total"]
     all_seeds_correct = agg["exact_matches"]
-    first_attempt = sum(r["first_attempt_ex"] for r in all_flat_results)
+    # `or 0`: rate-limited rows carry None here, and sum() cannot add None.
+    first_attempt = sum(r["first_attempt_ex"] or 0 for r in all_flat_results)
     lo, hi = _wilson_interval(ex_successes, ex_total)
     ci_text = f" (95% CI [{lo:.4f}, {hi:.4f}])" if lo is not None else ""
     rate = ex_successes / ex_total if ex_total else 0.0
 
     statuses = {r["status"] for r in all_flat_results}
     warning = _CLOUD_CAVEAT if (model and is_cloud_model(model)) else ""
+
+    rate_limited = sum(1 for r in all_flat_results if r["status"] == RATE_LIMITED_STATUS)
+    if rate_limited:
+        warning += (
+            f"> ⚠ {rate_limited} of {total * len(seeds)} generations skipped: Ollama Cloud\n"
+            "> rate limit (HTTP 429) persisted through a retry, so the run stopped. The scores\n"
+            "> below cover only the generations that completed; skipped queries are excluded\n"
+            "> from every metric rather than scored 0. Re-run to resume them.\n\n"
+        )
+
     if ex_successes == 0 and len(statuses) == 1 and (label := _FAILURE_LABELS.get(next(iter(statuses)))):
         warning += (
             f"> ⚠ {ex_total}/{ex_total} generations failed: {label} — "
@@ -582,7 +620,9 @@ def _aggregate_model_results(rows: list[dict]) -> dict:
     ex_successes = sum(ex_values)
     ex_total = len(ex_values)
 
-    failures = sum(1 for r in rows if r["status"] != "ok")
+    # A rate-limited skip is not a model failure — count it on its own line.
+    failures = sum(1 for r in rows if r["status"] not in ("ok", RATE_LIMITED_STATUS))
+    skipped = sum(1 for r in rows if r["status"] == RATE_LIMITED_STATUS)
 
     return {
         "metrics": metrics,
@@ -591,6 +631,7 @@ def _aggregate_model_results(rows: list[dict]) -> dict:
         "ex_total": ex_total,
         "total_queries": len(by_query),
         "failures": failures,
+        "skipped": skipped,
         "num_seeds": len(rows) // len(by_query) if by_query else 0,
     }
 
@@ -600,8 +641,13 @@ def format_run_summary(
     models: list[str],
     session_dir: Path,
     elapsed: float,
+    skipped_models: list[str] | None = None,
 ) -> str:
-    """Render the closing 'Benchmark Complete' block: aggregate scores, not restated config."""
+    """Render the closing 'Benchmark Complete' block: aggregate scores, not restated config.
+
+    `models` is the models that actually ran. `skipped_models` names any that a quota
+    abort cut before they started, so the summary accounts for the whole configured set.
+    """
     rule = "═" * 60
     elapsed_str = f"{int(elapsed) // 60}m {int(elapsed) % 60}s"
     lines = [rule, f"  Benchmark Complete  ·  elapsed {elapsed_str}", rule]
@@ -631,6 +677,8 @@ def format_run_summary(
             lines.append(_field(METRIC_LABELS[metric], value))
         lines.append(_field("Correct on all seeds", f"{agg['exact_matches']} / {agg['total_queries']}"))
         lines.append(_field("Failures", str(agg["failures"])))
+        if agg["skipped"]:
+            lines.append(_field("Skipped (rate-limited)", str(agg["skipped"])))
     else:
         name_width = max(len("Model"), max(len(m) for m in models))
         lines.append(
@@ -646,7 +694,14 @@ def format_run_summary(
                 f"  {model:<{name_width}}   {ex_str:>9}   {f1_str:>7}   {ast_str:>8}   {seeds_str:>9}   {agg['failures']:>4}"
             )
 
+        skips = [f"{m}: {aggregates[m]['skipped']}" for m in models if aggregates[m]["skipped"]]
+        if skips:
+            lines.append("")
+            lines.append(_field("Skipped (rate-limited)", ", ".join(skips)))
+
     lines.append("")
+    if skipped_models:
+        lines.append(_field("Not run (rate-limited)", ", ".join(skipped_models)))
     lines.append(_field("Session", str(session_dir)))
     lines.append(rule)
     return "\n".join(lines) + "\n"

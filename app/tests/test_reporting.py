@@ -655,3 +655,138 @@ def test_comparison_report_caveats_only_the_cloud_models(tmp_path):
     assert "qwen3-coder:480b-cloud" in comparison
     assert "Ollama Cloud" in comparison
     assert "network latency" in comparison
+
+
+def test_rate_limited_sentinel_classifies_and_renders_as_skipped(tmp_path):
+    """A quota abort leaves a marked .raw and no .sql. That must read as skipped —
+    not as one of the model's generation failures."""
+    from backend.benchmark.reporting import RATE_LIMITED_MARKER
+
+    ref_queries, ref_answers, gen_queries, gen_answers, questions, report_dir = _report_dirs(tmp_path)
+
+    (ref_queries / "01.sql").write_text("SELECT name FROM customers;")
+    (ref_answers / "01.csv").write_text("name\nAlice\n")
+    (gen_queries / "01.raw").write_text(f"{RATE_LIMITED_MARKER}: Ollama Cloud quota exhausted\n")
+    (questions / "01.md").write_text('# Business Question:\n  "Names?"\n')
+
+    results = generate_reports(
+        generated_queries_dir=gen_queries.parent,
+        reference_queries_dir=ref_queries,
+        generated_answers_dir=gen_answers.parent,
+        reference_answers_dir=ref_answers,
+        report_dir=report_dir,
+        model="qwen3-coder:480b-cloud",
+        questions_dir=questions,
+    )
+
+    assert results[0]["status"] == "rate_limited"
+
+    per_query = (report_dir / "per_query" / "01.md").read_text()
+    assert "skipped" in per_query
+    assert "rate-limited" in per_query
+    assert "generation failed" not in per_query
+    assert "*(not generated)*" not in per_query
+
+
+def test_rate_limited_queries_are_excluded_from_scores_not_scored_zero(tmp_path):
+    """Work we never attempted must leave both sides of the EX fraction. Scoring it 0
+    would punish the model for our quota running out."""
+    from backend.benchmark.reporting import RATE_LIMITED_MARKER
+
+    ref_queries, ref_answers, gen_queries, gen_answers, questions, report_dir = _report_dirs(tmp_path)
+
+    for qid in ("01", "02"):
+        (ref_queries / f"{qid}.sql").write_text("SELECT name FROM customers;")
+        (ref_answers / f"{qid}.csv").write_text("name\nAlice\n")
+        (questions / f"{qid}.md").write_text('# Business Question:\n  "Names?"\n')
+
+    # 01 completed and matched; 02 was skipped by the quota abort.
+    (gen_queries / "01.sql").write_text("SELECT name FROM customers;")
+    (gen_answers / "01.csv").write_text("name\nAlice\n")
+    (gen_queries / "02.raw").write_text(f"{RATE_LIMITED_MARKER}: quota exhausted\n")
+
+    results = generate_reports(
+        generated_queries_dir=gen_queries.parent,
+        reference_queries_dir=ref_queries,
+        generated_answers_dir=gen_answers.parent,
+        reference_answers_dir=ref_answers,
+        report_dir=report_dir,
+        model="qwen3-coder:480b-cloud",
+        questions_dir=questions,
+    )
+
+    skipped = next(r for r in results if r["status"] == "rate_limited")
+    assert skipped["execution_accuracy"] is None
+    assert skipped["result_f1"] is None
+    assert skipped["ast_similarity"] is None
+    assert skipped["first_attempt_ex"] is None
+
+    summary = (report_dir / "summary.md").read_text()
+    # 1 of 1 *completed* generation was correct — not 1 of 2.
+    assert "**Execution accuracy** | **1/1 = 1.0000**" in summary
+    assert "1 of 2 generations skipped" in summary
+
+
+def test_rate_limited_does_not_trigger_the_prompt_incompatibility_warning(tmp_path):
+    """That warning blames the model's prompt handling. A quota abort is our
+    infrastructure stopping, so it must not fire."""
+    from backend.benchmark.reporting import RATE_LIMITED_MARKER
+
+    ref_queries, ref_answers, gen_queries, gen_answers, questions, report_dir = _report_dirs(tmp_path)
+
+    (ref_queries / "01.sql").write_text("SELECT name FROM customers;")
+    (ref_answers / "01.csv").write_text("name\nAlice\n")
+    (gen_queries / "01.raw").write_text(f"{RATE_LIMITED_MARKER}: quota exhausted\n")
+    (questions / "01.md").write_text('# Business Question:\n  "Names?"\n')
+
+    generate_reports(
+        generated_queries_dir=gen_queries.parent,
+        reference_queries_dir=ref_queries,
+        generated_answers_dir=gen_answers.parent,
+        reference_answers_dir=ref_answers,
+        report_dir=report_dir,
+        model="qwen3-coder:480b-cloud",
+        questions_dir=questions,
+    )
+
+    summary = (report_dir / "summary.md").read_text()
+    assert "incompatible with the prompt format" not in summary
+
+
+def test_run_summary_separates_skipped_from_failures(tmp_path):
+    rows = [
+        {"query_id": 1, "seed": 1, "status": "ok", "execution_accuracy": 1,
+         "result_f1": 1.0, "ast_similarity": 1.0, "ast_similarity_normalized": 1.0,
+         "first_attempt_ex": 1},
+        {"query_id": 2, "seed": 1, "status": "exec_error", "execution_accuracy": 0,
+         "result_f1": 0.0, "ast_similarity": 0.5, "ast_similarity_normalized": 0.5,
+         "first_attempt_ex": 0},
+        {"query_id": 3, "seed": 1, "status": "rate_limited", "execution_accuracy": None,
+         "result_f1": None, "ast_similarity": None, "ast_similarity_normalized": None,
+         "first_attempt_ex": None},
+    ]
+    agg = _aggregate_model_results(rows)
+    assert agg["failures"] == 1        # the exec_error, not the skip
+    assert agg["skipped"] == 1
+    assert agg["ex_total"] == 2        # the skip left the denominator
+
+    out = format_run_summary(
+        {"m-cloud": rows}, ["m-cloud"], tmp_path / "session", 61.0,
+    )
+    assert "Skipped (rate-limited)" in out
+    assert "Failures" in out
+
+
+def test_run_summary_lists_models_that_never_ran(tmp_path):
+    rows = [
+        {"query_id": 1, "seed": 1, "status": "ok", "execution_accuracy": 1,
+         "result_f1": 1.0, "ast_similarity": 1.0, "ast_similarity_normalized": 1.0,
+         "first_attempt_ex": 1},
+    ]
+    out = format_run_summary(
+        {"local:7b": rows}, ["local:7b"], tmp_path / "session", 5.0,
+        skipped_models=["big-a-cloud", "big-b-cloud"],
+    )
+    assert "Not run (rate-limited)" in out
+    assert "big-a-cloud" in out
+    assert "big-b-cloud" in out

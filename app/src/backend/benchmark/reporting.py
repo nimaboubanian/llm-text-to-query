@@ -410,7 +410,13 @@ def generate_reports(
             "> from every metric rather than scored 0. Re-run to resume them.\n\n"
         )
 
-    if ex_successes == 0 and len(statuses) == 1 and (label := _FAILURE_LABELS.get(next(iter(statuses)))):
+    # Exclude rate-limited rows: ex_successes/ex_total already exclude them, and a
+    # quota abort mixed in with real failures shouldn't mask an otherwise-uniform
+    # failure status.
+    non_skipped_statuses = statuses - {RATE_LIMITED_STATUS}
+    if ex_successes == 0 and len(non_skipped_statuses) == 1 and (
+        label := _FAILURE_LABELS.get(next(iter(non_skipped_statuses)))
+    ):
         warning += (
             f"> ⚠ {ex_total}/{ex_total} generations failed: {label} — "
             "model may be incompatible with the prompt format.\n\n"
@@ -618,6 +624,8 @@ def _aggregate_model_results(rows: list[dict]) -> dict:
 
     exact_matches = 0
     for qid_rows in by_query.values():
+        if any(r["status"] == RATE_LIMITED_STATUS for r in qid_rows):
+            continue  # an unattempted seed means "all seeds" was never established
         qid_ex = _compute_stats([r.get("execution_accuracy") for r in qid_rows])
         if qid_ex["mean"] == 1.0:
             exact_matches += 1

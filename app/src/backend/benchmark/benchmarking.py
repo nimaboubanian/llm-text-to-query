@@ -233,7 +233,7 @@ def main():
             precomputed[model] = results
 
             if aborted:
-                # Quota windows are hourly, so there is nothing to wait for. Locals ran
+                # Quota windows are 5-hourly and weekly, so there is nothing to wait for. Locals ran
                 # first, so everything still queued is a cloud model that would 429 too.
                 skipped_models = models[i:]
                 if skipped_models:

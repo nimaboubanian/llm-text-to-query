@@ -70,7 +70,7 @@ def _generate_with_rate_limit_probe(question, schema, model, seed, validate, on_
     result = ollama.generate_sql_with_retry(
         question, schema, model, seed=seed, validate=validate,
     )
-    if result.status_code != 429:
+    if result.status_code != 429 or not ollama.is_cloud_model(model):
         return result
 
     on_probe()
@@ -201,7 +201,7 @@ def _run_single_generation(
         )
         retries += result.retried
 
-        if result.status_code == 429:
+        if result.status_code == 429 and ollama.is_cloud_model(model):
             # The limit survived the probe pause, so this is a spent session/weekly
             # usage budget (5-hour and 7-day windows), not the transient concurrency
             # limit — there is nothing to wait for. Locals-first ordering means

@@ -753,6 +753,38 @@ def test_rate_limited_does_not_trigger_the_prompt_incompatibility_warning(tmp_pa
     assert "incompatible with the prompt format" not in summary
 
 
+def test_incompatibility_warning_survives_a_mixed_in_rate_limited_row(tmp_path):
+    """Inverse of the all-rate-limited case above: when every *attempted* generation
+    shares one real failure status but a quota abort also skipped some queries, the
+    'incompatible with the prompt format' warning must still fire — a rate-limited
+    row must not join the status set and break the len(...) == 1 check."""
+    from backend.benchmark.reporting import RATE_LIMITED_MARKER
+
+    ref_queries, ref_answers, gen_queries, gen_answers, questions, report_dir = _report_dirs(tmp_path)
+
+    for qid in ("01", "02"):
+        (ref_queries / f"{qid}.sql").write_text("SELECT name FROM customers;")
+        (ref_answers / f"{qid}.csv").write_text("name\nAlice\n")
+        (questions / f"{qid}.md").write_text('# Business Question:\n  "Names?"\n')
+
+    # 01 failed with an empty response every attempt; 02 was cut short by a quota abort.
+    (gen_queries / "01.raw").write_text("")
+    (gen_queries / "02.raw").write_text(f"{RATE_LIMITED_MARKER}: quota exhausted\n")
+
+    generate_reports(
+        generated_queries_dir=gen_queries.parent,
+        reference_queries_dir=ref_queries,
+        generated_answers_dir=gen_answers.parent,
+        reference_answers_dir=ref_answers,
+        report_dir=report_dir,
+        model="qwen3-coder:480b-cloud",
+        questions_dir=questions,
+    )
+
+    summary = (report_dir / "summary.md").read_text()
+    assert "incompatible with the prompt format" in summary
+
+
 def test_run_summary_separates_skipped_from_failures(tmp_path):
     rows = [
         {"query_id": 1, "seed": 1, "status": "ok", "execution_accuracy": 1,
@@ -775,6 +807,23 @@ def test_run_summary_separates_skipped_from_failures(tmp_path):
     )
     assert "Skipped (rate-limited)" in out
     assert "Failures" in out
+
+
+def test_correct_on_all_seeds_excludes_partially_skipped_queries():
+    """A query with one successful seed and one rate-limited seed must not count as
+    'correct on all seeds' — that seed was never attempted, so 'all seeds' was never
+    established, even though _compute_stats' None-filtering would otherwise average
+    the surviving seed's 1.0 down to a false 1.0 mean."""
+    rows = [
+        {"query_id": 1, "seed": 1, "status": "ok", "execution_accuracy": 1,
+         "result_f1": 1.0, "ast_similarity": 1.0, "ast_similarity_normalized": 1.0,
+         "first_attempt_ex": 1},
+        {"query_id": 1, "seed": 2, "status": "rate_limited", "execution_accuracy": None,
+         "result_f1": None, "ast_similarity": None, "ast_similarity_normalized": None,
+         "first_attempt_ex": None},
+    ]
+    agg = _aggregate_model_results(rows)
+    assert agg["exact_matches"] == 0
 
 
 def test_run_summary_lists_models_that_never_ran(tmp_path):

@@ -239,6 +239,33 @@ def test_a_non_429_failure_neither_probes_nor_aborts(tmp_path):
     assert not raw.startswith(RATE_LIMITED_MARKER)
 
 
+def test_a_non_cloud_429_neither_probes_nor_aborts(tmp_path):
+    """The probe/abort logic exists for Ollama Cloud's usage budget specifically.
+    A non-cloud model returning 429 (e.g. something unrelated in front of the local
+    daemon) must be treated like any other generation failure — no 30s sleep, and
+    critically no abort, since aborting here would cost any local models still
+    queued behind this one, the exact thing locals-first ordering exists to avoid."""
+    questions_dir = _questions(tmp_path, "01", "02")
+    output_dir = tmp_path / "out"
+    calls = []
+
+    def generate(question, schema, model, seed=None, validate=None):
+        calls.append(question)
+        return GenerationResult(sql=None, prompt="p", status_code=429,
+                                error="unexpected 429 from something in front of ollama")
+
+    with _patched_runner(generate) as slept:
+        aborted = run_llm_generation(
+            questions_dir, output_dir, "postgresql://fake", "local:7b", seeds=[1],
+        )
+
+    assert aborted is False
+    assert len(calls) == 2      # one attempt each, no probe
+    assert slept == []
+    raw = (output_dir / "seed_1" / "01.raw").read_text()
+    assert not raw.startswith(RATE_LIMITED_MARKER)
+
+
 def test_a_rate_limited_query_is_retried_on_the_next_run(tmp_path):
     """The sentinel is a .raw with no .sql, so the existing .sql-keyed cache retries it."""
     questions_dir = _questions(tmp_path, "01", "02")

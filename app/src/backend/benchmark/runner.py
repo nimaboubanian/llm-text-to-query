@@ -92,7 +92,13 @@ def _run_single_generation(
     cache_label = f", {len(existing)} cached" if existing else ""
     print(f"  Generating {len(to_process)} queries{seed_label}{cache_label}...")
 
-    print(f"  Warming up {model}...", end="", flush=True)
+    # warmup() is a no-op for cloud models; say so rather than reporting a preload
+    # that never happened.
+    warmup_label = (
+        "Skipping warmup (Ollama Cloud model)" if ollama.is_cloud_model(model)
+        else f"Warming up {model}"
+    )
+    print(f"  {warmup_label}...", end="", flush=True)
     print(" ✓" if ollama.warmup(model) else " ⚠ (warmup failed, continuing)")
 
     success = 0

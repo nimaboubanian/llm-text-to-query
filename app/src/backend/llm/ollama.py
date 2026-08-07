@@ -17,6 +17,16 @@ from backend.llm.prompt_builder import build_prompt
 logger = logging.getLogger(__name__)
 
 
+def is_cloud_model(model: str) -> bool:
+    """True for models Ollama proxies to ollama.com rather than running locally.
+
+    Since Ollama ~0.12 the local daemon routes any model whose tag ends `-cloud`
+    to Ollama Cloud through the same :11434 API, so the tag is the only signal —
+    there is no separate endpoint or credential to look at.
+    """
+    return model.endswith("-cloud")
+
+
 def _is_single_statement(sql: str) -> bool:
     """Reject multi-statement SQL to prevent piggyback attacks."""
     return ";" not in sql.strip().rstrip(";")
@@ -83,6 +93,32 @@ class GenerationResult:
     prompt_eval_count: int | None = None
     eval_count: int | None = None
     duration_seconds: float | None = None
+    # HTTP status of a failed generate call. The daemon passes an Ollama Cloud
+    # status through verbatim, so callers can distinguish quota exhaustion (429)
+    # from auth failure (401/403) without parsing error text. None on success
+    # and on transport errors, which never reached a status line.
+    status_code: int | None = None
+
+
+def _error_body(e: urllib.error.HTTPError) -> dict:
+    """Best-effort decode of an error response body.
+
+    Ollama returns errors as {"error": "<message>"} — for a 429 that message is the
+    only statement of *why* (usage budget spent vs. concurrency limit), so it must not
+    be discarded. Total by design: raising while handling an error would replace a
+    useful message with a traceback.
+    """
+    try:
+        raw = e.read().decode("utf-8", "replace").strip()
+    except Exception:
+        return {}
+    if not raw:
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except ValueError:
+        return {"error": raw[:500]}
+    return parsed if isinstance(parsed, dict) else {"error": raw[:500]}
 
 
 def _post_json(url: str, payload: dict, timeout: int) -> tuple[int, dict]:
@@ -94,7 +130,7 @@ def _post_json(url: str, payload: dict, timeout: int) -> tuple[int, dict]:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             return resp.status, json.loads(resp.read())
     except urllib.error.HTTPError as e:
-        return e.code, {}
+        return e.code, _error_body(e)
 
 
 def warmup(model: str) -> bool:
@@ -103,7 +139,13 @@ def warmup(model: str) -> bool:
     Sends an empty-prompt generate request, which makes Ollama load the model
     and return immediately without generating tokens — avoiding a cold-load
     timeout on the first real query. Returns True if the model loaded.
+
+    Cloud models are a no-op: there is no local memory to preload, and the
+    request would spend quota on nothing.
     """
+    if is_cloud_model(model):
+        return True
+
     try:
         status, _ = _post_json(
             f"{OLLAMA_URL}/api/generate",
@@ -132,6 +174,33 @@ def generate_sql(
     return _generate(prompt, model or INTERACTIVE_APP_MODEL, seed)
 
 
+def _error_for_status(status: int, model: str, detail: str | None = None) -> str:
+    """Turn a non-200 generate status into an actionable message.
+
+    Cloud-specific wording is gated on the model tag: a local daemon can return
+    403 for an unlisted origin, and telling that user their ollama.com
+    credentials failed would send them chasing the wrong problem.
+
+    `detail` is the server's own `error` message, appended when present.
+    """
+    suffix = f": {detail}" if detail else ""
+    if not is_cloud_model(model):
+        return f"LLM API error: {status}{suffix}"
+    if status in (401, 403):
+        return (
+            f"Ollama Cloud auth failed (HTTP {status}) for '{model}'. Register the "
+            "daemon's key with an ollama.com account: run `ollama signin` in the "
+            "ollama container, or add the output of "
+            "`cat /root/.ollama/id_ed25519.pub` at https://ollama.com/settings/keys"
+        )
+    if status == 429:
+        # Deliberately not "quota exhausted": Ollama Cloud returns 429 both for a spent
+        # session/weekly usage budget and for its per-plan concurrency limit, and this
+        # layer cannot tell them apart. The runner's probe retry decides.
+        return f"Ollama Cloud rate limit hit (HTTP 429) for '{model}'{suffix}"
+    return f"LLM API error: {status}{suffix}"
+
+
 def _generate(prompt: str, selected_model: str, seed: int | None) -> GenerationResult:
     options = {
         "temperature": LLM_TEMPERATURE,
@@ -155,12 +224,14 @@ def _generate(prompt: str, selected_model: str, seed: int | None) -> GenerationR
 
         if status == 404:
             return GenerationResult(
-                sql=None, prompt=prompt, error=f"Model '{selected_model}' not found."
+                sql=None, prompt=prompt, status_code=status,
+                error=f"Model '{selected_model}' not found."
             )
 
         if status != 200:
             return GenerationResult(
-                sql=None, prompt=prompt, error=f"LLM API error: {status}"
+                sql=None, prompt=prompt, status_code=status,
+                error=_error_for_status(status, selected_model, data.get("error")),
             )
 
         full_response = data.get("response", "")

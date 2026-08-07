@@ -10,7 +10,7 @@ import pytest
 from backend.database.schema import load_tpch_metadata
 
 # tbl files are the raw TPC-H dbgen output: pipe-separated, spec column order.
-SF1 = Path(__file__).resolve().parents[2] / "benchmark" / ".tpch" / "data" / "sf1"
+SF1 = Path(__file__).resolve().parents[1] / "tpch" / "data" / "sf1"
 
 SPEC_COLUMNS = {"region": 3, "nation": 4, "supplier": 7, "customer": 8,
                 "part": 9, "partsupp": 5, "orders": 9, "lineitem": 16}

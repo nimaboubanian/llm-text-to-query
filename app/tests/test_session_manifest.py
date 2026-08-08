@@ -19,6 +19,7 @@ def test_session_manifest_strips_credentials(tmp_path):
     assert "password" not in manifest["database_url"]
     assert manifest["database_url"] == "postgresql://***:***@postgres:5432/tpch"
     assert manifest["prompt_flags"] == {"schema_ddl": True}
+    assert manifest["skipped_models"] == []
 
 
 def test_redact_db_url_handles_url_without_credentials():

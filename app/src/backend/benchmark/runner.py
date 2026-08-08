@@ -26,24 +26,6 @@ from backend.benchmark.reporting import RATE_LIMITED_MARKER
 RATE_LIMIT_PROBE_SECONDS = 30
 
 
-class QuotaExhausted(Exception):
-    """Ollama Cloud returned HTTP 429 twice, either side of the probe pause.
-
-    Treated as a spent usage budget: a concurrency rejection would have cleared.
-    Raised from inside the per-query loop to unwind both it and the per-seed loop;
-    caught in run_llm_generation, so it never leaves this module. str() is the
-    server's own stated reason, which the skip sentinels record.
-    """
-
-
-def _question_ids(questions_dir: Path, query_ids: list[str] | None) -> list[str]:
-    """The query IDs a run covers, in file order, after the query_ids filter."""
-    return [
-        q.stem for q in sorted(questions_dir.glob("*.md"))
-        if query_ids is None or q.stem in query_ids
-    ]
-
-
 def _mark_rate_limited(seed_dir: Path, query_ids: list[str], reason: str = "") -> None:
     """Record a skip sentinel for each query a rate-limit abort never attempted.
 
@@ -60,26 +42,6 @@ def _mark_rate_limited(seed_dir: Path, query_ids: list[str], reason: str = "") -
         )
 
 
-def _generate_with_rate_limit_probe(question, schema, model, seed, validate, on_probe):
-    """Generate once; on HTTP 429, pause and re-issue exactly once.
-
-    Returns the second result when the probe fires, so a caller seeing status_code 429
-    on the returned value knows the limit survived the pause and the budget is spent.
-    `on_probe()` is called just before the pause, to narrate it.
-    """
-    result = ollama.generate_sql_with_retry(
-        question, schema, model, seed=seed, validate=validate,
-    )
-    if result.status_code != 429 or not ollama.is_cloud_model(model):
-        return result
-
-    on_probe()
-    sleep(RATE_LIMIT_PROBE_SECONDS)
-    return ollama.generate_sql_with_retry(
-        question, schema, model, seed=seed, validate=validate,
-    )
-
-
 def run_llm_generation(
     questions_dir: Path,
     output_dir: Path,
@@ -94,17 +56,19 @@ def run_llm_generation(
         seed_dir = output_dir / f"seed_{seed}"
         if len(seeds) > 1:
             print(f"  --- Seed {seed} ---")
-        try:
-            _run_single_generation(
-                questions_dir, seed_dir, db_url, model, seed=seed, query_ids=query_ids,
-            )
-        except QuotaExhausted as exc:
-            # The current seed's remaining queries were marked before the raise;
+        abort_reason = _run_single_generation(
+            questions_dir, seed_dir, db_url, model, seed=seed, query_ids=query_ids,
+        )
+        if abort_reason is not None:
+            # The current seed's remaining queries were marked before returning;
             # mark every seed that never started, so no (seed, query) is left
             # indistinguishable from a genuine generation failure.
-            unstarted = _question_ids(questions_dir, query_ids)
+            unstarted = [
+                q.stem for q in sorted(questions_dir.glob("*.md"))
+                if query_ids is None or q.stem in query_ids
+            ]
             for remaining_seed in seeds[i + 1:]:
-                _mark_rate_limited(output_dir / f"seed_{remaining_seed}", unstarted, str(exc))
+                _mark_rate_limited(output_dir / f"seed_{remaining_seed}", unstarted, abort_reason)
             if seeds[i + 1:]:
                 print(f"  ⊘ Seeds {', '.join(str(s) for s in seeds[i + 1:])} skipped: rate-limited")
             return True
@@ -120,7 +84,9 @@ def _run_single_generation(
     query_ids: list[str] | None = None,
     on_item_start=print_item_start,
     on_item_done=print_item_done,
-) -> None:
+) -> str | None:
+    """Runs one seed's generation. Returns the abort reason if a quota abort cut it
+    short, else None."""
     # Digest is over the FULL question set, independent of query_ids filtering below —
     # otherwise a --query-ids re-run (e.g. resuming just the failed queries after an
     # interrupted run) would change the fingerprint and wipe the entire generation cache.
@@ -170,10 +136,7 @@ def _run_single_generation(
 
     # warmup() is a no-op for cloud models; say so rather than reporting a preload
     # that never happened.
-    warmup_label = (
-        "Skipping warmup (Ollama Cloud model)" if ollama.is_cloud_model(model)
-        else f"Warming up {model}"
-    )
+    warmup_label = "Skipping warmup (Ollama Cloud model)" if ollama.is_cloud_model(model) else f"Warming up {model}"
     print(f"  {warmup_label}...", end="", flush=True)
     print(" ✓" if ollama.warmup(model) else " ⚠ (warmup failed, continuing)")
 
@@ -190,15 +153,18 @@ def _run_single_generation(
             on_item_done(" ⚠ no question found, skipping")
             continue
 
-        def _probe_notice() -> None:
+        result = ollama.generate_sql_with_retry(
+            question, schema, model, seed=seed, validate=lambda sql: explain_error(engine, sql),
+        )
+        if result.status_code == 429 and ollama.is_cloud_model(model):
+            # A 429 here may be the transient per-plan concurrency limit, which clears
+            # in seconds — re-issue once before treating it as a spent usage budget.
             on_item_done(f" ⏸ rate-limited — retrying once in {RATE_LIMIT_PROBE_SECONDS}s")
             on_item_start(i, len(to_process), f"Q{query_id} (retry)")
-
-        result = _generate_with_rate_limit_probe(
-            question, schema, model, seed,
-            lambda sql: explain_error(engine, sql),
-            _probe_notice,
-        )
+            sleep(RATE_LIMIT_PROBE_SECONDS)
+            result = ollama.generate_sql_with_retry(
+                question, schema, model, seed=seed, validate=lambda sql: explain_error(engine, sql),
+            )
         retries += result.retried
 
         if result.status_code == 429 and ollama.is_cloud_model(model):
@@ -215,7 +181,7 @@ def _run_single_generation(
                   f"{success} generated, {len(skipped)} "
                   f"{'query' if len(skipped) == 1 else 'queries'} marked skipped")
             print(f"    {reason}")
-            raise QuotaExhausted(reason)
+            return reason
 
         if result.retried and result.first_prompt is not None:
             (output_dir / f"{query_id}.prompt").write_text(result.first_prompt)

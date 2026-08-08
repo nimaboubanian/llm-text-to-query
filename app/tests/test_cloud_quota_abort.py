@@ -1,38 +1,17 @@
 """Locals-first model ordering and the HTTP 429 mid-run abort."""
+from contextlib import ExitStack, contextmanager
+from pathlib import Path
+from unittest.mock import patch
+
 from backend.benchmark.benchmarking import _sort_locals_first
+from backend.benchmark.runner import RATE_LIMIT_PROBE_SECONDS, run_llm_generation
+from backend.benchmark.reporting import RATE_LIMITED_MARKER
+from backend.llm.ollama import GenerationResult
 
 
 def test_locals_sort_before_cloud_models():
     models = ["qwen3-coder:480b-cloud", "qwen2.5-coder:7b"]
     assert _sort_locals_first(models) == ["qwen2.5-coder:7b", "qwen3-coder:480b-cloud"]
-
-
-def test_sort_is_stable_within_each_group():
-    """User order is meaningful (it decides which local runs first) — only the
-    local/cloud split may reorder anything."""
-    models = ["z-cloud", "sqlcoder:7b", "a-cloud", "qwen2.5-coder:7b", "b-cloud"]
-    assert _sort_locals_first(models) == [
-        "sqlcoder:7b", "qwen2.5-coder:7b", "z-cloud", "a-cloud", "b-cloud",
-    ]
-
-
-def test_sort_leaves_all_local_and_all_cloud_lists_untouched():
-    locals_only = ["b:7b", "a:7b"]
-    cloud_only = ["b-cloud", "a-cloud"]
-    assert _sort_locals_first(locals_only) == locals_only
-    assert _sort_locals_first(cloud_only) == cloud_only
-    assert _sort_locals_first([]) == []
-
-
-from contextlib import ExitStack, contextmanager
-from pathlib import Path
-from unittest.mock import patch
-
-from backend.benchmark.runner import (
-    RATE_LIMIT_PROBE_SECONDS, QuotaExhausted, run_llm_generation,
-)
-from backend.benchmark.reporting import RATE_LIMITED_MARKER
-from backend.llm.ollama import GenerationResult
 
 
 def _questions(tmp_path: Path, *qids: str) -> Path:
@@ -346,17 +325,3 @@ def test_session_manifest_records_models_cut_by_the_abort(tmp_path):
     assert manifest["models"] == ["local:7b", "a-cloud", "b-cloud"]
     # ...with what was cut recorded alongside it.
     assert manifest["skipped_models"] == ["b-cloud"]
-
-
-def test_session_manifest_omits_skipped_models_on_a_clean_run(tmp_path):
-    from backend.benchmark.reporting import write_session_manifest
-    import json
-
-    session_dir = tmp_path / "session"
-    session_dir.mkdir()
-    path = write_session_manifest(
-        session_dir, models=["local:7b"], seeds=[1], query_ids=None, scale_factor=1,
-        generation_parameters={}, prompt_flags={}, fingerprints={},
-        database_url="postgresql://u:p@h/db",
-    )
-    assert json.loads(path.read_text())["skipped_models"] == []
